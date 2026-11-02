@@ -9,7 +9,6 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
-import re
 import unicodedata
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -53,7 +52,7 @@ def _demo(split: str, count: int) -> list[str]:
         "Two friends built a paper boat and watched it float downstream.",
     )
     suffix = " They talked about what they learned and tried again."
-    shift = 0 if split == "train" else 2
+    shift = 0 if split == "train" else 10000
     return [seeds[(i + shift) % len(seeds)] + suffix + f" Chapter {i + shift}." for i in range(count)]
 
 
