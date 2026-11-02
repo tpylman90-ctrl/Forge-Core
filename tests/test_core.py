@@ -3,7 +3,7 @@ import unittest
 import torch
 
 from forge_core.agent.authorization import ActionRequest, Approval, require_approval
-from forge_core.learning.curiosity import CuriosityEngine
+from forge_core.learning.curiosity import CuriosityEngine, CuriositySettings, ObservationSignal
 from forge_core.neural.model import ByteTransformer, ModelConfig
 from forge_core.neural.tokenizer import ByteTokenizer
 
@@ -73,6 +73,25 @@ class TestSafety(unittest.TestCase):
         self.assertFalse(engine.confirm(candidate, False).confirmed)
         self.assertTrue(engine.confirm(candidate, True).confirmed)
         self.assertFalse(candidate.confirmed)
+
+    def test_high_curiosity_asks_often_with_safety_gates(self):
+        engine = CuriosityEngine()
+        self.assertEqual(engine.settings.mode, "high")
+        self.assertTrue(engine.should_ask(ObservationSignal(True, novel=True)))
+        self.assertTrue(engine.should_ask(ObservationSignal(True, motivation_unclear=True)))
+        self.assertFalse(engine.should_ask(ObservationSignal(False, novel=True)))
+        self.assertFalse(engine.should_ask(ObservationSignal(True, novel=True, sensitive_context=True)))
+        self.assertFalse(engine.should_ask(ObservationSignal(True, novel=True, unsafe_to_interrupt=True)))
+        self.assertFalse(engine.should_ask(ObservationSignal(True, novel=True, already_asked=True)))
+        self.assertFalse(CuriosityEngine(CuriositySettings("paused")).should_ask(
+            ObservationSignal(True, novel=True, motivation_unclear=True)))
+        self.assertFalse(CuriosityEngine(CuriositySettings("quiet")).should_ask(
+            ObservationSignal(True, novel=True, motivation_unclear=True)))
+        balanced = CuriosityEngine(CuriositySettings("balanced"))
+        self.assertFalse(balanced.should_ask(ObservationSignal(True, novel=True)))
+        self.assertTrue(balanced.should_ask(ObservationSignal(True, novel=True, motivation_unclear=True)))
+        with self.assertRaises(ValueError):
+            CuriositySettings("unknown")
 
 
 if __name__ == "__main__":
