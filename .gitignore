@@ -18,6 +18,8 @@ memories/
 *.pth
 *.ckpt
 *.safetensors
+*.vault
+*.vault.*
 .env
 .env.*
 !.env.example
