@@ -15,7 +15,7 @@ python -m forge_core.cli review
 python -m forge_core.cli forget --id YOUR-MEMORY-ID
 ```
 
-The interactive prototype works on a personal computer with Python. It does **not** observe apps or your phone yet; that requires a separate opt-in Android module. It does **not** automatically update model weights from your answers. The vault is AES-256-GCM encrypted using a scrypt-derived key from your passphrase, and only the local encrypted file is saved. This is a prototype, not a completed security audit. There is no forgotten-passphrase recovery yet.
+The Python CLI works on a personal computer. It does **not** observe apps or your phone; separate [Android companion source](../android/README.md) implements opt-in allowlisted app-switch prompts pending APK and phone validation. It does **not** automatically update model weights from your answers. The vault is AES-256-GCM encrypted using a scrypt-derived key from your passphrase, and only the local encrypted file is saved. This is a prototype, not a completed security audit. There is no forgotten-passphrase recovery yet.
 
 The default location is `~/.forge-core/memory.vault`, which must **never** be committed to Git. Passphrases are not saved. Use a strong passphrase and keep a protected backup if needed. Do not place sensitive real-world personal data into experimental builds before a security review.
 
