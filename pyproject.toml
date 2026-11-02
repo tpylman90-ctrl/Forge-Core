@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "forge-core-ai"
-version = "0.1.0"
+version = "0.2.0"
 description = "Forge Core independent personal AI research scaffold"
 requires-python = ">=3.10"
-dependencies = ["torch>=2.3,<3"]
+dependencies = ["torch>=2.3,<3", "cryptography>=42,<48"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
