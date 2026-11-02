@@ -29,8 +29,8 @@
 
 ## Milestone M4: Android integration
 - [x] Standalone Android source scaffold for opt-in allowlisted app-switch prompts, Keystore-encrypted confirmed memory and visible foreground service
-- [x] GitHub Actions Android debug build workflow created (success must be verified)
-- [ ] Successful Android APK build and installation on target phone
+- [x] Android debug APK compiled in GitHub Actions (run 41545378574), artifact 13188462347; Python tests passed (run 41545378489)
+- [ ] Install and exercise first Android APK on target phone
 - [ ] Real device permission/reliability tests and battery impact
 - [ ] Feasibility benchmark on target phone (RAM, tokens/sec, thermal, storage)
 - [ ] Android interface, accessibility and opt-in sensors
