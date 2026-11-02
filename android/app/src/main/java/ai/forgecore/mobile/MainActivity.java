@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ActivityNotFoundException;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
 import android.net.Uri;
 import android.os.Build;
@@ -178,10 +179,24 @@ public final class MainActivity extends android.app.Activity {
                             && !pkg.startsWith("com.android.systemui")) seen.add(pkg);
                 }
             }
+            if (seen.isEmpty()) {
+                // Android may hide recent events until special access is fully active.
+                // A launcher query lets the user explicitly pick apps without
+                // requiring recent usage events. No app list is uploaded.
+                Intent launcher = new Intent(Intent.ACTION_MAIN);
+                launcher.addCategory(Intent.CATEGORY_LAUNCHER);
+                for (ResolveInfo candidate : getPackageManager().queryIntentActivities(
+                        launcher, 0)) {
+                    if (candidate.activityInfo != null) {
+                        String pkg = candidate.activityInfo.packageName;
+                        if (pkg != null && !pkg.equals(getPackageName())) seen.add(pkg);
+                    }
+                }
+            }
             ArrayList<String> sorted = new ArrayList<>(seen);
             Collections.sort(sorted);
             if (sorted.isEmpty()) {
-                toast("No recent app transitions found; use other apps and try again");
+                toast("Android did not expose recent or launchable apps. Try restarting Forge or opening Settings.");
                 return;
             }
             String[] names = sorted.toArray(new String[0]);
@@ -189,7 +204,7 @@ public final class MainActivity extends android.app.Activity {
             boolean[] checks = new boolean[names.length];
             for (int i = 0; i < names.length; i++) checks[i] = allowed.contains(names[i]);
             new AlertDialog.Builder(this)
-                    .setTitle("Choose apps to observe")
+                    .setTitle("Choose non-sensitive apps to observe")
                     .setMultiChoiceItems(names, checks, (dialog, which, selected) -> checks[which] = selected)
                     .setPositiveButton("Save selection", (dialog, which) -> {
                         try {
