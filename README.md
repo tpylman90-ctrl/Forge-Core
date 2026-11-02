@@ -13,9 +13,9 @@ Our long-term ambition is a trustworthy, proactive thinking partner that learns 
 - Make experiments reproducible and report measured improvements honestly.
 - Separate identity, memory, learning and the neural foundation so components can evolve independently.
 
-See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), and [Security](SECURITY.md).
+See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), and [Security](SECURITY.md).
 
-## v0.1 objective
+## v0.2 objectives
 
 1. Implement a small causal Transformer initialized from random weights.
 2. Train on locally supplied, properly licensed plain-text datasets; never on personal memory by default.
@@ -30,6 +30,10 @@ Requires Python 3.10+.
 ```bash
 python -m pip install -e .
 python -m unittest discover -s tests -v
+python -m forge_core.cli demo
+# Interactive teach/confirm/review/forget (local encrypted vault):
+python -m forge_core.cli learn
+python -m forge_core.cli review
 ```
 
 Train only on a text file you have reviewed and are licensed to use, kept outside Git:
@@ -44,7 +48,7 @@ The default ~10M-parameter configuration is an **experimental** model, not a cap
 
 ## Status
 
-The first implementation milestone is a research scaffold. The ability to learn personal decision-making or deploy securely on Android is **not implemented** yet.
+The v0.2 research scaffold includes a functioning, template-based, user-driven learning CLI and a password-encrypted local memory prototype. A trained intelligent assistant, automatic phone observation, secure Android memory, and automatic model learning from experience are **not implemented**. CI workflow is present; verify its actual result before making success claims.
 
 ## License
 
