@@ -56,7 +56,7 @@ Use Android Keystore-bound encryption keys, authenticated encryption (such as AE
 | Curiosity loop | In-memory draft/confirmation types | Useful calibrated questions |
 | Action safety | Deny-by-default example | Trusted, audited mobile consent |
 | Identity | Written policy | Consistent, evaluable behavioral profile |
-| Android | None | Offline/assisted inference and UI |
+| Android | Experimental standalone app source: opt-in selected-app transitions, question notifications, Keystore-encrypted confirmed memory; pending phone verification | Offline/assisted inference, richer opt-in observations, scalable UI |
 
 ## Guiding principle
 
