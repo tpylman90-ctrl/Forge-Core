@@ -13,7 +13,7 @@ Our long-term ambition is a trustworthy, proactive thinking partner that learns 
 - Make experiments reproducible and report measured improvements honestly.
 - Separate identity, memory, learning and the neural foundation so components can evolve independently.
 
-See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), [Android companion](android/README.md), and [Security](SECURITY.md).
+See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), [Android companion](android/README.md), [Language bridge](docs/LANGUAGE-BRIDGE.md), and [Security](SECURITY.md).
 
 ## v0.2 objectives
 
