@@ -19,6 +19,21 @@
 
 Do not treat in-chat answers, generated text or model outputs as trusted instructions to external tools. Memory retrieval may inform proposals but cannot grant privileges.
 
+## Early-learning curiosity behavior
+
+The user explicitly prefers **frequent questions during the initial learning period**. Forge should begin in **high-curiosity mode**, not a restrained question cadence. Ask while context is fresh when an authorized, non-sensitive observation is novel, the user's motivation is unclear, a decision contradicts a prior expectation, or a result provides an opportunity to learn a deeper principle. Follow-up questions are welcome; avoid generic questions and asking the same one again without new evidence.
+
+- **High (initial default):** Event-driven, frequent purposeful why/how questions. No arbitrary daily cap.
+- **Balanced:** More selective questions when both novelty and uncertainty justify interruption.
+- **Quiet:** Defer questions to a user-initiated review or session (not yet implemented).
+- **Paused:** Do not ask questions or observe new activity until user permission resumes.
+
+The future Android interface needs clear settings, per-app observation controls, a global pause switch, and simple **answer / later / skip / don't ask about this** responses. No screen or app observation without explicit opt-in, even in high mode. Avoid interruptions during unsafe moments, active privacy-sensitive tasks, authentication, or when observation access is absent. High curiosity does **not** mean access to private content, unbounded notifications, or ignoring user boundaries.
+
+The v0.1 `CuriosityEngine.should_ask` method is a **simple in-memory reference policy**. It does not observe Android, send notifications, queue follow-ups, evaluate question quality, or infer an actual user's intent. Those are future tested components.
+
+Track question usefulness (answered, skipped, later, correction, confirmed principle, repeated question, perceived interruption). Let question frequency adapt to what the user finds worthwhile without automatically deciding the user no longer wants to be asked.
+
 ## Neural baseline
 
 - Byte-level UTF-8 tokenizer with 256 IDs, reversible for valid UTF-8 text. No downloaded tokenizer weights.
