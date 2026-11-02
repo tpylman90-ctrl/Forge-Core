@@ -7,8 +7,11 @@ import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.ActivityNotFoundException;
 import android.content.pm.PackageManager;
+import android.content.pm.ResolveInfo;
 import android.graphics.Color;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
@@ -50,16 +53,19 @@ public final class MainActivity extends android.app.Activity {
         label(root, "No screen capture, messages, internet permission or automatic model training.", 13, Color.LTGRAY);
 
         status = label(root, "", 15, Color.rgb(100, 206, 242));
-        button(root, "1 · Grant app-usage access", () ->
-                startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)));
-        button(root, "2 · Choose apps Forge may learn from", this::selectApps);
-        button(root, "3 · Start observation (visible notification)", this::startObserving);
+        label(root, "Android 16 may restrict Usage Access for apps installed from downloaded APKs. First open Forge's own app details, tap the three-dot menu, and select Allow restricted settings if offered. Then open Usage Access.", 14, Color.LTGRAY);
+        button(root, "1 · Open Forge app details (restricted settings)", this::openForgeAppDetails);
+        button(root, "2 · Open Usage Access settings", this::openUsageAccess);
+        button(root, "3 · Choose apps Forge may learn from", this::selectApps);
+        button(root, "4 · Start observation (visible notification)", this::startObserving);
+        button(root, "Help: Usage Access not showing Forge", this::showAccessHelp);
         button(root, "Pause / stop observation", () -> {
             stopService(new Intent(this, ObserveService.class));
             toast("Observation stopped");
         });
         button(root, "Review confirmed memories", this::reviewMemories);
         button(root, "Teach Forge a decision manually", () -> showQuestion("Your own example"));
+        label(root, "Manual learning works even without Usage Access. This is still a template-based learner; genuine conversational language inference is a separate upcoming module.", 13, Color.LTGRAY);
         label(root, "Questions appear as notifications after selected app switches. This is a test prototype. You can stop observation at any time.", 13, Color.LTGRAY);
 
         refreshStatus();
@@ -116,9 +122,46 @@ public final class MainActivity extends android.app.Activity {
         }
     }
 
+    private void openForgeAppDetails() {
+        Intent details = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                Uri.parse("package:" + getPackageName()));
+        try {
+            startActivity(details);
+        } catch (ActivityNotFoundException error) {
+            toast("Open Android Settings > Apps > Forge Core manually");
+        }
+    }
+
+    private void openUsageAccess() {
+        try {
+            startActivity(new Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS));
+        } catch (ActivityNotFoundException error) {
+            new AlertDialog.Builder(this)
+                    .setTitle("Usage Access settings unavailable")
+                    .setMessage("Open Android Settings > Apps > Special app access > Usage access. Device settings vary by manufacturer.")
+                    .setPositiveButton("Open Forge details", (d, w) -> openForgeAppDetails())
+                    .setNegativeButton("Close", null)
+                    .show();
+        }
+    }
+
+    private void showAccessHelp() {
+        new AlertDialog.Builder(this)
+                .setTitle("Android 16 Usage Access troubleshooting")
+                .setMessage("1. Open Forge Core app details using the first button.\n\n"
+                        + "2. If the upper-right three-dot menu includes 'Allow restricted settings', select it. Android may ask you to authenticate.\n\n"
+                        + "3. Return to Forge and open Usage Access settings. Look for Forge Core and grant usage access.\n\n"
+                        + "4. If Forge still does not appear, go to Android Settings > Apps > Special app access > Usage access, or search Settings for Usage access.\n\n"
+                        + "5. You can use 'Teach Forge a decision manually' without this permission.\n\n"
+                        + "Not all Motorola/Android versions show the same options. Forge cannot override this system restriction.")
+                .setPositiveButton("Forge app details", (d, w) -> openForgeAppDetails())
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
     private void selectApps() {
         if (!hasUsageAccess()) {
-            toast("Grant app-usage access in Android Settings first");
+            showAccessHelp();
             return;
         }
         try {
@@ -136,10 +179,24 @@ public final class MainActivity extends android.app.Activity {
                             && !pkg.startsWith("com.android.systemui")) seen.add(pkg);
                 }
             }
+            if (seen.isEmpty()) {
+                // Android may hide recent events until special access is fully active.
+                // A launcher query lets the user explicitly pick apps without
+                // requiring recent usage events. No app list is uploaded.
+                Intent launcher = new Intent(Intent.ACTION_MAIN);
+                launcher.addCategory(Intent.CATEGORY_LAUNCHER);
+                for (ResolveInfo candidate : getPackageManager().queryIntentActivities(
+                        launcher, 0)) {
+                    if (candidate.activityInfo != null) {
+                        String pkg = candidate.activityInfo.packageName;
+                        if (pkg != null && !pkg.equals(getPackageName())) seen.add(pkg);
+                    }
+                }
+            }
             ArrayList<String> sorted = new ArrayList<>(seen);
             Collections.sort(sorted);
             if (sorted.isEmpty()) {
-                toast("No recent app transitions found; use other apps and try again");
+                toast("Android did not expose recent or launchable apps. Try restarting Forge or opening Settings.");
                 return;
             }
             String[] names = sorted.toArray(new String[0]);
@@ -147,7 +204,7 @@ public final class MainActivity extends android.app.Activity {
             boolean[] checks = new boolean[names.length];
             for (int i = 0; i < names.length; i++) checks[i] = allowed.contains(names[i]);
             new AlertDialog.Builder(this)
-                    .setTitle("Choose apps to observe")
+                    .setTitle("Choose non-sensitive apps to observe")
                     .setMultiChoiceItems(names, checks, (dialog, which, selected) -> checks[which] = selected)
                     .setPositiveButton("Save selection", (dialog, which) -> {
                         try {
@@ -169,7 +226,7 @@ public final class MainActivity extends android.app.Activity {
 
     private void startObserving() {
         if (!hasUsageAccess()) {
-            toast("Grant Usage Access before starting");
+            showAccessHelp();
             return;
         }
         try {

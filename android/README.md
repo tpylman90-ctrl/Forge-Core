@@ -20,6 +20,14 @@ GitHub Actions workflow: .github/workflows/android.yml. Install the generated **
 
 The workflow must show a successful green run before claiming that an installable APK exists. This README is a specification and source guide, not a claim of device verification.
 
+## Android 16: Forge absent from Usage Access
+
+Android 16 restricts usage-access permission for certain sideloaded APKs. If Forge does not appear in Usage Access settings, open **Android Settings → Apps → Forge Core → three-dot menu → Allow restricted settings** (if shown), then return to **Apps → Special app access → Usage access** and enable Forge Core. The new APK provides an in-app shortcut to its App Info page and troubleshooting instructions. Android and OEM variants differ; users may not see this switch, and Forge cannot bypass Android protections.
+
+**Manual teaching works without Usage Access.** Android permission access only gates observation of selected app-switch signals, not learning through direct conversation.
+
+The APK does not currently ship a language model. For the planned fully offline pretrained language teacher and separate scratch-model research, see [language bridge](../docs/LANGUAGE-BRIDGE.md).
+
 ## First phone test
 
 1. Install the debug APK and open Forge Core.
