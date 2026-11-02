@@ -28,6 +28,10 @@
 - [ ] Permission-bound external tools with audited approvals
 
 ## Milestone M4: Android integration
+- [x] Standalone Android source scaffold for opt-in allowlisted app-switch prompts, Keystore-encrypted confirmed memory and visible foreground service
+- [x] GitHub Actions Android debug build workflow created (success must be verified)
+- [ ] Successful Android APK build and installation on target phone
+- [ ] Real device permission/reliability tests and battery impact
 - [ ] Feasibility benchmark on target phone (RAM, tokens/sec, thermal, storage)
 - [ ] Android interface, accessibility and opt-in sensors
 - [ ] Offline memory and explicit synchronization policy
