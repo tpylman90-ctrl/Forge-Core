@@ -13,7 +13,7 @@ Our long-term ambition is a trustworthy, proactive thinking partner that learns 
 - Make experiments reproducible and report measured improvements honestly.
 - Separate identity, memory, learning and the neural foundation so components can evolve independently.
 
-See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), and [Security](SECURITY.md).
+See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), [Android companion](android/README.md), and [Security](SECURITY.md).
 
 ## v0.2 objectives
 
@@ -48,7 +48,7 @@ The default ~10M-parameter configuration is an **experimental** model, not a cap
 
 ## Status
 
-The v0.2 research scaffold includes a functioning, template-based, user-driven learning CLI and a password-encrypted local memory prototype. A trained intelligent assistant, automatic phone observation, secure Android memory, and automatic model learning from experience are **not implemented**. CI workflow is present; verify its actual result before making success claims.
+The v0.2 research scaffold includes a functioning, template-based, user-driven learning CLI and a password-encrypted local memory prototype. Android companion source now adds opt-in allowlisted app-switch questions with Android Keystore-backed confirmed memory; phone installation and APK build must be verified separately. A trained intelligent assistant, detailed activity understanding, and automatic model learning from experience are **not implemented**.
 
 ## License
 
