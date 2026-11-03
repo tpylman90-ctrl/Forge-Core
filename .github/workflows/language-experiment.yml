@@ -9,6 +9,12 @@ on:
         type: choice
         options: [tinystories, demo]
         default: tinystories
+      corpus_profile:
+        description: "Exact locked small preview or new expanded public source"
+        required: true
+        type: choice
+        options: [locked200, extended800]
+        default: locked200
       model_size:
         description: "Tiny regression control; CPU-friendly Forge Seed; full original base"
         required: true
@@ -16,7 +22,7 @@ on:
         options: [tiny, seed, base]
         default: seed
       steps:
-        description: "ADDITIONAL steps (tiny <=500; seed <=2000; base <=5)"
+        description: "ADDITIONAL steps (tiny <=500; seed <=8000; base <=5)"
         required: true
         type: number
         default: 1000
@@ -27,7 +33,7 @@ on:
   # One intentionally requested longer-run experiment; no automatic schedule.
   push:
     branches: [main]
-    paths: ["experiments/requests/seed-run003.md"]
+    paths: ["experiments/requests/seed-run004.md"]
 
 permissions:
   contents: read
@@ -40,8 +46,9 @@ jobs:
     env:
       DATASET: ${{ inputs.dataset || 'tinystories' }}
       MODEL_SIZE: ${{ inputs.model_size || 'seed' }}
-      STEPS: ${{ inputs.steps || '1000' }}
-      RESUME_RUN_ID: ${{ github.event_name == 'push' && '41554336734' || inputs.resume_run_id || '' }}
+      STEPS: ${{ github.event_name == 'push' && '4000' || inputs.steps || '1000' }}
+      RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
+      RUN_PROFILE: ${{ github.event_name == 'push' && 'extended800' || inputs.corpus_profile || 'locked200' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -57,22 +64,36 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$DATASET" == demo || "$DATASET" == tinystories ]]
+          [[ "$RUN_PROFILE" == locked200 || "$RUN_PROFILE" == extended800 ]]
           [[ "$MODEL_SIZE" == tiny || "$MODEL_SIZE" == seed || "$MODEL_SIZE" == base ]]
           [[ "$STEPS" =~ ^[0-9]+$ ]]
           (( STEPS >= 1 ))
           if [[ "$MODEL_SIZE" == tiny ]]; then (( STEPS <= 500 )); fi
-          if [[ "$MODEL_SIZE" == seed ]]; then (( STEPS <= 2000 )); fi
+          if [[ "$MODEL_SIZE" == seed ]]; then (( STEPS <= 8000 )); fi
           if [[ "$MODEL_SIZE" == base ]]; then (( STEPS <= 5 )); fi
           if [[ -n "$RESUME_RUN_ID" ]]; then [[ "$RESUME_RUN_ID" =~ ^[0-9]+$ ]]; fi
+          if [[ "$RUN_PROFILE" == extended800 ]]; then
+            echo "TRAIN_ROWS=800" >> "$GITHUB_ENV"
+            echo "VALID_ROWS=200" >> "$GITHUB_ENV"
+            echo "BATCH_SIZE=4" >> "$GITHUB_ENV"
+            echo "SEQ_LEN=128" >> "$GITHUB_ENV"
+            echo "EVAL_EVERY=400" >> "$GITHUB_ENV"
+          else
+            echo "TRAIN_ROWS=200" >> "$GITHUB_ENV"
+            echo "VALID_ROWS=50" >> "$GITHUB_ENV"
+            echo "BATCH_SIZE=2" >> "$GITHUB_ENV"
+            echo "SEQ_LEN=64" >> "$GITHUB_ENV"
+            echo "EVAL_EVERY=100" >> "$GITHUB_ENV"
+          fi
       - name: Prepare document-separated language data
         run: |
           python -m forge_core.neural.prepare \
-            --source "$DATASET" --out data/experiment --train-rows 200 --valid-rows 50
+            --source "$DATASET" --out data/experiment --train-rows "$TRAIN_ROWS" --valid-rows "$VALID_ROWS"
       - name: Verify exact public corpus content before any training
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$DATASET" == tinystories ]]; then
+          if [[ "$DATASET" == tinystories && "$RUN_PROFILE" == locked200 ]]; then
             python -m forge_core.neural.lock \
               --manifest data/experiment/manifest.json \
               --lock data/locks/tinystories-preview-200-50-v0.4.json
@@ -98,9 +119,9 @@ jobs:
             --valid data/experiment/valid.txt \
             --manifest data/experiment/manifest.json \
             --model-size "$MODEL_SIZE" --steps "$STEPS" \
-            --batch-size 2 --seq-len 64 --eval-batches 8 \
+            --batch-size "$BATCH_SIZE" --seq-len "$SEQ_LEN" --eval-batches 8 \
             --sample-tokens 96 --seed 42 \
-            --eval-every 100 --audit-batches 64 \
+            --eval-every "$EVAL_EVERY" --audit-batches 64 \
             --out artifacts/checkpoint.pt --report artifacts/metrics.json \
             "${ARGS[@]}"
       - name: Preserve exact public corpus, provenance and loss curve
@@ -110,7 +131,7 @@ jobs:
           cp data/experiment/train.txt artifacts/train.txt
           cp data/experiment/valid.txt artifacts/valid.txt
           if [[ "$DATASET" == tinystories ]]; then
-            printf '%s\n' 'Public TinyStories preview: roneneldan/TinyStories (CDLA-Sharing-1.0)' 'https://huggingface.co/datasets/roneneldan/TinyStories' 'Content SHA256 pinned to Forge Seed Run 002; this is not an immutable full upstream dataset snapshot.' > artifacts/SOURCE-NOTICE.txt
+            printf '%s\n' 'Public TinyStories preview: roneneldan/TinyStories (CDLA-Sharing-1.0)' 'https://huggingface.co/datasets/roneneldan/TinyStories' 'Locked200 is SHA256-pinned; extended800 captures a new dataset manifest and must be locked before any continuation. This is not a full immutable upstream snapshot.' > artifacts/SOURCE-NOTICE.txt
           else
             printf '%s\n' 'Forge Core original synthetic CI test fixtures; not a real language corpus.' > artifacts/SOURCE-NOTICE.txt
           fi
