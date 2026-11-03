@@ -36,6 +36,14 @@ See [Teacher v1](docs/TEACHER-V1.md),
 [New transfer exam](docs/TEACHER-POINTER-TRANSFER.md). All new
 weights and lessons remain research-only.
 
+**New fixed-weight role-binding diagnostic (Nov 3):** The trained
+source-word pointer answered **83/384** unfamiliar synthetic giver/
+recipient questions, compared with **11/384** for an incorrect-source
+control. Yet it answered BOTH role questions correctly in only
+**9/192** events and BOTH swapped-name versions in only **11/192**.
+This isolates a major question-conditioning and semantic-role transfer
+deficit; nothing was promoted. [Read the verified role audit](docs/POINTER-ROLE-RESULTS.md).
+
 ## Master development direction
 
 [**Forge Core Master Blueprint v1.0**](docs/MASTER-BLUEPRINT.md) governs
