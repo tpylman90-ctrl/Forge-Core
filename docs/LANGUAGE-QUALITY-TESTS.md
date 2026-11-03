@@ -26,3 +26,17 @@ The one-time Run 005 comparison checks the step-4,000 and step-8,000
 checkpoints trained on the identical 800/200 source corpus. The side-by-side
 samples remain public research artifacts, with no user memories or other
 private inputs. Human review is required before declaring any language gate.
+
+## Verified Run 005 findings
+
+Comparison: https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41558718634
+
+- Both checkpoints used the exact same 800/200 TinyStories source hashes,
+  model architecture, batch settings and sampling seeds.
+- Step 8,000 produced more ordinary story phrases, but invented words,
+  unusual agreement and disconnected clauses persisted.
+- The sentence-level and dialogue-quality gate **has not been passed**.
+- A unit test detected that the first inspection implementation altered
+  global RNG state during neural initialization; this was corrected in
+  the follow-up commit and independently retested.
+- The test provides sample evidence, not an objective fluency score.

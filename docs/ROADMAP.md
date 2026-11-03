@@ -45,8 +45,9 @@ held-out documents and reproducible hashes. A passing smoke test is not language
 - [ ] Move beyond preview rows to immutable, complete, licensed training documents
 - [ ] Train a useful Forge Seed with sufficient steps, diverse immutable documents and suitable compute; Run 005 at 8,000 steps remains fragmentary
 - [ ] Review byte-level tokenizer inefficiency; benchmark subword tokenizer alternatives
-- [x] Added fixed-prompt qualitative comparison tool and CI tests; Run 005 versus Run 004 comparison requested
-- [ ] Human-review generated text coherence, unseen narrative behavior and simple QA; no fluent language claim yet
+- [x] Five-prompt qualitative inspection Run 005 versus Run 004 completed; recognizable syntax emerging, but grammatical errors and invented words remain
+- [x] Human-reviewed initial five story prompts: **fluency NOT achieved**; fixed benchmark and source-preserving archive verified
+- [ ] Improve unseen narrative continuity, grammatical consistency and basic QA before claiming language capability
 - [ ] Add instruction/conversation finetuning after basic language ability is demonstrated
 - [ ] Avoid claiming general reasoning until independently tested
 

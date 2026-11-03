@@ -186,3 +186,29 @@ quality gate. No Android agent, pretrained teacher, user memory, subjective
 personality or autonomy has been added to these training weights. Keep the
 model distinct from the historical draft Run 003 and preserve both reference
 checkpoints for reproducibility.
+
+
+## Run 005 follow-up: fixed-prompt generation and durable draft archive
+
+- **Qualitative workflow:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41558718634
+- **Identical public dataset and architecture:** Run 004 (step 4,000) versus
+  Run 005 (step 8,000). Five generic, nonpersonal prompt prefixes; same
+  fixed sampling temperature and seeds; no training in the comparison.
+- **Observation:** Later samples more often start with familiar story
+  structure (e.g. "there was" and "was very excited") but still contain
+  grammatical errors, invented words, repetitions, and disconnected
+  sentence content. **The model does not pass the human-readability gate.**
+- **Checkpoint archive workflow:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41558718548
+  successfully audited and created GitHub **DRAFT** Release
+  \`forge-seed-run005-v0.6\` (not published as a capable model).
+  It includes the resumable checkpoint, source notice, model metrics, public
+  train/validation samples, dataset manifest, and audit SHA256 checksums.
+- **CI issue and correction:** One new qualitative test initially caught
+  an RNG side effect during model initialization. The inspector now
+  preserves the caller's RNG state around initialization and generation.
+  The model-training weights and prior learning results were unaffected.
+- **Next evaluation gate:** Pretrain on an expanded, revision-pinned corpus;
+  compare a freshly learned tokenizer to the byte tokenizer at equal
+  training-compute budgets. Add human-readable sentence and unseen-story
+  evaluations, with explicit failure examples. Do not yet connect an
+  unready language model to Android observation or personal memory.

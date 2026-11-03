@@ -78,8 +78,11 @@ Seed for 4,000 steps, reducing fixed held-out next-byte loss from 5.5463 to
 reducing held-out loss further to 1.2533. The generated sample now has some
 English-like clauses, but is not coherent enough for conversation.
 
-Five fixed nonpersonal prompt samples compare checkpoints via the
+Five fixed nonpersonal prompts have been compared through the
 [language-quality inspection workflow](docs/LANGUAGE-QUALITY-TESTS.md).
+Results show more familiar story syntax but still incoherent output. This is
+**learning to predict language bytes, not a functional conversational AI**.
+The 8,000-step research checkpoint has a validated, unpublished draft archive.
 
 For the first bounded real-language experiment, follow
 [the training guide](docs/LANGUAGE-TRAINING-LOOP.md) or manually use the
