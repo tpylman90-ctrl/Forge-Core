@@ -40,7 +40,7 @@ class ChoiceExample:
     answer: str
 
 
-def build_examples(split: str) -> list[ChoiceExample]:
+def build_examples(split: str, expand_roles: bool = False) -> list[ChoiceExample]:
     """Prompt text never contains gold labels or rule explanations."""
     probes = build_probes(split)
     examples: list[ChoiceExample] = []
@@ -79,6 +79,31 @@ def build_examples(split: str) -> list[ChoiceExample]:
             examples.append(ChoiceExample(p.id, p.skill, prompt, side.upper()))
         else:
             raise ValueError(f"Unsupported gold skill {p.skill}")
+    if expand_roles:
+        # Cross the six names with the five split-specific verbs.
+        # A/B positions and queried roles are counterbalanced.
+        roles = [p for p in probes if p.skill == "semantic_roles"]
+        nouns = sorted({noun for p in roles for noun in p.actors})
+        for verb_i, p in enumerate(roles):
+            past = p.sentence_a.split()[2]
+            for i, actor in enumerate(nouns):
+                for j, patient in enumerate(nouns):
+                    if i == j:
+                        continue
+                    choices = ((actor, patient) if (i + j + verb_i) % 2 == 0
+                               else (patient, actor))
+                    sentence = f"The {actor} {past} the {patient}."
+                    for role, correct in (("agent", actor), ("patient", patient)):
+                        question = ("Who performs the action?" if role == "agent"
+                                    else "Who receives the action?")
+                        prompt = (
+                            f"Sentence: {sentence}\nQuestion: {question}\n"
+                            f"A) {choices[0]}\nB) {choices[1]}\nAnswer: "
+                        )
+                        answer = "A" if choices[0] == correct else "B"
+                        examples.append(ChoiceExample(
+                            f"{split}:role-curriculum:{verb_i}:{actor}:{patient}:{role}",
+                            "semantic_roles", prompt, answer))
     if any(x.answer not in ("A", "B") for x in examples):
         raise ValueError("Bad gold label")
     if len({x.id for x in examples}) != len(examples):
@@ -182,7 +207,9 @@ def run_experiment(*, checkpoint_path: Path, validation_path: Path,
                    lr: float = 5e-5, validation_windows: int = 16,
                    output_dir: Path | None = None,
                    language_train_path: Path | None = None,
-                   language_weight: float = 0.0) -> dict:
+                   language_weight: float = 0.0,
+                   expanded_roles: bool = False,
+                   stratified_schedule: bool = False) -> dict:
     if not 1 <= steps <= 1000 or not 1 <= batch <= 8 or not 0 < lr <= 0.01:
         raise ValueError("Invalid bounded adaptation settings")
     if not 2 <= validation_windows <= 64:
@@ -197,8 +224,8 @@ def run_experiment(*, checkpoint_path: Path, validation_path: Path,
         raise ValueError("Validation text differs from source checkpoint")
     train_probes, eval_probes = build_probes("train"), build_probes("eval")
     validate_splits(train_probes, eval_probes)
-    train = build_examples("train")
-    evaluation = build_examples("eval")
+    train = build_examples("train", expand_roles=expanded_roles)
+    evaluation = build_examples("eval", expand_roles=expanded_roles)
     if {x.id for x in train} & {x.id for x in evaluation}:
         raise ValueError("Probe leakage across splits")
     control = shuffled_control(train, seed + 117)
@@ -208,7 +235,23 @@ def run_experiment(*, checkpoint_path: Path, validation_path: Path,
     if max(len(x.prompt.encode("utf-8")) for x in train + evaluation) > cfg.max_seq_len:
         raise ValueError("Model too small for these language probes")
     rng = random.Random(seed)
-    schedule = [[rng.randrange(len(train)) for _ in range(batch)] for _ in range(steps)]
+    if stratified_schedule:
+        # 50% roles, 25% negation, 25% agreement, with identical arms.
+        indices_by_skill = {
+            skill: [i for i, ex in enumerate(train) if ex.skill == skill]
+            for skill in ("semantic_roles", "negation", "subject_verb_agreement")
+        }
+        if any(not pool for pool in indices_by_skill.values()):
+            raise ValueError("Missing linguistic training category")
+        rotation = ("semantic_roles", "negation", "semantic_roles",
+                    "subject_verb_agreement")
+        schedule = [
+            [rng.choice(indices_by_skill[rotation[(t * batch + j) % len(rotation)]])
+             for j in range(batch)]
+            for t in range(steps)
+        ]
+    else:
+        schedule = [[rng.randrange(len(train)) for _ in range(batch)] for _ in range(steps)]
     language_batches = None
     if language_weight:
         if language_train_path is None:
@@ -261,6 +304,7 @@ def run_experiment(*, checkpoint_path: Path, validation_path: Path,
         "seed": seed, "steps_per_arm": steps, "batch_size": batch, "learning_rate": lr,
         "public_language_loss_weight": language_weight,
         "identical_language_minibatches": bool(language_batches),
+        "expanded_roles": expanded_roles, "stratified_schedule": stratified_schedule,
         "prompt_examples_train": len(train), "prompt_examples_eval": len(evaluation),
         "identical_schedule": True, "identical_initial_weights": True,
         "same_number_of_prompts_and_optimizer_updates": True,
@@ -303,6 +347,10 @@ def main() -> None:
     p.add_argument("--seed", type=int, default=1234)
     p.add_argument("--language-weight", type=float, default=0.0,
                    help="Shared public-language next-byte loss contribution, 0..1")
+    p.add_argument("--expanded-roles", action="store_true",
+                   help="Use cross-product verified actor/patient examples")
+    p.add_argument("--stratified-schedule", action="store_true",
+                   help="Balance semantic roles, grammar and negation in minibatches")
     args = p.parse_args()
     audit = verify_archive(args.archive)
     result = run_experiment(
@@ -312,6 +360,8 @@ def main() -> None:
         output_dir=args.out,
         language_train_path=args.archive / "train.txt",
         language_weight=args.language_weight,
+        expanded_roles=args.expanded_roles,
+        stratified_schedule=args.stratified_schedule,
     )
     result["archive_audit"] = {"status": audit["archive_status"],
                               "source": audit["source"], "license": audit["license"]}

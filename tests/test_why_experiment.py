@@ -23,6 +23,17 @@ class TestLinguisticWhyExperiment(unittest.TestCase):
         self.assertNotEqual([x.answer for x in tr], [x.answer for x in null])
         self.assertFalse({x.id for x in tr} & {x.id for x in ev})
 
+    def test_expanded_roles_are_balanced_and_held_out(self):
+        train = build_examples("train", expand_roles=True)
+        validation = build_examples("eval", expand_roles=True)
+        self.assertEqual(len(train), 330)
+        self.assertEqual(len(validation), 330)
+        self.assertEqual(len({row.id for row in train}), 330)
+        self.assertFalse({row.id for row in train} & {row.id for row in validation})
+        for skill in ("semantic_roles", "negation", "subject_verb_agreement"):
+            self.assertEqual({row.answer for row in train if row.skill == skill}, {"A", "B"})
+            self.assertEqual({row.answer for row in validation if row.skill == skill}, {"A", "B"})
+
     def test_same_checkpoint_and_validation_hash_and_equal_update_budget(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

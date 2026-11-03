@@ -86,3 +86,28 @@ next-byte loss on both arms against the unchanged checkpoint.
 A benefit here would justify *further controlled tests*, not promotion:
 repeat across seeds, stronger withheld constructions, and properly licensed
 external grammar annotations before using it in any assistant.
+
+
+## Run 002: verified, but effect remains narrow
+
+[Run 002](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41569782469)
+introduced identical public-language rehearsal in both arms, 40% language
+loss / 60% verified or shuffled linguistic labels. Matched seed, 120
+updates, batch 2 and source checkpoint Run 005.
+
+- Frozen held-out language loss **1.082579**.
+- Gold-label/rehearsal model: **1.085860** (very small regression).
+- Shuffled-label/rehearsal control: **1.086169**.
+- Gold-label evaluation: **19/30** (63.3%); shuffled-labels **18/30**
+  (60%); frozen **15/30** (50%).
+- On the gold-label model: grammar **5/5**, negation **4/5**, semantic
+  actor/patient roles **10/20**. The core role skill has NOT generalized.
+- One seed and only 30 templated questions make the nominal difference
+  inconclusive. The shuffled-label model also scored 5/5 on grammar
+  evaluation, making it clear that surface patterns can dominate.
+
+**Run 003** expands actor/object training examples across the available
+training nouns/verbs, evaluates on a similarly expanded unseen lexicon,
+and stratifies task examples so that grammatical and negation tasks remain
+visible. Both arms still rehearse identical public language. No result is
+promoted without further independent tests.

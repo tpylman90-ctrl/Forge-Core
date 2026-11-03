@@ -15,7 +15,7 @@ on:
         default: 120
   push:
     branches: [main]
-    paths: ["experiments/requests/why-ab-run002.md"]
+    paths: ["experiments/requests/why-ab-run003.md"]
 
 permissions:
   contents: read
@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 35
     env:
       SOURCE_RUN: ${{ github.event_name == 'push' && '41558008416' || inputs.checkpoint_run_id }}
-      TRAIN_STEPS: ${{ github.event_name == 'push' && '120' || inputs.adaptation_steps }}
+      TRAIN_STEPS: ${{ github.event_name == 'push' && '240' || inputs.adaptation_steps }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -65,7 +65,9 @@ jobs:
             --steps "$TRAIN_STEPS" \
             --batch 2 \
             --seed 1234 \
-            --language-weight 0.4
+            --language-weight 0.4 \
+            --expanded-roles \
+            --stratified-schedule
       - name: Preserve measured comparison, not promoted model weights
         uses: actions/upload-artifact@v4
         with:
