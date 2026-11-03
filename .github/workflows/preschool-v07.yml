@@ -69,6 +69,12 @@ jobs:
             --model-size seed --steps "$STEPS" --batch 4 --seq-len 128 \
             --vocab 2048 --eval-every 2000 --seed 42 \
             "${ARGS[@]}"
+      - name: Evaluate basic preschool-like capabilities without automatic promotion
+        run: |
+          cp data/preschool/manifest.json artifacts/preschool/source-manifest.json
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/preschool \
+            --out artifacts/preschool/capabilities.json
       - name: Preserve public text source, pinned revision and research checkpoint
         shell: bash
         run: |
