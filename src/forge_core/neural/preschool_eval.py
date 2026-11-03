@@ -79,6 +79,7 @@ def forced_choice(model: ByteTransformer, tokenizer: Tokenizer,
     model.eval()
     groups: dict[str,dict] = {}
     ncorrect = 0
+    individual_results: list[int] = []
     for task in prompts:
         prefix = tokenizer.encode(task["prompt"]).ids
         if len(prefix)>=model.cfg.max_seq_len:
@@ -102,9 +103,21 @@ def forced_choice(model: ByteTransformer, tokenizer: Tokenizer,
         g["correct"]+=correct
         g["total"]+=1
         ncorrect+=correct
+        individual_results.append(correct)
+    # Adjacent records are deliberate A/B mirrors of the same underlying
+    # question. Treat them as one pair rather than as independent evidence.
+    mirror_pairs = []
+    if len(prompts) % 2 == 0:
+        for i in range(0, len(prompts), 2):
+            if prompts[i].get("gold") == "A" and prompts[i+1].get("gold") == "B":
+                mirror_pairs.append((individual_results[i], individual_results[i+1]))
     return {
         "correct":ncorrect,"total":len(prompts),
         "accuracy":round(ncorrect/len(prompts),4),
+        "mirrored_pair_count":len(mirror_pairs),
+        "both_mirrors_correct":sum(a and b for a,b in mirror_pairs),
+        "one_mirror_correct":sum(a != b for a,b in mirror_pairs),
+        "both_mirrors_wrong":sum(not a and not b for a,b in mirror_pairs),
         "by_skill":{name:{"correct":v["correct"],"total":v["total"],
                           "accuracy":round(v["correct"]/v["total"],4)}
                     for name,v in sorted(groups.items())},

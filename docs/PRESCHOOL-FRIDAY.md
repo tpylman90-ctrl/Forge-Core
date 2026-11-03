@@ -80,7 +80,8 @@ improvements, remaining failures and a realistic next training plan.
 - [x] Train-only scratch ByteLevel-BPE with SHA256 and reversible-token test
 - [x] Separate v0.7 scratch Transformer, resumable optimizer/RNG and
       fixed-prompt generation / held-out loss instrumentation
-- [ ] Complete real GitHub Actions v0.7 run and review source/score metrics
-- [ ] Build held-out basic QA/instruction benchmark and compare against chance
-- [ ] Improve/extend if baseline outputs don't yet meet language targets
-- [ ] Verify durable checkpoint retention after passing reproducibility audit
+- [x] Verified 14,000-step v0.7 original scratch model and reviewed generated text; held-out token loss 7.6305 → 2.6303
+- [x] Basic 40-choice mirrored question benchmark completed; 19/40 at chance level. Free-form instruction benchmark remains pending
+- [x] Verified negative 1,600-example QA study and successful 16-example memorization sanity gate
+- [ ] Run staged QA curriculum and assess novel question transfer; do not promote without evidence
+- [x] Audited and created unpublished DRAFT model Release with tokenizer and source SHA256; not a publicly certified model

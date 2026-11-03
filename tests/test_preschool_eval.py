@@ -14,6 +14,10 @@ class TestPreschoolEval(unittest.TestCase):
                          {"color","recipient","location","count"})
         self.assertEqual(len({x["id"] for x in tasks}),40)
         self.assertEqual(len(MANUAL_PROMPTS),15)
+        for i in range(0,len(tasks),2):
+            self.assertEqual(tasks[i]["gold"],"A")
+            self.assertEqual(tasks[i+1]["gold"],"B")
+            self.assertEqual(tasks[i]["skill"],tasks[i+1]["skill"])
         self.assertEqual(tasks,build_prompts())
 
 

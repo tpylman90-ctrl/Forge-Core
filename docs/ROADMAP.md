@@ -119,3 +119,14 @@ Track code SHA, source/license, document IDs/hashes, splits, parameters, tokeniz
 training steps, optimizer state, seed, hardware, time, validation loss/bits per
 byte, generation samples, regressions and checkpoint retention. Label every claim
 as **verified, implemented but unverified, or proposed**.
+
+
+## November 3 verified v0.7 and next learning experiment
+
+- [x] Revision-pinned 10 MiB public training/2 MiB public validation prefixes, scratch BPE, original 2.22M Transformer and 14,000 steps
+- [x] Unseen mirrored preschool QA baseline **19/40** (~chance), not passed
+- [x] First broad verified-label QA study failed to transfer: **20/40**, shuffled **21/40**
+- [x] Sixteen-example sanity calibration memorized **16/16 after 100 updates**, so output learning works on repeated examples
+- [x] Baseline v0.7 research checkpoint preserved in audited **unpublished draft** GitHub release
+- [ ] Staged 16→64→256→512 question teaching and independent transfer evaluation
+- [ ] Demonstrate robust role/color/count/location comprehension and simple instructions on novel examples before claiming preschool-like ability

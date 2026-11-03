@@ -280,3 +280,78 @@ The correct next phase is robust corpus/tokenizer pretraining followed by
 measured basic instruction comprehension, then re-run the Why experiments
 with an independent grammar benchmark and multiple seeds. Existing
 research artifacts remain separate, with no personal-memory mixing.
+
+
+## Forge Seed v0.7 — 14,000-step original scratch-BPE language experiment
+
+- **Run:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41572257363
+- **Evaluation:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41573510393
+- **Date:** 2026-11-03 (UTC; US Eastern Nov 2 evening)
+- **Source:** roneneldan/TinyStories upstream git revision
+  f54c09fd23315a6f9c86f9dc80f725de7d8f9c64;
+  10 MiB source train prefix, 2 MiB source validation prefix;
+  11,838 cleaned training source records. Upstream declared
+  CDLA-Sharing-1.0. This is NOT a full representative dataset sample.
+- **Tokenizer:** original ByteLevel BPE learned only from training text;
+  2,048-token vocabulary. No pretrained weights or tokenizer.
+- **Model:** original, random-initialized 2,219,136-parameter decoder
+  Transformer, 4 layers / 4 heads / 192 width.
+- **Training:** 14,000 AdamW updates, CPU, batch 4, 128 BPE tokens.
+- **Sampled held-out BPE token loss:** 7.630480 at initialization;
+  2.630295 after 14,000 steps across 256 held-out windows.
+- **Progress:** 2k 3.634244; 4k 3.220338; 6k 3.007008;
+  8k 2.859182; 10k 2.776953; 12k 2.697914;
+  14k 2.637960 (64-window comparisons).
+- **Estimated bits/byte:** 1.038255 based on token density and sampled
+  loss. Not an exact full-corpus measure or directly comparable to the
+  older byte-tokenizer model's loss.
+- **Generated samples:** recognizable multi-sentence short-story
+  fragments, including "Once upon a time, there was a little girl
+  named Lily. She loved to play outside..." but repetitive, sometimes
+  contradictory, with invented phrases. Readable text is progress,
+  not a demonstrated preschool conversational skill.
+- **Preschool task assessment:** 19/40 (47.5%) on balanced mirrored A/B
+  prompts; color 5/10, count 5/10, location 5/10, recipient 4/10.
+  This does NOT exceed the approximate chance-level baseline.
+  No independent human-graded free-form instruction score yet.
+- **Safety:** Original v0.7 checkpoint preserved, not promoted.
+  Integrity-checked public-only unpublished DRAFT GitHub Release
+  forge-seed-v07-pretrain-14000 verified by
+  https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41635667568.
+  Personal memories excluded.
+
+## Forge v0.7 — First supervised QA trial and diagnostic
+
+- **QA teaching run:**
+  https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41635128033
+- **Design:** Frozen original vs verified gold answers vs within-skill
+  shuffled-answer control; 1,600 synthetic public/original training
+  exercises, 1,400 AdamW updates/arm, public TinyStories rehearsal.
+  Transfer and original exams use distinct names and varying phrasings.
+- **Results, original mirrored 40:** frozen 19/40 (47.5%), verified
+  20/40 (50%), shuffled 21/40 (52.5%).
+- **Results, transfer mirrored 40:** frozen 20/40 (50%), verified
+  20/40 (50%), shuffled 21/40 (52.5%).
+- **Held-out language loss:** frozen 2.637959, verified 2.607107,
+  shuffled 2.607889; no catastrophic forgetting, but the target
+  *comprehension* task did NOT improve.
+- **Training loss:** verified A/B remained near log(2), suggesting
+  insufficient learning even on many training questions.
+- **Memorization diagnostic:**
+  https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41635991947
+  tested 16 repeated, balanced verified questions from the same original
+  checkpoint with 600 steps and no language rehearsal. Initial score
+  8/16; after only 100 updates, **16/16**; kept 16/16 through 600.
+  That proves the classification path can optimize and memorize
+  simple repeated items. It does NOT prove transfer or comprehension.
+- **Next:** Staged 16 → 64 → 256 → 512-question curriculum with
+  held-out paired-mirror consistency metrics, shuffled controls, shared
+  public-text rehearsal and no automatic promotion. See
+  docs/PRESCHOOL-STAGED.md.
+
+### Interpretation
+
+The central bottleneck is still generalizing new sentences into
+correct answers. The correct approach is supervised scaffolding,
+independent held-out evaluation, and careful regression control—not
+premature Android integration or another claim of cognitive maturity.

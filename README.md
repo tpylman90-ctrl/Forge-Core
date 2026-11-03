@@ -146,3 +146,7 @@ code or third-party datasets beyond their documented terms.
 For long-lived, audited preservation of a public research checkpoint,
 see the [draft archive procedure](docs/CHECKPOINT-ARCHIVE.md). Nothing
 is automatically published as a trained conversational assistant.
+
+### Latest measured language evidence (November 3)
+
+The v0.7 original model at 14,000 steps now generates more readable story-like text (held-out next-token loss **2.6303**), but scored only **19/40** on balanced elementary A/B comprehension questions. A broad QA-training experiment failed to improve held-out accuracy (**20/40** verified vs **21/40** shuffled). A deliberately small sanity study then memorized all **16/16** examples after 100 updates, indicating our immediate weakness is *transferring* answer rules to unfamiliar sentences, not the ability to optimize an output token. A staged curriculum is running/being evaluated; experimental weights are never automatically promoted. See [Preschool Staged Research](docs/PRESCHOOL-STAGED.md) and the [Experiment Ledger](docs/EXPERIMENTS.md).
