@@ -1,0 +1,90 @@
+name: Forge Teacher v1 — neural word-pointer research
+
+on:
+  workflow_dispatch:
+    inputs:
+      original_run_id:
+        type: string
+        required: true
+        description: "Archived original scratch language model run"
+        default: "41572257363"
+      parent_run_id:
+        type: string
+        required: true
+        description: "Verified compositional research candidate run"
+        default: "41649770774"
+      teacher_run_id:
+        type: string
+        required: true
+        description: "Completed verified Teacher v1 lesson-feedback pilot"
+        default: "41668685911"
+      steps:
+        type: number
+        required: true
+        description: "Per-arm neural pointer steps (1–2000)"
+        default: 500
+  push:
+    branches: [main]
+    paths: ["experiments/requests/teacher-pointer-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  pointer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      ORIGINAL_RUN: ${{ inputs.original_run_id || '41572257363' }}
+      PARENT_RUN: ${{ inputs.parent_run_id || '41649770774' }}
+      TEACHER_RUN: ${{ inputs.teacher_run_id || '41668685911' }}
+      STEPS: ${{ inputs.steps || '500' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install original scratch BPE codec
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Check bounded inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          for val in "$ORIGINAL_RUN" "$PARENT_RUN" "$TEACHER_RUN" "$STEPS"; do
+            [[ "$val" =~ ^[0-9]+$ ]]
+          done
+          (( STEPS >= 1 && STEPS <= 2000 ))
+      - name: Download audited original, research parent, and feedback-adjusted teacher lessons
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original parent teacher artifacts/pointer
+          gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-v07-compositional-qa --dir parent
+          gh run download "$TEACHER_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-teacher-v1-research --dir teacher
+          test -f original/checkpoint.pt
+          test -f parent/verified-research.pt
+          test -f teacher/next-lessons/manifest.json
+      - name: Train frozen-backbone neural copy pointer against wrong-source control
+        shell: bash
+        run: |
+          python -m forge_core.neural.span_pointer_lab \
+            --source original --parent parent \
+            --lessons teacher/next-lessons \
+            --out artifacts/pointer --steps "$STEPS"
+      - name: Preserve unpromoted pointer research and diagnostic measurements
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-teacher-v1-neural-pointer
+          path: artifacts/pointer/
+          retention-days: 30
+          if-no-files-found: error
