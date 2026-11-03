@@ -1,0 +1,104 @@
+name: Forge Scratch Language Experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      dataset:
+        description: "Approved public dataset or original tiny fixture"
+        required: true
+        type: choice
+        options:
+          - demo
+          - tinystories
+        default: demo
+      model_size:
+        description: "Tiny CPU control or original ~10M parameter base"
+        required: true
+        type: choice
+        options:
+          - tiny
+          - base
+        default: tiny
+      steps:
+        description: "ADDITIONAL training steps (1..30 tiny; 1..5 base)"
+        required: true
+        type: number
+        default: 5
+      resume_run_id:
+        description: "Optional prior experiment run ID with matching corpus/config"
+        required: false
+        type: string
+  pull_request:
+    paths:
+      - ".github/workflows/language-experiment.yml"
+      - "src/forge_core/neural/experiment.py"
+      - "src/forge_core/neural/prepare.py"
+      - "tests/test_training_loop.py"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATASET: ${{ inputs.dataset || 'demo' }}
+      MODEL_SIZE: ${{ inputs.model_size || 'tiny' }}
+      STEPS: ${{ inputs.steps || '3' }}
+      RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Validate bounded work
+        shell: bash
+        run: |
+          [[ "$DATASET" == demo || "$DATASET" == tinystories ]]
+          [[ "$MODEL_SIZE" == tiny || "$MODEL_SIZE" == base ]]
+          [[ "$STEPS" =~ ^[0-9]+$ ]]
+          (( STEPS >= 1 && STEPS <= 30 ))
+          if [[ "$MODEL_SIZE" == base ]]; then (( STEPS <= 5 )); fi
+          if [[ -n "$RESUME_RUN_ID" ]]; then [[ "$RESUME_RUN_ID" =~ ^[0-9]+$ ]]; fi
+      - name: Prepare separate training and validation data
+        run: |
+          python -m forge_core.neural.prepare \
+            --source "$DATASET" --out data/experiment --train-rows 200 --valid-rows 50
+      - name: Download approved previous experiment checkpoint
+        if: ${{ env.RESUME_RUN_ID != '' }}
+        shell: bash
+        run: |
+          mkdir -p previous
+          gh run download "$RESUME_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name forge-scratch-language-checkpoint \
+            --dir previous
+          test -f previous/checkpoint.pt
+      - name: Train, validate and checkpoint
+        shell: bash
+        run: |
+          ARGS=()
+          if [[ -n "$RESUME_RUN_ID" ]]; then ARGS+=(--resume previous/checkpoint.pt); fi
+          python -m forge_core.neural.experiment \
+            --train data/experiment/train.txt \
+            --valid data/experiment/valid.txt \
+            --model-size "$MODEL_SIZE" --steps "$STEPS" \
+            --batch-size 2 --seq-len 32 --eval-batches 2 --seed 42 \
+            --out artifacts/checkpoint.pt --report artifacts/metrics.json \
+            "${ARGS[@]}"
+      - name: Record provenance with checkpoint
+        run: cp data/experiment/manifest.json artifacts/dataset-manifest.json
+      - name: Retain model weights, optimizer and metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-scratch-language-checkpoint
+          path: artifacts/
+          if-no-files-found: error
+          retention-days: 30

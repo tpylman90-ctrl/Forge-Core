@@ -10,10 +10,13 @@
 - [x] Random-initialized causal Transformer implementation
 - [x] Byte tokenizer and supervised next-byte training loop
 - [x] Tiny deterministic smoke tests and checkpoint output
-- [ ] License-reviewed dataset intake and provenance manifests
-- [ ] Training/validation split with held-out loss and perplexity
-- [ ] Baseline experiments (dataset, seed, duration, compute, loss curve)
-- [ ] Demonstrate controlled overfitting on a tiny licensed sample
+- [x] Bounded TinyStories/demo intake, documented license and provenance manifests (not full curated training yet)
+- [x] Separate train/validation sources, deterministic held-out next-byte loss and bits-per-byte; full-document split/leakage audit pending
+- [ ] Benchmark first real dataset run; record loss curves, hardware and duration
+- [ ] Establish measured language-learning progress against a fixed baseline
+
+- [x] Checkpoint includes optimizer, random state, data hashes and step; explicit resume across GitHub runs
+- [ ] Durable checkpoint retention beyond temporary GitHub artifacts
 
 ## Milestone M2: Memory and active curiosity
 - [x] In-memory proposal/confirmation data types
