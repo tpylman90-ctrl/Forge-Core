@@ -355,3 +355,32 @@ The central bottleneck is still generalizing new sentences into
 correct answers. The correct approach is supervised scaffolding,
 independent held-out evaluation, and careful regression control—not
 premature Android integration or another claim of cognitive maturity.
+
+
+## Forge Seed v0.7 staged QA result — memorization without transfer
+
+- **Run:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41636853840
+- **CI:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41636853894 passed
+- **Initial weights:** audited original 14k-step Forge Seed (unchanged).
+- **Training:** 4 stages (16, 64, 256, 512 examples), 2,600 AdamW
+  updates per arm, rule-derived gold labels vs balanced shuffled labels,
+  same input prompts/schedules and public-language rehearsal.
+- **Final training QA:** 98.83% correct on 512 training questions.
+- **Fixed legacy 40:** verified **21/40** (52.5%);
+  shuffled **23/40** (57.5%); frozen **19/40** (47.5%).
+- **Held-out transfer 40:** verified **18/40** (45%);
+  shuffled **19/40** (47.5%); frozen **20/40** (50%).
+- **Both A/B mirrors correct:** verified **4 of 20** underlying legacy
+  items and **4 of 20** underlying transfer items.
+- **Held-out language loss:** verified **2.654611** vs frozen
+  **2.637959**, ~0.63% higher; no severe language collapse.
+- **Research artifact:** Actions artifact 13230808542, expiring
+  December 3, 2026. Not promoted.
+
+### Decision
+
+Memorization did not turn into language-relation comprehension. The
+next experiment tests paired **counterfactual facts/questions** and
+swapped A/B choices at every stage. It is explicitly a hypothesis,
+not an evidence-supported upgrade. The original checkpoint remains
+the archived baseline. See docs/PRESCHOOL-PAIRED-RELATIONS.md.

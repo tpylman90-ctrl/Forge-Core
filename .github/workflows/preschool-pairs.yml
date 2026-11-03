@@ -1,0 +1,65 @@
+name: Forge Seed v0.7 — paired counterfactual QA experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        type: string
+        required: true
+        description: "Original public-only v0.7 training checkpoint"
+        default: "41572257363"
+  push:
+    branches: [main]
+    paths: ["experiments/requests/preschool-qa-pairs-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    env:
+      RUN_ID: ${{ inputs.source_run_id || '41572257363' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install original BPE tokenizer decoder
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Verify run ID
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$RUN_ID" =~ ^[0-9]+$ ]]
+      - name: Load original scratch checkpoint and public data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checkpoint artifacts/paired
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir checkpoint
+          test -f checkpoint/checkpoint.pt
+          test -f checkpoint/tokenizer.json
+          test -f checkpoint/source-manifest.json
+          test -f checkpoint/train.txt
+          test -f checkpoint/valid.txt
+      - name: Gold counterfactuals and mirrored choices vs shuffled-label control
+        run: |
+          python -m forge_core.neural.preschool_staged \
+            --checkpoint-dir checkpoint \
+            --out artifacts/paired --seed 410 --paired
+      - name: Keep unpromoted experimental branches and results
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-v07-qa-paired-experiment
+          path: artifacts/paired/
+          retention-days: 30
+          if-no-files-found: error

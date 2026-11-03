@@ -25,6 +25,7 @@ from forge_core.neural.preschool_qa import (
     training_tasks, transfer_tasks, verify_source,
 )
 from forge_core.neural.seed_v07 import heldout, generate_samples
+from forge_core.neural.paired_contrasts import paired_tasks
 
 # Training count, optimizer updates per independent arm, rehearsal fraction,
 # AdamW LR. Small repeated examples first. None are personal data.
@@ -35,16 +36,28 @@ DEFAULT_STAGES = (
     (512, 1200, 0.25, 6e-5),
 )
 
+# Balanced counterfactual/mirror curriculum: number of *questions*, not cases.
+# Pairs differ only by answer order; states differ by the underlying fact.
+CONTRAST_STAGES = (
+    (32, 250, 0.00, 3e-4),
+    (64, 400, 0.10, 1.5e-4),
+    (128, 650, 0.15, 1.1e-4),
+    (256, 850, 0.20, 8e-5),
+    (512, 1100, 0.25, 6e-5),
+)
+
 
 def curriculum(*, folder: Path, output: Path, seed: int = 99,
                stages: tuple[tuple[int, int, float, float], ...] = DEFAULT_STAGES,
-               batch_size: int = 4) -> dict:
+               batch_size: int = 4, paired: bool = False) -> dict:
     if not 1 <= batch_size <= 4 or not 1 <= len(stages) <= 6:
         raise ValueError("Invalid bounded staged-curriculum parameters")
     if any(not (16 <= n <= 8000 and n % 8 == 0 and 1 <= steps <= 2000
                 and 0 <= weight < 1 and 0 < lr < 0.01)
            for n, steps, weight, lr in stages):
         raise ValueError("Invalid stage training limits")
+    if paired and any(n % 32 for n, *_ in stages):
+        raise ValueError('Paired stages must have multiple-of-32 example counts')
     if sum(x[1] for x in stages) > 5000:
         raise ValueError("Too many total optimizer updates")
     torch.set_num_threads(min(2, torch.get_num_threads()))
@@ -80,7 +93,7 @@ def curriculum(*, folder: Path, output: Path, seed: int = 99,
     start = time.monotonic()
     for stage_number, (n, steps, weight, lr) in enumerate(stages, start=1):
         # Every subsequent stage includes the previous stage's examples.
-        items = training_tasks(n, seed)
+        items = paired_tasks(n, seed) if paired else training_tasks(n, seed)
         random_labels = shuffled_labels(items, seed + stage_number * 101)
         gold_encoded = encode_tasks(items, codec, gold_model.cfg.max_seq_len)
         shuffled_encoded = encode_tasks(random_labels, codec,
@@ -144,10 +157,15 @@ def curriculum(*, folder: Path, output: Path, seed: int = 99,
         "dataset_train_sha256": manifest["train_sha256"],
         "dataset_valid_sha256": manifest["valid_sha256"],
         "original_random_initialized_parameters": frozen.num_parameters,
-        "seed": seed, "total_adaptation_updates_per_arm":
+        "seed": seed, "curriculum_type": (
+            "paired_counterfactuals_and_mirrored_answer_orders"
+            if paired else "single_question_staged_baseline"),
+        "total_adaptation_updates_per_arm":
             sum(x[1] for x in stages),
         "frozen": frozen_scores,
         "stages": history,
+        "verified_label_source": "original explicit grammatical and semantic rules",
+        "not_an_independent_comprehension_certification": True,
         "final_gold": final_gold, "final_shuffled": final_shuffled,
         "gold_fixed_seed_generation": generate_samples(
             gold_model, codec, seed, new_tokens=64),
@@ -192,8 +210,12 @@ def main():
     p.add_argument("--checkpoint-dir", type=Path, required=True)
     p.add_argument("--out", type=Path, default=Path("artifacts/qa-staged"))
     p.add_argument("--seed", type=int, default=99)
+    p.add_argument("--paired", action="store_true",
+                   help="Counterfactual semantic states and both A/B orders")
     args = p.parse_args()
-    curriculum(folder=args.checkpoint_dir, output=args.out, seed=args.seed)
+    curriculum(folder=args.checkpoint_dir, output=args.out, seed=args.seed,
+               stages=CONTRAST_STAGES if args.paired else DEFAULT_STAGES,
+               paired=args.paired)
 
 
 if __name__ == "__main__":

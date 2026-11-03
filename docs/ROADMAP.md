@@ -130,3 +130,11 @@ as **verified, implemented but unverified, or proposed**.
 - [x] Baseline v0.7 research checkpoint preserved in audited **unpublished draft** GitHub release
 - [ ] Staged 16→64→256→512 question teaching and independent transfer evaluation
 - [ ] Demonstrate robust role/color/count/location comprehension and simple instructions on novel examples before claiming preschool-like ability
+
+## November 3 — contrastive QA next experiment
+
+- [x] Verify staged learning completed: 98.83% training examples correct, but only 18/40 transfer answers (worse than 20/40 frozen)
+- [x] Identify shortcut risk: answer position/wording rather than true subject, recipient, color, location or count relations
+- [x] Implement new curriculum of **paired counterfactuals and both A/B choice orders**; test deterministic generation, class balance, and cumulative training
+- [ ] Run gold-label versus shuffled control; audit both-mirror transfer, held-out text loss, and generated stories
+- [ ] Repeat promising results with independent templates and seeds before any research-candidate promotion

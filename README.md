@@ -150,3 +150,7 @@ is automatically published as a trained conversational assistant.
 ### Latest measured language evidence (November 3)
 
 The v0.7 original model at 14,000 steps now generates more readable story-like text (held-out next-token loss **2.6303**), but scored only **19/40** on balanced elementary A/B comprehension questions. A broad QA-training experiment failed to improve held-out accuracy (**20/40** verified vs **21/40** shuffled). A deliberately small sanity study then memorized all **16/16** examples after 100 updates, indicating our immediate weakness is *transferring* answer rules to unfamiliar sentences, not the ability to optimize an output token. A staged curriculum is running/being evaluated; experimental weights are never automatically promoted. See [Preschool Staged Research](docs/PRESCHOOL-STAGED.md) and the [Experiment Ledger](docs/EXPERIMENTS.md).
+
+### Semantic relationship training (research only)
+
+A staged 2,600-step QA experiment correctly memorized ~98.8% of its training examples but did not generalize to novel test questions (18/40 vs 20/40 frozen). To avoid assuming that more memorization means understanding, the next experiment explicitly pairs every fact-change with both swapped A/B answer orders. See [Paired relations research](docs/PRESCHOOL-PAIRED-RELATIONS.md). Original Forge Seed remains archived and experimental models are never promoted without transfer evidence.
