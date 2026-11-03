@@ -72,6 +72,19 @@ while the generated sample remained incoherent. See [the experiment ledger](docs
 It is important to distinguish statistical next-byte learning from coherent
 sentences, instruction following and independent judgment. None is assumed.
 
+
+### Linguistic Why research status
+
+Three controlled auxiliary teaching runs have completed on copies of the
+original 8,000-step Forge Seed. Public-language rehearsal prevented most
+ordinary-language regression, but actor/patient understanding remained
+**chance-level (160/320 held-out)** in the expanded third trial. These
+experimental weights are **not** promoted. Read the
+[experiment ledger](docs/EXPERIMENTS.md) and the
+[linguistic why experiment report](docs/LINGUISTIC-WHY-EXPERIMENT.md)
+before expanding training. The next gate is stronger language data,
+tokenization and basic instruction-following benchmarks—not Android.
+
 ## Run CPU tests
 
 Python 3.10+ (plus PyTorch and cryptography):

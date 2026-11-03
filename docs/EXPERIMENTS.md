@@ -212,3 +212,71 @@ checkpoints for reproducibility.
   training-compute budgets. Add human-readable sentence and unseen-story
   evaluations, with explicit failure examples. Do not yet connect an
   unready language model to Android observation or personal memory.
+
+
+## Linguistic Why controlled trial — Run 001, Run 002, Run 003 (all research only)
+
+All experiments started from the preserved original Forge Seed Run 005,
+8,000 optimizer steps and **1,875,072 randomly initialized-and-trained
+parameters**. Two independent copies of the same checkpoint were adapted
+with either verified linguistic answers or within-task-count-balanced
+shuffled answers; a frozen model provided a no-training reference. All
+datasets are original controlled rule fixtures and the separately audited
+public TinyStories slice, never personal memories.
+
+### Run 001 — verified labels without language rehearsal
+
+- Workflow: https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41569417386
+- 120 steps each, batch 2, seed 1234, 30 train / 30 eval questions,
+  held-out nouns AND verbs.
+- Held-out quiz: frozen **15/30**, shuffled **16/30**, verified **19/30**.
+- Verified by skill: agreement **5/5**, negation **4/5**,
+  semantic roles **10/20** (chance level).
+- TinyStories held-out next-byte loss: frozen **1.082579**;
+  verified **1.140008**; shuffled **1.153280**.
+- Interpretation: some constrained classification success but language
+  regression and no role generalization; NOT promotable.
+
+### Run 002 — same tasks, shared public-language rehearsal
+
+- Workflow: https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41569782469
+- Same base, steps, seed and prompts; each arm receives the SAME public
+  TinyStories training minibatch every step. Loss: 40% language /
+  60% gold- or shuffled-label structural classification.
+- Held-out quiz: frozen **15/30**, shuffled **18/30**, verified **19/30**.
+- Verified by skill: agreement **5/5**, negation **4/5**,
+  semantic roles **10/20**.
+- TinyStories held-out loss: frozen **1.082579**, verified **1.085860**,
+  shuffled **1.086169**.
+- Interpretation: adding public language rehearsal nearly prevented
+  next-byte regression, but evidence of structural transfer remained weak.
+
+### Run 003 — expanded role curriculum, stratified tasks
+
+- Workflow: https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41570210237
+- 240 steps each, batch 2, same seed, 40% shared public-language rehearsal
+  and stratified training category sampling.
+- 330 train / 330 eval questions, including **320 semantic-role** choices
+  each; original rule templates, disjoint evaluation nouns AND verbs.
+- Held-out quiz: frozen **164/330** (49.7%), shuffled **167/330**
+  (50.6%), verified **169/330** (51.2%).
+- Verified by skill: agreement **5/5**, negation **4/5**,
+  semantic roles **160/320** (50.0%).
+- **Training semantic roles also 160/320 (50.0%).** This is not a
+  transferable learned skill, despite the larger test set.
+- TinyStories held-out loss: frozen **1.082579**, verified **1.083116**,
+  shuffled **1.093163**.
+- Research artifact: \`forge-linguistic-why-ab-research\`, ID
+  **13200293855**, expiring 2026-12-03 UTC. Weights are
+  **EXPERIMENTAL ONLY** and have NOT replaced preserved Run 005.
+
+### Decision — no promotion
+
+The gold-label method shows some preliminary *template-level* agreement
+and negation accuracy, but cannot yet identify actor/patient roles beyond
+chance. The model also lacks reliable instruction-following and fluent
+language. **Do not make another blind scale-up of this auxiliary task**.
+The correct next phase is robust corpus/tokenizer pretraining followed by
+measured basic instruction comprehension, then re-run the Why experiments
+with an independent grammar benchmark and multiple seeds. Existing
+research artifacts remain separate, with no personal-memory mixing.

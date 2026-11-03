@@ -56,8 +56,14 @@ held-out documents and reproducible hashes. A passing smoke test is not language
 - [ ] Add template-, verb- and corpus-disjoint external evaluation
 - [x] Implement first **small null-label controlled A/B study**, starting from preserved Run 005 public-data scratch model; run and independent validation pending
 - [ ] Repeat on an immutable fully reviewed corpus with matched-compute text-only control, multiple seeds, unseen constructions and external labels
-- [ ] Adopt auxiliary tasks only if structural transfer improves without
-  degrading general language or creating unacceptable artifacts
+- [x] Three controlled A/B runs completed (original gold labels vs
+  shuffled answers, frozen checkpoint), with public-language retention checks
+- [x] Run 002/003 public-language rehearsal largely prevented next-byte
+  regression; actor/patient role skills still at chance, including expanded
+  held-out set (160/320)
+- [ ] **NO promotion:** defer neural Why adaptation until language and
+  instruction-following gates improve, then replicate with external
+  annotation, independent templates and multiple seeds
 
 ## Milestone L2 — Coherent language and dialogue [NEXT]
 

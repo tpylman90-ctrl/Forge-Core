@@ -111,3 +111,36 @@ training nouns/verbs, evaluates on a similarly expanded unseen lexicon,
 and stratifies task examples so that grammatical and negation tasks remain
 visible. Both arms still rehearse identical public language. No result is
 promoted without further independent tests.
+
+
+
+## Run 003 results and science decision
+
+[Run 003 results](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41570210237):
+expanded **330 train and 330 held-out** original controlled questions,
+with **320 actor/patient questions** in each split. Training nouns and verbs
+differed from evaluation nouns and verbs; templates still overlapped.
+The two adapted models used the same 240-step, batch-2, stratified schedule
+and identical public-language rehearsal.
+
+| Run 003 held-out classification | Correct | Accuracy |
+| --- | ---: | ---: |
+| Frozen Forge Seed | 164/330 | 49.7% |
+| Shuffled-label control | 167/330 | 50.6% |
+| Verified-label curriculum | 169/330 | 51.2% |
+
+Actor/patient roles were **160/320 (50%)**, including **on the training
+examples**, even with verified labels. Agreement and negation were easier
+(5/5 and 4/5), but only five hidden cases each. We cannot claim
+meaningful grammar understanding or independent reasoning.
+
+The verified arm's next-byte TinyStories held-out loss was **1.083116**
+versus the frozen **1.082579**, a much smaller regression than the
+first no-rehearsal trial. The randomized-label arm was **1.093163**.
+
+**Promotion decision: rejected.** Keep the pretrained-from-scratch
+checkpoint Run 005 unchanged. Preserve experimental weights separately
+only for reproduction. Next improve corpus diversity and instruction
+comprehension; later test the why objective on robust held-out syntactic
+constructions and an independently sourced annotation set with multiple
+seeds. Training longer on these few templates is not a sound substitute.
