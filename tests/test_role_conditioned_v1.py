@@ -8,12 +8,14 @@ import torch
 from torch.nn import functional as F
 
 from forge_core.neural.model import ByteTransformer, ModelConfig
+from forge_core.neural.span_pointer_lab import WordPointer
 from forge_core.neural.role_curriculum_v1 import (
     EXAM_NAMES, NAMES, SOURCES, SEEDS, TRIALS, candidate_spans,
     make_rows, source_roles, verify_disjoint, verify_rows,
 )
 from forge_core.neural.role_conditioned_v1 import (
     RoleHead, evaluate, score_rows, shuffled_labels, slot_features, Slots,
+    old_pointer_restricted,
 )
 
 
@@ -114,6 +116,13 @@ class TestRoleHead(unittest.TestCase):
         self.assertTrue(torch.equal(feature.entity, changed.entity))
         self.assertTrue(torch.equal(feature.query, changed.query))
         self.assertNotEqual(feature.gold, changed.gold)
+
+    def test_legacy_pointer_baseline_uses_same_detected_name_slots(self):
+        rows = make_rows("dev")[:4]
+        report = old_pointer_restricted(WordPointer(16), self.model, CharCodec(), rows)
+        self.assertEqual(report["total"], 4)
+        self.assertEqual(report["both_questions_correct"]["total"], 2)
+        self.assertEqual(report["both_entity_swaps_correct"]["total"], 2)
 
     def test_pair_metrics_detect_constant_answer_failure(self):
         rows = make_rows("dev")
