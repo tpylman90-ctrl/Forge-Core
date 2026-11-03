@@ -29,8 +29,9 @@ from torch.nn import functional as F
 
 from forge_core.neural.role_binding_diagnostic import load_frozen_models
 from forge_core.neural.role_conditioned_v1 import (
-    RoleHead, Slots, score_rows, slot_features,
+    Slots, score_rows, nearby_cues,
 )
+from forge_core.neural.span_pointer_lab import frozen_hidden
 from forge_core.neural.role_curriculum_v1 import (
     RoleRow, candidate_spans, make_rows, verify_disjoint,
 )
@@ -186,8 +187,50 @@ class Feature:
     grams: torch.Tensor
 
 
+@torch.no_grad()
+def story_only_slots(backbone, codec, row: RoleRow) -> Slots:
+    """Candidate representations cannot encode the later question.
+
+    The source name embeddings may attend to earlier story tokens only.
+    The optional three-token suffix must be clamped before the Question
+    marker, preventing a partially ablated baseline from seeing the query.
+    """
+    enc = codec.encode(row.prompt)
+    hidden = frozen_hidden(backbone, enc.ids)
+    boundary = row.prompt.index("\nQuestion: ")
+    story_end = max(i for i, (left, right) in enumerate(enc.offsets)
+                    if right <= boundary)
+    spans = candidate_spans(row.prompt)
+    vectors = []
+    for index, (name, start, end) in enumerate(spans):
+        covered = [i for i, (left, right) in enumerate(enc.offsets)
+                   if right > start and left < end and i <= story_end]
+        if not covered:
+            raise ValueError("Entity could not map to story tokens")
+        after = min(max(covered) + 3, story_end)
+        local_left, local_right = start - 7, end - 7
+        metadata = [
+            float(index == 0), float(index == 1),
+            float(local_left / max(1, len(row.story))),
+            *nearby_cues(row.story, local_left, local_right),
+        ]
+        if len(metadata) != 9:
+            raise ValueError("Unexpected nongold candidate features")
+        vectors.append(torch.cat((
+            hidden[covered].mean(dim=0),
+            hidden[after],
+            torch.tensor(metadata, dtype=hidden.dtype),
+        )))
+    names = tuple(name for name, _, _ in spans)
+    if row.answer not in names:
+        raise ValueError("Verified answer missing from independent entity detector")
+    return Slots(row.id, row.role, row.template, row.seed, row.trial,
+                 row.swap, row.answer, names, hidden[-1],
+                 torch.stack(vectors), names.index(row.answer))
+
+
 def features(backbone, codec, rows: list[RoleRow]) -> list[Feature]:
-    return [Feature(slot_features(backbone, codec, row),
+    return [Feature(story_only_slots(backbone, codec, row),
                     question_grams(row.prompt)) for row in rows]
 
 
