@@ -1,0 +1,85 @@
+name: Forge Seed v0.7 — copying and semantic-role apprenticeship
+
+on:
+  workflow_dispatch:
+    inputs:
+      original_run_id:
+        type: string
+        required: true
+        description: "Original public-only v0.7 pretraining run"
+        default: "41572257363"
+      parent_research_run_id:
+        type: string
+        required: true
+        description: "Verified compositional research candidate run"
+        default: "41649770774"
+      seed:
+        type: number
+        required: true
+        description: "Deterministic experiment seed"
+        default: 900
+  push:
+    branches: [main]
+    paths: ["experiments/requests/preschool-copy-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      ORIGINAL_RUN: ${{ inputs.original_run_id || '41572257363' }}
+      PARENT_RUN: ${{ inputs.parent_research_run_id || '41649770774' }}
+      SEED: ${{ inputs.seed || '900' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install BPE decoder
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install research package
+        run: python -m pip install --no-deps -e .
+      - name: Validate bounded run identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ORIGINAL_RUN" =~ ^[0-9]+$ ]]
+          [[ "$PARENT_RUN" =~ ^[0-9]+$ ]]
+          [[ "$SEED" =~ ^[0-9]+$ ]]
+          (( SEED >= 1 && SEED <= 1000000 ))
+      - name: Retrieve audited original and verified research candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original candidate artifacts/copy
+          gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-v07-compositional-qa --dir candidate
+          test -f original/checkpoint.pt
+          test -f original/source-manifest.json
+          test -f original/tokenizer.json
+          test -f original/train.txt
+          test -f original/valid.txt
+          test -f candidate/verified-research.pt
+      - name: Train grounded word-copy, selection and giver/recipient questions
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.preschool_copy \
+            --source original --parent-candidate candidate \
+            --out artifacts/copy --seed "$SEED"
+      - name: Preserve matched-control research weights and metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-v07-copy-role-research
+          path: artifacts/copy/
+          retention-days: 30
+          if-no-files-found: error
