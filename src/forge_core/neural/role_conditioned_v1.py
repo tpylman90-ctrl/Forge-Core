@@ -240,7 +240,8 @@ def old_pointer_restricted(head, backbone, codec, rows: list[RoleRow]) -> dict:
     """
     prepared = []
     for row in rows:
-        base = features_for(backbone, codec, SimpleNamespace(\n            id=row.id, skill=row.role, prompt=row.prompt, answer=row.answer))
+        base = features_for(backbone, codec, SimpleNamespace(
+            id=row.id, skill=row.role, prompt=row.prompt, answer=row.answer))
         allowed = set(name for name, _, _ in candidate_spans(row.prompt))
         indices = [i for i, name in enumerate(base.candidates) if name in allowed]
         if len(indices) != 2:
