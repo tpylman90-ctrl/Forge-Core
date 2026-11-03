@@ -1,4 +1,6 @@
-# Forge Core Architecture v1.0 (research design)
+# Forge Core Architecture v1.0 (research design; language-first execution v0.4)
+
+**Implementation priority:** original-language training and evaluation first. The Android observer is preserved but paused until the language quality gates in [the active roadmap](ROADMAP.md) are met. The following describes the long-term architecture, not completed intelligence.
 
 ## Separation of concerns
 
@@ -38,9 +40,9 @@ Track question usefulness (answered, skipped, later, correction, confirmed princ
 
 - Byte-level UTF-8 tokenizer with 256 IDs, reversible for valid UTF-8 text. No downloaded tokenizer weights.
 - Decoder-only causal Transformer: pre-LayerNorm, multi-head causal attention, GELU feed-forward, tied embeddings/output head.
-- Baseline: 6 layers, 6 heads, hidden width 384, context 256, around 10.8M trainable parameters (count verified at runtime).
+- Base: 6 layers, 6 heads, hidden width 384, context 256, around 10.8M parameters. Intermediate Forge Seed: 4 layers, 4 heads, width 192, exactly 1,875,072 parameters measured in Run 002.
 - CI-only tiny variant: 1 layer, 4 heads, hidden width 32, context 128.
-- Cross-entropy next-byte objective; checkpoint consists of model/config/step only. **No claim of useful linguistic performance.**
+- Cross-entropy next-byte objective; resumable checkpoint includes model, config, optimizer state, RNG state, data hashes, manifest fingerprint and metrics history. **No claim of useful linguistic performance.**
 - CPU sanity tests; serious dataset training requires compute and careful validation.
 
 ## Privacy/security design (future)
