@@ -71,7 +71,10 @@ def parse_roles(template: str, story: str) -> tuple[str, str, str]:
     if template == "received":
         return b, a, obj
     if template == "passive":
-        return b, a, obj
+        # The passive parser returns (object, recipient, giver), unlike
+        # active forms. Parse by named semantic slots, not tuple position.
+        object_name, receiver_name, sender_name = match.groups()
+        return sender_name, receiver_name, object_name
     return a, b, obj
 
 
