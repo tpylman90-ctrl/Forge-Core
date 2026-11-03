@@ -15,7 +15,7 @@ on:
         default: 120
   push:
     branches: [main]
-    paths: ["experiments/requests/why-ab-run001.md"]
+    paths: ["experiments/requests/why-ab-run002.md"]
 
 permissions:
   contents: read
@@ -55,7 +55,7 @@ jobs:
           test -f checkpoint/checkpoint.pt
           test -f checkpoint/valid.txt
           test -f checkpoint/dataset-manifest.json
-      - name: Gold-label versus shuffled-labels teaching experiment
+      - name: Gold-label versus shuffled-labels teaching plus shared language rehearsal
         shell: bash
         run: |
           set -euo pipefail
@@ -64,7 +64,8 @@ jobs:
             --out artifacts/why-ab \
             --steps "$TRAIN_STEPS" \
             --batch 2 \
-            --seed 1234
+            --seed 1234 \
+            --language-weight 0.4
       - name: Preserve measured comparison, not promoted model weights
         uses: actions/upload-artifact@v4
         with:

@@ -44,3 +44,45 @@ The first Run 001 is triggered once by \`experiments/requests/why-ab-run001.md\`
 - No separation from control: revise probes, curriculum or model capacity; do not assume "why" training is always superior.
 
 All findings remain **experimental** and subject to independent replication.
+
+## Run 001: first measured linguistic Why trial
+
+[GitHub Actions experiment](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41569417386)
+on the 8,000-step public TinyStories Forge Seed checkpoint (1,875,072
+parameters). Two arms got the same 120 optimizer steps and 30 training
+questions. One had verified labels; the other had class-balanced shuffled
+labels. The unchanged frozen checkpoint was also scored.
+
+| Held-out question score | 30 questions |
+| --- | ---: |
+| Frozen baseline | 15/30 (50.0%) |
+| Shuffled-labels control | 16/30 (53.3%) |
+| Verified teaching | **19/30 (63.3%)** |
+
+Verified-label performance by skill: agreement **5/5**, negation **4/5**,
+semantic roles **10/20** (chance-level). The model learned some simple answer
+relations but **not robust "who did what" understanding**. The same public
+held-out next-byte language loss worsened from **1.082579** (frozen) to
+**1.140008** (verified labels); shuffled control **1.153280**. Thus the
+auxiliary-only version **failed the no-regression promotion criterion**.
+
+These 30 scripted questions, one seed and shared syntax templates make the
+improvement inconclusive. Neither arm is an approved Forge Seed checkpoint.
+
+## Run 002: control for lost language ability
+
+Run 002 adds a *shared, identical* public-language prediction minibatch
+to both experimental arms at every optimizer step. The combined loss is
+40% normal next-byte loss and 60% A/B structural-label loss, keeping the
+same verified-vs-shuffled contrast as Run 001.
+
+The source public train bytes must match the original checkpoint SHA256.
+The number of steps, labeled prompts, and optimizer settings remain the
+same. This is not an equal-total-compute comparison with Run 001, because
+the new experiment adds a second loss stream; its clean causal comparison
+is **within Run 002**. Score training/test A/B tasks and ordinary held-out
+next-byte loss on both arms against the unchanged checkpoint.
+
+A benefit here would justify *further controlled tests*, not promotion:
+repeat across seeds, stronger withheld constructions, and properly licensed
+external grammar annotations before using it in any assistant.

@@ -31,9 +31,13 @@ class TestLinguisticWhyExperiment(unittest.TestCase):
             model = ByteTransformer(cfg)
             raw = ("The fox followed the rabbit. It was a sunny day. " * 8).encode()
             (root / "valid.txt").write_bytes(raw)
+            language_text = ("A young fox followed an otter through the forest. " * 8).encode()
+            (root / "train.txt").write_bytes(language_text)
             torch.save({
                 "schema": 2, "config": asdict(cfg), "model": model.state_dict(),
-                "valid_sha256": hashlib.sha256(raw).hexdigest(), "step": 7,
+                "valid_sha256": hashlib.sha256(raw).hexdigest(),
+                "train_sha256": hashlib.sha256(language_text).hexdigest(),
+                "step": 7,
             }, root / "checkpoint.pt")
             report = run_experiment(checkpoint_path=root / "checkpoint.pt",
                                     validation_path=root / "valid.txt",
@@ -47,6 +51,18 @@ class TestLinguisticWhyExperiment(unittest.TestCase):
                              {"frozen", "verified_labels", "shuffled_labels"})
             self.assertTrue((root / "out" / "why-experiment.json").exists())
             self.assertTrue((root / "out" / "verified-labels.pt").exists())
+            regularized = run_experiment(
+                checkpoint_path=root / "checkpoint.pt", validation_path=root / "valid.txt",
+                steps=2, batch=2, validation_windows=2,
+                language_train_path=root / "train.txt", language_weight=0.4)
+            self.assertEqual(regularized["public_language_loss_weight"], 0.4)
+            self.assertTrue(regularized["identical_language_minibatches"])
+            (root / "train.txt").write_text("changed")
+            with self.assertRaisesRegex(ValueError, "training text differs"):
+                run_experiment(checkpoint_path=root / "checkpoint.pt",
+                               validation_path=root / "valid.txt",
+                               steps=1, language_train_path=root / "train.txt",
+                               language_weight=0.4)
             (root / "valid.txt").write_text("altered")
             with self.assertRaisesRegex(ValueError, "differs"):
                 run_experiment(checkpoint_path=root / "checkpoint.pt",

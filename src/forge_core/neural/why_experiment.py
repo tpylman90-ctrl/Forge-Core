@@ -27,6 +27,7 @@ from forge_core.learning.linguistic_why import build_probes, validate_splits
 from forge_core.neural.archive import verify_archive
 from forge_core.neural.experiment import evaluate
 from forge_core.neural.model import ByteTransformer, ModelConfig
+from forge_core.neural.train import make_batch
 
 CHOICES = (ord("A"), ord("B"))
 
@@ -144,12 +145,18 @@ def score_choices(model: ByteTransformer, examples: list[ChoiceExample]) -> dict
 
 def _adapt(model: ByteTransformer, examples: list[ChoiceExample],
            labels: list[ChoiceExample], schedule: list[list[int]],
-           lr: float) -> float:
-    """Only correct/shuffled target label differs. Same prompt and budget."""
+           lr: float, language_batches: list[tuple[torch.Tensor, torch.Tensor]] | None = None,
+           language_weight: float = 0.0) -> float:
+    """Same prompts, same public-language examples, same batch count in both arms.
+
+    Only the linguistic gold labels differ. The optional public-language
+    auxiliary objective can protect general next-byte prediction, but cannot
+    by itself prove semantic understanding.
+    """
     opt = torch.optim.AdamW(model.parameters(), lr=lr)
     model.train()
     last = float("nan")
-    for sample_indices in schedule:
+    for step_index, sample_indices in enumerate(schedule):
         opt.zero_grad(set_to_none=True)
         for i in sample_indices:
             ex, label = examples[i], labels[i]
@@ -158,9 +165,13 @@ def _adapt(model: ByteTransformer, examples: list[ChoiceExample],
             logits, _ = model(prefix)
             pair = logits[0, -1, [CHOICES[0], CHOICES[1]]].unsqueeze(0)
             y = torch.tensor([0 if label.answer == "A" else 1], dtype=torch.long)
-            loss = F.cross_entropy(pair, y) / len(sample_indices)
-            loss.backward()
-            last = float(loss.detach()) * len(sample_indices)
+            task_loss = F.cross_entropy(pair, y)
+            ((1.0 - language_weight) * task_loss / len(sample_indices)).backward()
+            last = float(task_loss.detach())
+        if language_batches is not None:
+            x, y = language_batches[step_index]
+            _, language_loss = model(x, y)
+            (language_weight * language_loss).backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
     return last
@@ -169,11 +180,15 @@ def _adapt(model: ByteTransformer, examples: list[ChoiceExample],
 def run_experiment(*, checkpoint_path: Path, validation_path: Path,
                    steps: int = 100, batch: int = 2, seed: int = 1234,
                    lr: float = 5e-5, validation_windows: int = 16,
-                   output_dir: Path | None = None) -> dict:
+                   output_dir: Path | None = None,
+                   language_train_path: Path | None = None,
+                   language_weight: float = 0.0) -> dict:
     if not 1 <= steps <= 1000 or not 1 <= batch <= 8 or not 0 < lr <= 0.01:
         raise ValueError("Invalid bounded adaptation settings")
     if not 2 <= validation_windows <= 64:
         raise ValueError("Invalid validation window count")
+    if not 0 <= language_weight < 1:
+        raise ValueError("Language loss weight must be in [0, 1)")
     ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if ckpt.get("schema") != 2 or "model" not in ckpt or "valid_sha256" not in ckpt:
         raise ValueError("Checkpoint lacks Forge Core provenance metadata")
@@ -194,6 +209,20 @@ def run_experiment(*, checkpoint_path: Path, validation_path: Path,
         raise ValueError("Model too small for these language probes")
     rng = random.Random(seed)
     schedule = [[rng.randrange(len(train)) for _ in range(batch)] for _ in range(steps)]
+    language_batches = None
+    if language_weight:
+        if language_train_path is None:
+            raise ValueError("Public source training text is required for language mixing")
+        train_bytes = language_train_path.read_bytes()
+        if hashlib.sha256(train_bytes).hexdigest() != ckpt.get("train_sha256"):
+            raise ValueError("Public training text differs from source checkpoint")
+        seq = min(64, cfg.max_seq_len)
+        if len(train_bytes) <= seq:
+            raise ValueError("Training text too small for language mixing")
+        generator = torch.Generator().manual_seed(seed + 909)
+        tensor_data = torch.tensor(list(train_bytes), dtype=torch.long)
+        language_batches = [make_batch(tensor_data, batch, seq, generator)
+                            for _ in range(steps)]
     start = time.monotonic()
     # Both arms clone the SAME pretrained-from-scratch Forge checkpoint
     # (not a third-party teacher). Optimizers are freshly initialized.
@@ -205,8 +234,10 @@ def run_experiment(*, checkpoint_path: Path, validation_path: Path,
         null_model = copy.deepcopy(frozen)
     base_eval = score_choices(frozen, evaluation)
     base_train = score_choices(frozen, train)
-    last_gold = _adapt(gold_model, train, train, schedule, lr)
-    last_null = _adapt(null_model, train, control, schedule, lr)
+    last_gold = _adapt(gold_model, train, train, schedule, lr,
+                       language_batches, language_weight)
+    last_null = _adapt(null_model, train, control, schedule, lr,
+                       language_batches, language_weight)
     score_gold = score_choices(gold_model, evaluation)
     score_null = score_choices(null_model, evaluation)
     train_gold = score_choices(gold_model, train)
@@ -228,6 +259,8 @@ def run_experiment(*, checkpoint_path: Path, validation_path: Path,
         "source_step": ckpt["step"], "validation_sha256": ckpt["valid_sha256"],
         "model_parameters": frozen.num_parameters,
         "seed": seed, "steps_per_arm": steps, "batch_size": batch, "learning_rate": lr,
+        "public_language_loss_weight": language_weight,
+        "identical_language_minibatches": bool(language_batches),
         "prompt_examples_train": len(train), "prompt_examples_eval": len(evaluation),
         "identical_schedule": True, "identical_initial_weights": True,
         "same_number_of_prompts_and_optimizer_updates": True,
@@ -268,6 +301,8 @@ def main() -> None:
     p.add_argument("--steps", type=int, default=100)
     p.add_argument("--batch", type=int, default=2)
     p.add_argument("--seed", type=int, default=1234)
+    p.add_argument("--language-weight", type=float, default=0.0,
+                   help="Shared public-language next-byte loss contribution, 0..1")
     args = p.parse_args()
     audit = verify_archive(args.archive)
     result = run_experiment(
@@ -275,6 +310,8 @@ def main() -> None:
         validation_path=args.archive / "valid.txt",
         steps=args.steps, batch=args.batch, seed=args.seed,
         output_dir=args.out,
+        language_train_path=args.archive / "train.txt",
+        language_weight=args.language_weight,
     )
     result["archive_audit"] = {"status": audit["archive_status"],
                               "source": audit["source"], "license": audit["license"]}
