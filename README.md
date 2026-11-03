@@ -1,55 +1,73 @@
-# Forge Core
+# Forge Core — Original AI research
 
-**Forge Core** is an independent, experimental personal AI research project. It is not the SceneForge game, AssetWright, or the existing Forge-ai Android application.
+**Forge Core** is an independent, experimental AI project. It is not
+SceneForge, AssetWright, or the existing Forge-ai Android application.
 
-Our long-term ambition is a trustworthy, proactive thinking partner that learns *why* a person makes decisions and develops a useful, consistent perspective of its own. That is a research goal, **not** a claim of current capability or consciousness.
+**Primary current objective: teach our own randomly initialized neural network
+language and measure its progress.** We are not substituting a pretrained Qwen
+model for the original Forge Core weights. Future identity, curiosity-driven
+"ask why", user-controlled memory and Android interfaces follow evidence gates.
 
-## Project rules
+The five-year goal is a J.A.R.V.I.S.-like thinking partner with its own stable
+personality that learns how and *why* its user makes decisions. It may propose
+ideas independently but must obtain explicit authorization before external
+actions. No current prototype meets that long-term vision.
 
-- Learn intentions, reasoning, outcomes and corrections rather than just memorizing actions.
-- Think independently; **external actions by the future Forge agent require explicit, scoped user authorization**.
-- Keep private user memories encrypted on-device by default, separate from neural-network weights.
-- Treat public training datasets as untrusted inputs requiring licensing and provenance review.
-- Make experiments reproducible and report measured improvements honestly.
-- Separate identity, memory, learning and the neural foundation so components can evolve independently.
+## Development order
 
-See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), [Android companion](android/README.md), [Language bridge](docs/LANGUAGE-BRIDGE.md), [Original language training](docs/LANGUAGE-TRAINING-LOOP.md), [Verified experiments](docs/EXPERIMENTS.md), and [Security](SECURITY.md).
+**L0 provenance → L1 real-text pretraining → L2 language and dialogue quality →
+L3 independent identity → L4 personal understanding and memory → L5 Android.**
 
-## v0.2 objectives
+See [language-first roadmap](docs/ROADMAP.md) and the
+[training pipeline](docs/LANGUAGE-TRAINING-LOOP.md).
 
-1. Implement a small causal Transformer initialized from random weights.
-2. Train on locally supplied, properly licensed plain-text datasets; never on personal memory by default.
-3. Validate data flow, causal masking, checkpointing and a CPU smoke test.
-4. Prototype curiosity records and an authorization gate before connecting external tools.
-5. Establish reproducible GitHub Actions tests.
+## Verified versus experimental
 
-## Quick start
+- **Implemented:** A from-scratch causal Transformer, byte tokenizer,
+  reproducible training/evaluation and resumable optimizer checkpoints.
+- **Implemented:** Bounded TinyStories preview loader with document IDs,
+  near-duplicate checks, manifest verification and fixed held-out windows.
+- **Available sizes:** tiny ~25k smoke control; seed ~1.9M CPU experiment;
+  base ~10.8M original architecture.
+- **Verified previously:** Three steps on synthetic text in a 24,928-param
+  model decreased sampled validation loss modestly. This is **not** language
+  acquisition. See [experiment ledger](docs/EXPERIMENTS.md).
+- **Unverified:** Meaningful natural-language ability from real data,
+  conversation, reasoning, and personality.
+- **Paused:** Expanding Android observer features. Existing Android source is
+  preserved as an independent prototype, not the language foundation.
 
-Requires Python 3.10+.
+## Run CPU tests
 
-```bash
-python -m pip install -e .
-python -m unittest discover -s tests -v
-python -m forge_core.cli demo
-# Interactive teach/confirm/review/forget (local encrypted vault):
-python -m forge_core.cli learn
-python -m forge_core.cli review
-```
+Python 3.10+ (plus PyTorch and cryptography):
 
-Train only on a text file you have reviewed and are licensed to use, kept outside Git:
+    python -m pip install -e .
+    python -m unittest discover -s tests -v
 
-```bash
-mkdir -p data
-# Place your approved UTF-8 training text at data/train.txt
-python -m forge_core.neural.train --text data/train.txt --steps 20 --batch-size 2 --seq-len 64
-```
+Run the tiny synthetic control:
 
-The default model is an **experimental ~10M-parameter scratch-trained baseline**, not a capable assistant. The separate CPU experiment loop is documented in [Language Training](docs/LANGUAGE-TRAINING-LOOP.md). Significant training will need GPUs; the tiny CI configuration exists only to catch regressions. Model checkpoints, training corpora and private memory are ignored by Git.
+    python -m forge_core.neural.prepare --source demo --out data/control
+    python -m forge_core.neural.experiment --train data/control/train.txt \
+      --valid data/control/valid.txt --manifest data/control/manifest.json \
+      --model-size tiny --steps 5 --out artifacts/control.pt
 
-## Status
+For the first bounded real-language experiment, follow
+[the training guide](docs/LANGUAGE-TRAINING-LOOP.md) or manually use the
+"Forge Scratch Language Experiment" GitHub Actions workflow.
 
-The v0.2 research scaffold includes a functioning, template-based, user-driven learning CLI and a password-encrypted local memory prototype. Android companion source now adds opt-in allowlisted app-switch questions with Android Keystore-backed confirmed memory; phone installation and APK build must be verified separately. A trained intelligent assistant, detailed activity understanding, and automatic model learning from experience are **not implemented**.
+**Never commit** private memory, credentials, checkpoints, corpora or personal
+observations to this public repository. Only properly licensed sources are
+eligible for the language dataset. Generated checkpoints are not permanent
+backups; audit the current data card license before scaling.
+
+Founding governance:
+[Charter](CHARTER.md) · [Architecture](docs/ARCHITECTURE.md) ·
+[Evaluation](docs/EVALUATION.md) · [Privacy](SECURITY.md).
+
+Our success measure is demonstrated language progress and useful behavior,
+not training time, downloads, model size, or appearance of autonomy.
 
 ## License
 
-Source-code license selection is pending; do not assume code or third-party datasets have an open license until one is explicitly added/reviewed.
+Code license selection is pending. Do not presume rights to distribute this
+code or third-party datasets beyond their documented terms.

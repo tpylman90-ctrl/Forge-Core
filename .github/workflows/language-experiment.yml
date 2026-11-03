@@ -4,36 +4,29 @@ on:
   workflow_dispatch:
     inputs:
       dataset:
-        description: "Approved public dataset or original tiny fixture"
+        description: "Approved real public text or synthetic CI control"
         required: true
         type: choice
-        options:
-          - demo
-          - tinystories
-        default: demo
+        options: [tinystories, demo]
+        default: tinystories
       model_size:
-        description: "Tiny CPU control or original ~10M parameter base"
+        description: "Tiny regression control; CPU-friendly Forge Seed; full original base"
         required: true
         type: choice
-        options:
-          - tiny
-          - base
-        default: tiny
+        options: [tiny, seed, base]
+        default: seed
       steps:
-        description: "ADDITIONAL training steps (1..30 tiny; 1..5 base)"
+        description: "ADDITIONAL steps (tiny <=100; seed <=60; base <=5)"
         required: true
         type: number
-        default: 5
+        default: 20
       resume_run_id:
-        description: "Optional prior experiment run ID with matching corpus/config"
+        description: "Optional prior successful run ID with identical dataset and configuration"
         required: false
         type: string
-  pull_request:
-    paths:
-      - ".github/workflows/language-experiment.yml"
-      - "src/forge_core/neural/experiment.py"
-      - "src/forge_core/neural/prepare.py"
-      - "tests/test_training_loop.py"
+  push:
+    branches: [main]
+    paths: ["docs/LANGUAGE-TRAINING-LOOP.md"]
 
 permissions:
   contents: read
@@ -41,12 +34,12 @@ permissions:
 
 jobs:
   train:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
     env:
-      DATASET: ${{ inputs.dataset || 'demo' }}
-      MODEL_SIZE: ${{ inputs.model_size || 'tiny' }}
-      STEPS: ${{ inputs.steps || '3' }}
+      DATASET: ${{ inputs.dataset || 'tinystories' }}
+      MODEL_SIZE: ${{ inputs.model_size || 'seed' }}
+      STEPS: ${{ inputs.steps || '20' }}
       RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -58,20 +51,23 @@ jobs:
         run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
       - name: Install Forge Core
         run: python -m pip install --no-deps -e .
-      - name: Validate bounded work
+      - name: Verify bounded training request
         shell: bash
         run: |
+          set -euo pipefail
           [[ "$DATASET" == demo || "$DATASET" == tinystories ]]
-          [[ "$MODEL_SIZE" == tiny || "$MODEL_SIZE" == base ]]
+          [[ "$MODEL_SIZE" == tiny || "$MODEL_SIZE" == seed || "$MODEL_SIZE" == base ]]
           [[ "$STEPS" =~ ^[0-9]+$ ]]
-          (( STEPS >= 1 && STEPS <= 30 ))
+          (( STEPS >= 1 ))
+          if [[ "$MODEL_SIZE" == tiny ]]; then (( STEPS <= 100 )); fi
+          if [[ "$MODEL_SIZE" == seed ]]; then (( STEPS <= 60 )); fi
           if [[ "$MODEL_SIZE" == base ]]; then (( STEPS <= 5 )); fi
           if [[ -n "$RESUME_RUN_ID" ]]; then [[ "$RESUME_RUN_ID" =~ ^[0-9]+$ ]]; fi
-      - name: Prepare separate training and validation data
+      - name: Prepare document-separated language data
         run: |
           python -m forge_core.neural.prepare \
             --source "$DATASET" --out data/experiment --train-rows 200 --valid-rows 50
-      - name: Download approved previous experiment checkpoint
+      - name: Download prior approved experiment checkpoint
         if: ${{ env.RESUME_RUN_ID != '' }}
         shell: bash
         run: |
@@ -81,21 +77,24 @@ jobs:
             --name forge-scratch-language-checkpoint \
             --dir previous
           test -f previous/checkpoint.pt
-      - name: Train, validate and checkpoint
+      - name: Train from random weights or resume, then evaluate
         shell: bash
         run: |
+          set -euo pipefail
           ARGS=()
           if [[ -n "$RESUME_RUN_ID" ]]; then ARGS+=(--resume previous/checkpoint.pt); fi
           python -m forge_core.neural.experiment \
             --train data/experiment/train.txt \
             --valid data/experiment/valid.txt \
+            --manifest data/experiment/manifest.json \
             --model-size "$MODEL_SIZE" --steps "$STEPS" \
-            --batch-size 2 --seq-len 32 --eval-batches 2 --seed 42 \
+            --batch-size 2 --seq-len 64 --eval-batches 8 \
+            --sample-tokens 48 --seed 42 \
             --out artifacts/checkpoint.pt --report artifacts/metrics.json \
             "${ARGS[@]}"
-      - name: Record provenance with checkpoint
+      - name: Preserve dataset provenance and reproducibility record
         run: cp data/experiment/manifest.json artifacts/dataset-manifest.json
-      - name: Retain model weights, optimizer and metrics
+      - name: Retain checkpoint, optimizer, validation and generated sample
         uses: actions/upload-artifact@v4
         with:
           name: forge-scratch-language-checkpoint

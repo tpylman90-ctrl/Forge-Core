@@ -1,44 +1,80 @@
-# Forge Core — Roadmap
+# Forge Core — Language-first roadmap (v0.4)
 
-## Milestone M0: Governance and scaffolding
-- [x] Independent public repository
-- [x] Charter and architecture documents
-- [x] Basic security rules and data exclusions
-- [x] CPU CI tests
+## Governing rule
 
-## Milestone M1: Trainability, not intelligence
-- [x] Random-initialized causal Transformer implementation
-- [x] Byte tokenizer and supervised next-byte training loop
-- [x] Tiny deterministic smoke tests and checkpoint output
-- [x] Bounded TinyStories/demo intake, documented license and provenance manifests (not full curated training yet)
-- [x] Separate train/validation sources, deterministic held-out next-byte loss and bits-per-byte; full-document split/leakage audit pending
-- [ ] Benchmark first real dataset run; record loss curves, hardware and duration
-- [ ] Establish measured language-learning progress against a fixed baseline
+**Build and measure Forge's original language intelligence before expanding observer
+or assistant features.** Forge's five-year identity, privacy and authorization
+charter remains binding throughout, but implementation follows evidence gates.
+The existing Android observer and pretrained teacher are preserved as separate,
+non-canonical prototypes. Do not expand those features during the language
+foundation phase. Forge Core is not SceneForge or Forge-ai.
 
-- [x] Checkpoint includes optimizer, random state, data hashes and step; explicit resume across GitHub runs
-- [ ] Durable checkpoint retention beyond temporary GitHub artifacts
+## Milestone L0 — Foundation integrity [implemented; continue auditing]
 
-## Milestone M2: Memory and active curiosity
-- [x] In-memory proposal/confirmation data types
-- [ ] Threat model and encrypted Android storage prototype
-- [ ] Inspect/correct/export/delete workflows
-- [ ] Ask-why selection criteria and user-confirmed principles
-- [ ] Relevance/reliability evaluation for retrieval
+- [x] Public, separate Forge-Core repository and charter
+- [x] Original random-initialized causal Transformer, not pretrained Qwen weights
+- [x] Small smoke tests and reproducible optimizer/checkpoint resume
+- [x] Bounded approved data intake, per-document identifiers, split SHA256 and
+      exact/near-duplicate screening, with source/license manifest
+- [x] Refuse training with a mismatched manifest or overlapping document IDs/hashes
+- [ ] Pin and verify an immutable TinyStories source revision before large-scale training
+- [ ] Full-document and cross-corpus leakage review and authoritative license assessment
 
-## Milestone M3: Independent judgment
-- [ ] Evidence/calibration tests and disagreement quality
-- [ ] Rule/versioned identity profile, avoid sycophancy
-- [ ] Permission-bound external tools with audited approvals
+**Gate:** every dataset used for a report has a provenance record, distinct
+held-out documents and reproducible hashes. A passing smoke test is not language.
 
-## Milestone M4: Android integration
-- [x] Standalone Android source scaffold for opt-in allowlisted app-switch prompts, Keystore-encrypted confirmed memory and visible foreground service
-- [x] Android debug APK compiled in GitHub Actions (run 41545378574), artifact 13188462347; Python tests passed (run 41545378489)
-- [ ] Install and exercise first Android APK on target phone
-- [ ] Real device permission/reliability tests and battery impact
-- [ ] Feasibility benchmark on target phone (RAM, tokens/sec, thermal, storage)
-- [ ] Android interface, accessibility and opt-in sensors
-- [ ] Offline memory and explicit synchronization policy
+## Milestone L1 — Learn from real text [NOW]
 
-## Measurement rules
+- [x] Three-stage trainability ladder:
+  * **tiny:** ~25k parameters (test control only)
+  * **seed:** ~1.9M parameters (CPU-feasible language-learning probe)
+  * **base:** ~10.8M parameters (original target architecture; not yet substantively trained)
+- [x] Fixed, spread-out held-out evaluation windows, checkpoint metadata and
+      optional sampled generation
+- [x] GitHub Actions real-text experiment with modest bounded CPU steps, artifacts,
+      prior-checkpoint resume and explicit source/hash checks
+- [ ] **Verify** the first TinyStories training run and record actual numbers
+- [ ] Show repeatable held-out improvements over more than one checkpoint
+- [ ] Compare a scratch run to a matched random-weight baseline and record text samples
+- [ ] Select durable checkpoint storage beyond 30-day CI artifacts
 
-Record model architecture/parameter count, reproducibility seed, train/validation bytes, source/license, hardware, runtime, final/held-out loss and failure examples for every experiment. Separate **verified** from **planned** results. A smoke test passing is not a trained assistant.
+**Gate:** genuine public-text learning evidence; not just memorizing a tiny demo.
+
+## Milestone L2 — Coherent language and dialogue [NEXT]
+
+- [ ] Move beyond preview rows to immutable, complete, licensed training documents
+- [ ] Train a useful Forge Seed with sufficient steps, data, and suitable GPU compute
+- [ ] Review byte-level tokenizer inefficiency; benchmark subword tokenizer alternatives
+- [ ] Quantify generated text coherence, held-out language behavior and simple QA
+- [ ] Add instruction/conversation finetuning after basic language ability is demonstrated
+- [ ] Avoid claiming general reasoning until independently tested
+
+**Gate:** intelligible multi-turn language, evaluated against fixed prompts and
+unseen held-out text. Model-size increases alone do not satisfy the gate.
+
+## Milestone L3 — Independent thinking identity
+
+- [ ] Version a distinct Forge personality profile, separate from user imitation
+- [ ] Evaluate grounded agreement/disagreement, uncertainty and reasoning quality
+- [ ] Explain proposed actions and require explicit approval before external execution
+
+## Milestone L4 — Learn why and retain private experience
+
+- [ ] Integrate conversational "ask why" with real language ability
+- [ ] Support proposed, confirmed, corrected and rejected principles
+- [ ] Keep personal encrypted local memory separate from weights, with export/deletion
+- [ ] Evaluate whether applying a remembered principle was helpful
+
+## Milestone L5 — Android and optional integrations
+
+- [x] Experimental opt-in Android observation prototype, preserved but **paused**
+- [ ] Device privacy/security and permission testing; user-controlled opt-in
+- [ ] Android inference benchmarks and integration after L2 language quality gate
+- [ ] No unapproved actions or hidden observation
+
+## Evidence discipline
+
+Track code SHA, source/license, document IDs/hashes, splits, parameters, tokenizer,
+training steps, optimizer state, seed, hardware, time, validation loss/bits per
+byte, generation samples, regressions and checkpoint retention. Label every claim
+as **verified, implemented but unverified, or proposed**.
