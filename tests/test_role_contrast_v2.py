@@ -13,7 +13,7 @@ from forge_core.neural.role_curriculum_v1 import make_rows
 from forge_core.neural.role_contrast_v2 import (
     EXAM_SEEDS, SEEDS, ContrastRoleHead, audit_exam, audit_exam_vocab,
     features, group_flip_null, groups, make_exam, measure, pair_loss,
-    question_grams, story_only_slots, train,
+    question_grams, story_only_slots, train, validate_budget,
 )
 
 
@@ -29,6 +29,16 @@ class TestRoleContrastData(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.final = make_exam()
+
+    def test_workflow_budget_and_python_ceiling_agree(self):
+        validate_budget(36, 50000, 500)
+        validate_budget(1, 1, 1)
+        for minutes, steps, cadence in (
+                (37, 50000, 500), (36, 50001, 500),
+                (36, 50000, 50001), (0, 100, 10)):
+            with self.subTest(minutes=minutes, steps=steps, cadence=cadence):
+                with self.assertRaises(ValueError):
+                    validate_budget(minutes, steps, cadence)
 
     def test_unique_new_exam_and_verified_gold(self):
         audit_exam_vocab()
