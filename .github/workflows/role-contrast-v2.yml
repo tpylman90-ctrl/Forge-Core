@@ -1,0 +1,98 @@
+name: Forge Seed — budgeted contrastive role research
+
+on:
+  workflow_dispatch:
+    inputs:
+      budget_minutes:
+        description: "Single CPU training budget, 1–36 minutes"
+        required: true
+        type: number
+        default: 36
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/role-contrast-v2-long-001.md"
+
+# Public runners are shared infrastructure. Never launch overlapping long jobs.
+concurrency:
+  group: forge-role-contrast-v2-cpu
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  research:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 48
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUDGET_MINUTES: ${{ inputs.budget_minutes || '36' }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Record runner start and available CPU
+        shell: bash
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' | tee results/runner-start-utc.txt
+          getconf _NPROCESSORS_ONLN | tee results/runner-logical-cpus.txt
+          free -m > results/runner-memory-start.txt
+      - name: Install CPU PyTorch and original BPE tokenizer
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Validate budget, synthetic data and question ablation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BUDGET_MINUTES" =~ ^[0-9]+$ ]]
+          (( BUDGET_MINUTES >= 1 && BUDGET_MINUTES <= 36 ))
+          python -m unittest discover -s tests -p test_role_contrast_v2.py -v
+      - name: Download exactly audited and frozen source-model lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original parent pointer
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          gh run download 41649770774 --repo "$GITHUB_REPOSITORY" \
+            --name forge-v07-compositional-qa --dir parent
+          gh run download 41670001958 --repo "$GITHUB_REPOSITORY" \
+            --name forge-teacher-v1-neural-pointer --dir pointer
+          test -f original/checkpoint.pt
+          test -f parent/verified-research.pt
+          test -f pointer/verified-pointer.pt
+          test -f pointer/wrong-source-pointer.pt
+      - name: Train 3 independently initialized contrastive/control heads on one CPU runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "This is a single bounded experiment, not a daily compute entitlement."
+          python -m forge_core.neural.role_contrast_v2 \
+            --source original --parent parent --pointer pointer \
+            --out results \
+            --max-minutes "$BUDGET_MINUTES" \
+            --max-steps 50000 \
+            --eval-every 500
+      - name: Capture end time and process footprint
+        if: always()
+        shell: bash
+        run: |
+          date -u '+%Y-%m-%dT%H:%M:%SZ' | tee results/runner-end-utc.txt
+          du -sh results || true
+      - name: Retain research metrics and recovery snapshots, no promotion
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-role-contrast-v2-budgeted-research
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
