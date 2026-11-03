@@ -85,6 +85,16 @@ experimental weights are **not** promoted. Read the
 before expanding training. The next gate is stronger language data,
 tokenization and basic instruction-following benchmarks—not Android.
 
+## Friday early-language milestone
+
+Our next target is Forge Seed v0.7 by **Friday, November 6, 2026**.
+This is a measurable language-development checkpoint, not a promise that
+the model can already converse like a preschool child. The new run uses a
+specific upstream TinyStories commit, a bounded larger public story sample,
+an original BPE tokenizer learned from scratch and an original new neural
+model initialized from random weights. Older checkpoints remain preserved.
+See the [Friday Preschool Readiness Gate](docs/PRESCHOOL-FRIDAY.md).
+
 ## Run CPU tests
 
 Python 3.10+ (plus PyTorch and cryptography):

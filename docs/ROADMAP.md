@@ -65,6 +65,20 @@ held-out documents and reproducible hashes. A passing smoke test is not language
   instruction-following gates improve, then replicate with external
   annotation, independent templates and multiple seeds
 
+## Friday November 6 — Forge Seed v0.7 early-language experiment
+
+See [Preschool Readiness Gate](PRESCHOOL-FRIDAY.md). "Preschool" is a
+provisional human-language skill rubric, not an automatic label.
+
+- [x] Source revision pinned to exact TinyStories commit; bounded raw
+  train/validation separate-file loader implemented
+- [x] Scratch 2048-token BPE trainer and revised scratch model experiment
+  with tokenizer SHA256 and resumable optimizer, RNG and fixed sample prompts
+- [ ] Verify actual GitHub Actions training, document measured sample quality
+- [ ] Implement unseen who/what/color and simple instruction assessments
+- [ ] Pass the rubric or transparently report failures on Friday
+- [ ] Review exact-source retention and licensing before publishing weights
+
 ## Milestone L2 — Coherent language and dialogue [NEXT]
 
 - [ ] Move beyond preview rows to immutable, complete, licensed training documents
