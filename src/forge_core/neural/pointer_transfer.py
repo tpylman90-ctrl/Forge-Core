@@ -111,7 +111,12 @@ def make_exam(seed:int, per_skill:int=20) -> list[DirectExample]:
                     f"How many did {target} count?"
                 )
                 gold=n2 if i%2 else n1
-            prompt = f"Story: {prompt}\nQuestion: Answer using one source word.\nAnswer:"
+            # Non-semantic session marker prevents accidental duplicates
+            # across predetermined exam seeds; it encodes NO answer or skill.
+            session = {5101:"morning",5102:"afternoon",5103:"evening"}.get(
+                seed, f"session-{seed}")
+            prompt = (f"Story: During the {session} class, {prompt}"
+                      "\nQuestion: Answer using one source word.\nAnswer:")
             if gold.casefold() not in prompt.casefold():
                 raise AssertionError("Exam truth absent from source")
             examples.append(DirectExample(

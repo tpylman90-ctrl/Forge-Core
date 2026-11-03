@@ -20,7 +20,7 @@ on:
         description: "Finished neural pointer research run"
   push:
     branches: [main]
-    paths: ["experiments/requests/teacher-pointer-transfer-001.md"]
+    paths: ["experiments/requests/teacher-pointer-transfer-002.md"]
 
 permissions:
   contents: read
