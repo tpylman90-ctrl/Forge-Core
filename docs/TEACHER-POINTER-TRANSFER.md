@@ -29,3 +29,26 @@ https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41670001958
 
 The separate local GGUF AI teacher remains opt-in for curriculum advice,
 not for inserting unverified answer labels or pretrained model weights.
+
+
+## Completed result — November 3
+
+The source-pointer training run passed with **42/120 development**
+examples correctly copied, compared with 7/120 untrained and 4/120
+wrong-source control.
+
+The first 360-case exam run safely failed before a valid report due to
+two duplicate source questions across seeds. A neutral session
+context fixed those duplicates, retaining correct answers and the
+previously frozen weights. Both retry CI and examination passed.
+
+[Corrected cross-template exam 41671188473](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41671188473):
+**41/360 (11.39%)** verified pointer versus **12/360 (3.33%)**
+wrong-source control. Per seed: 9, 17 and 15 correct of 120, versus
+6, 4 and 2 control. Despite the advantage over control, this is
+poor transfer from the 42/120 development result. **No promotion.**
+
+Interpretation: a trainable source-span selector does help within a
+familiar generator family, but role binding and understanding of
+unfamiliar sentence constructions are not solved. Continue with
+a richer syntax/role mechanism and independent natural-language exams.

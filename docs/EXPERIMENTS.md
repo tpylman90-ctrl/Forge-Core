@@ -535,3 +535,87 @@ pretrained-original. It includes a new 120-case instruction challenge,
 plus previously tested QA/command regression metrics. Its matched
 control receives shuffled answer words. No candidate is automatically
 promoted or called preschool-capable.
+
+
+## Forge Teacher v1 — validated lesson feedback and neural pointer research (2026-11-03)
+
+**New implementation and CI:** original verified synthetic lesson bundles,
+strict source-rule revalidation, six-skill adaptive planner based on integer
+development scores only, optional local llama.cpp/GGUF AI advice, and a
+bounded verified-vs-shuffled student experiment. The hosted pilot uses
+the *deterministic planner*, not an automatically downloaded or invoked
+pretrained teacher.
+
+### Teacher v1 student pilot
+
+[Teacher/student Actions run 41668685911](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41668685911)
+
+- Scratch-origin base neural research weights: audited v0.7 original
+  run 41572257363 and verified compositional branch 41649770774.
+  All SHA256 source/provenance checks passed.
+- 240 rule-verified training lessons and **120 DEVELOPMENT** questions,
+  covering copy, select, giver, recipient, color and quantity.
+- 280 optimizer updates per arm, with matched prompts, optimizer
+  schedule and public TinyStories language rehearsal.
+- Starting base: **22/120** direct answers on development.
+  Verified-answer teaching: **19/120**; shuffled-answer control:
+  **14/120**. This is a **negative** pilot for teacher-guided
+  fine-tuning. Neither branch was promoted.
+- Held-out public-language token loss: **2.691088 → 2.725105** in the
+  verified branch (about +1.26%, below the 5% retention limit).
+- Feedback-selected next lessons were generated and audited but not
+  automatically trained. Research artifact 13247785518 expires
+  2026-12-03 UTC.
+
+### Frozen-backbone neural source-word pointer
+
+[Pointer training run 41670001958](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41670001958)
+
+- A **73,920-parameter new neural pointer head** was trained to select
+  source-word spans from the 2.22M-parameter original scratch-origin
+  model's **FROZEN** hidden states. No backbone weights were changed.
+- The training source was Teacher v1's audited, feedback-adjusted
+  240-lesson bundle. Evaluation used 120 separate *development*
+  questions. 500 updates per arm; initial weights and question
+  schedules were matched.
+- DEVELOPMENT exact copied-word results: **42/120** verified;
+  **7/120** untrained pointer; **4/120** incorrect-source
+  pointer control. This shows trainable source selection under the
+  known lesson-generator family, not general language understanding.
+- Pointer-only experimental artifact 13248250482 expires Dec 3, 2026.
+  Not promoted, no Android integration, no personal data.
+
+### New cross-template synthetic exam
+
+[First exam run 41670828539](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41670828539)
+halted without publishing scores when two of 360 questions were exact
+duplicates across predetermined seeds. The evaluation was fixed by
+adding an answer-neutral session marker, not changing gold answers or
+training weights. The repeat CI passed.
+
+[Corrected exam run 41671188473](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41671188473)
+
+- **360 never-trained synthetic questions**, three fixed seeds with
+  new people, objects and sentence/question surface forms.
+- Verified pointer **41/360 (11.39%)**;
+  incorrect-source control **12/360 (3.33%)**.
+- Per-seed verified vs control:
+  seed 5101 **9/120 vs 6/120**;
+  seed 5102 **17/120 vs 4/120**;
+  seed 5103 **15/120 vs 2/120**.
+- Performance dropped markedly compared with the earlier **42/120**
+  development benchmark, demonstrating failure to transfer reliably
+  to new construction families.
+- Exam artifact 13246999246 expires Dec 3 2026; no model promotion.
+- All implementation and corrected-exam CI tests passed, including
+  source span offsets, immutable deterministic labels, and source
+  checkpoint verification.
+
+**Research decision:** teacher selection and a neural copy head are
+promising engineering components, but the learner is *not*
+preschool-ready. Do not continue blindly scaling the same templates.
+Next isolate role-binding attention, unfamiliar-entity span selection,
+and more diverse language pretraining, then repeat on wholly unseen
+independent exam material across seeds. A locally installed pretrained
+teacher remains optional for *advice only*; no pretrained neural
+weights entered the student and no model was run remotely.

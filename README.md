@@ -13,6 +13,29 @@ personality that learns how and *why* its user makes decisions. It may propose
 ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
+
+## Latest: Forge Teacher v1 and source-word copying research
+
+Teacher v1 now implements a **verified, feedback-adaptive lesson
+curriculum** and an optional **local GGUF AI curriculum advisor**.
+The hosted lesson generator is deterministic and rule-verified;
+a pretrained model was **not** downloaded or executed in CI.
+Forge's model continues to use its own scratch-origin weights.
+
+The first teacher-led student study scored **19/120** development
+answers versus the starting **22/120**—a negative result, so no
+checkpoint was promoted. A small neural source-word pointer,
+trained while the original language backbone stayed frozen,
+improved to **42/120** on its development test, but scored only
+**41/360** on a new cross-template synthetic exam versus **12/360**
+for an incorrect-source control. This remains far below reliable
+language comprehension.
+
+See [Teacher v1](docs/TEACHER-V1.md),
+[Pointer research](docs/TEACHER-POINTER.md), and
+[New transfer exam](docs/TEACHER-POINTER-TRANSFER.md). All new
+weights and lessons remain research-only.
+
 ## Master development direction
 
 [**Forge Core Master Blueprint v1.0**](docs/MASTER-BLUEPRINT.md) governs

@@ -77,3 +77,19 @@ Android deployment or claim of preschool-like comprehension yet.
 Code: \`forge_core.learning.teacher_v1\`,
 \`forge_core.language.local_teacher\`,
 \`forge_core.neural.teacher_student_v1\`.
+
+
+## First measured pilot (completed)
+
+[Research Actions run 41668685911](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41668685911)
+successfully generated verified training/development bundles, trained
+two matched research arms, scored 120 development examples, and saved
+a feedback-selected NEXT lesson bundle. The parent scored 22/120,
+verified training 19/120 and shuffled training 14/120; source
+TinyStories loss changed 2.691088 → 2.725105. The teacher-guided
+training change **failed to improve** the parent candidate.
+
+The separate neural pointer study later reached 42/120 on
+development, but only 41/360 on new synthetic cross-template examples.
+The optional GGUF AI adviser was never invoked in GitHub Actions.
+The student remains scratch-origin and **not preschool-capable**.

@@ -117,3 +117,21 @@ This does **not** meet the provisional preschool instruction or
 comprehension criteria. The next question is whether a targeted
 copy/select and semantic-role curriculum can transfer to *new names*,
 not whether training answers can be memorized.
+
+
+## Teacher v1 / pointer results — no premature preschool certification
+
+The new Teacher v1 pipeline generated verified, checksum-audited
+lessons and development labels, and accepted only optional AI-produced
+skill advice; no external AI teacher was executed in GitHub Actions.
+
+The first teacher neural pilot was negative: parent **22/120**,
+verified **19/120**, shuffled **14/120**. Frozen-backbone source-word
+pointer training improved a 120-question development set to **42/120**
+(vs untrained 7/120 and wrong-source control 4/120). However, a
+new **360-question cross-template synthetic exam** produced only
+**41/360** verified vs **12/360** control. The generalization
+deficit persists; "preschool" is not an established capability.
+
+All weights remain experimental and the original 14,000-step
+scratch checkpoint remains preserved.

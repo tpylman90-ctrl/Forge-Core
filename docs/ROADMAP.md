@@ -179,7 +179,31 @@ as **verified, implemented but unverified, or proposed**.
 - [x] Start new copy/list-selection/semantic-role apprenticeship from
       a separate copy of verified *research candidate*; source hashes
       checked, no promotion
-- [ ] Check fresh 120-instruction held-out test and regression in
+- [x] Check fresh 120-instruction held-out test (20/120 verified vs
+      19/120 parent and 8/120 shuffled); regression in
       existing 200-QA and story loss
 - [ ] Repeat only truly promising results with different seeds and
       independently authored natural language examples
+
+
+## Nov 3 — Teacher v1 and pointer architecture gates
+
+- [x] Implement optional **local AI teacher curriculum advice**, validated
+      strictly from aggregate development scores; no GGUF is bundled
+- [x] Implement verified lesson/answer generator with checksum and rule
+      regeneration, training-vs-development isolation and adaptive selection
+- [x] Run controlled 280-update Forge neural pilot; verified **19/120**
+      vs parent **22/120** and shuffled **14/120**; negative result
+- [x] Run 73,920-parameter frozen-backbone neural pointer:
+      **42/120** development vs **7/120** untrained and **4/120** control
+- [x] Run corrected 360-case novel-template exam:
+      **41/360** pointer vs **12/360** incorrect-source control; generalization
+      drops sharply compared with development, so no promotion
+- [ ] Investigate entity-role binding with structured attention instead of
+      repeating the same source-pointer or answer-token training templates
+- [ ] Diversify sentence grammar, use externally sourced and independently
+      verified language questions, and replicate across random seeds
+- [ ] Independently assess reading comprehension, one-step instructions,
+      sentence coherence and retention before any preschool-capability claim
+- [ ] An optional locally supplied licensed GGUF may be connected to
+      teacher advice; do not claim it was used during hosted experiments
