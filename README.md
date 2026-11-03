@@ -158,3 +158,12 @@ A staged 2,600-step QA experiment correctly memorized ~98.8% of its training exa
 ### Why A/B isn't enough
 
 Our revised counterfactual training experiment scored only 23/40 on unfamiliar two-choice test prompts versus 22/40 with shuffled teaching. It failed the ability threshold, so no candidate was promoted. The next independent experiment teaches Forge to output the actual correct word or name in a short answer rather than choose A or B. See [direct answer research](docs/PRESCHOOL-DIRECT.md) and the [experiment ledger](docs/EXPERIMENTS.md).
+
+### Latest direct-answer evaluation
+
+Forge's first verified *word-answer* apprenticeship learned its 256
+practiced examples but answered only **6/20 unfamiliar questions** correctly
+(versus 3/20 for a shuffled-answer control). The original story-language
+checkpoint remains archived and unmodified. This is a pilot improvement,
+not preschool-level comprehension. Details:
+[Direct-answer research](docs/PRESCHOOL-DIRECT.md).

@@ -85,3 +85,17 @@ improvements, remaining failures and a realistic next training plan.
 - [x] Verified negative 1,600-example QA study and successful 16-example memorization sanity gate
 - [ ] Run staged QA curriculum and assess novel question transfer; do not promote without evidence
 - [x] Audited and created unpublished DRAFT model Release with tokenizer and source SHA256; not a publicly certified model
+
+## November 3 direct-answer evidence
+
+Controlled research on two copies of the original scratch-v0.7 checkpoint
+trained a next-token **actual word** answer objective (rather than A/B).
+The verified branch learned all 256 practiced cases and scored **9/20
+original and 6/20 unfamiliar exact answers**, against **4/20 and
+3/20** for shuffled answers. Its public-story held-out loss was
+**2.661562**, compared with **2.637959** frozen. This is encouraging
+for a small pilot but *below the preschool comprehension/instruction
+gate*, with only twenty underlying cases per split. A separate source
+check and held-out independent larger benchmark are needed before
+any model promotion or capability claim. The human language criteria
+remain open.

@@ -417,3 +417,53 @@ the archived baseline. See docs/PRESCHOOL-PAIRED-RELATIONS.md.
   Next: test direct short-answer text generation on original checkpoint,
   where Forge must output actual words, not select an arbitrary letter,
   and keep a shuffled-answer control and language regression tests.
+
+
+## Forge v0.7 direct short-answer learning — verified pilot (2026-11-03)
+
+- **Workflow:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41643271245
+- **Source:** original 14,000-step randomly initialized TinyStories/BPE
+  2,219,136-parameter Forge Seed, NOT the experimental A/B checkpoints.
+- **Training objective:** teacher-forced *answer text tokens*, with
+  story/question context loss masked. Source fixtures come from
+  original verified counterfactual pairs; duplicate answer-choice mirrors
+  removed. Two arms share questions, steps, sampling and public-story
+  rehearsal; only verified vs within-skill-shuffled answer text differs.
+- **Stages:** 16, 64, 256 direct training questions;
+  250, 500, 1,250 AdamW steps/arm (2,000 total).
+  Increasing public-language rehearsal: 0%, 10%, 20%.
+- **Training exact match:** 16/16, 64/64, **256/256** on their respective
+  training questions. Memorization by itself does not mean understanding.
+- **Untouched original model direct answers:** original 0/20,
+  transfer 0/20; the unadapted story model emits narrative fragments
+  after "Answer:", not answer words.
+- **Verified model:** original **9/20 (45%)**, transfer **6/20 (30%)**.
+- **Shuffled-answer control:** original **4/20 (20%)**,
+  transfer **3/20 (15%)**. The difference is encouraging as a
+  *small pilot*, not strong statistical evidence with 20 cases.
+- **Per-skill original gold:** location **5/5**, recipient **2/5**,
+  color **1/5**, count **1/5**; transfer performance still weak.
+- **Held-out TinyStories BPE token loss:** original **2.637959**;
+  verified adaptation **2.661562** (~0.90% worse), shuffled
+  control **2.724324** (~3.27% worse).
+- **Research artifact:** \`forge-v07-direct-qa-research\`,
+  ID **13234216067**, expires 2026-12-03 UTC.
+  Model weights **EXPERIMENTAL ONLY**, not promoted to Forge Core,
+  Android, user memory or public Releases.
+- **Code/pipeline correction:** the initial direct-answer workflow
+  https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41642938833
+  halted safely before training because independent fixture generators
+  encoded mirror IDs differently. Corrected by verifying *actual
+  mirrored story/question/answer content*, rather than relying on
+  ID suffixes. Its retry and new CI passed.
+
+### Interpretation and next research gate
+
+Training the network to output the answer *word*, rather than choose
+A/B, improved apparent task behavior and protected most general
+language performance. But 6/20 unseen is inadequate for "preschool"
+or robust understanding. Next: widen training variation and
+cross-template composition, with a **new independently generated,
+unseen** larger test split, repeated seeds and free-form one-step
+instruction checks. Do not tune on the two small fixed held-out
+sets indefinitely. No weight promotion.

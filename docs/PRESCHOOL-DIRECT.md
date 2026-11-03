@@ -45,3 +45,19 @@ model weights replace the original audited Forge checkpoint.
 
 The goal is **language comprehension** and useful responses, not the
 ability to select a letter on a quiz. Negative results will be recorded.
+
+## Verified first results
+
+[GitHub Actions run 41643271245](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41643271245)
+completed with a separate train-only BPE tokenizer and publicly
+attributed TinyStories rehearsal. The model reached **256/256 exact
+answers on its practiced training set**. Direct, greedy unseen answers
+were only **9/20** on the original set and **6/20** on unfamiliar
+transfer (vs **4/20** and **3/20** respectively for shuffled-label
+teaching; frozen model 0/20 on both). The general-language loss
+changed **2.637959 → 2.661562** in the verified arm. No trial was
+promoted. The initial run had been safely stopped before training by
+mismatched mirror ID formats; the corrected code validates source
+pair contents instead of suffixes. The 20-question holdouts are
+small and not a definitive proof of understanding. Wider evaluation
+and true one-step instruction tests are the next milestone.

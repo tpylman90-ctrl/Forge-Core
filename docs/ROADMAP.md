@@ -145,4 +145,8 @@ as **verified, implemented but unverified, or proposed**.
 - [x] Verified results: transfer only **23/40** gold vs **22/40** shuffled; both choice orders correct **5/20**; failed quality threshold
 - [x] Story loss 2.6961 vs 2.6380 frozen; close but weak comprehension evidence
 - [x] Implement bounded **direct-answer text** teacher-forcing research with verified gold vs shuffled answers and original-language rehearsal
-- [ ] Evaluate novel short answers and independent free-form instruction following; require larger, untouched tests before claims
+- [x] Direct-answer research completed: 256/256 training, 9/20 original, 6/20 unfamiliar, while shuffled control 4/20 and 3/20
+- [x] Held-out story loss remained close (2.6616 verified vs 2.6380 original)
+- [ ] Larger independent, novel direct-answer test and multiple training seeds
+- [ ] Broaden colors/quantities/roles/wording with controlled data compositions, preserve language rehearsal
+- [ ] Evaluate authentic single-step instructions and coherence before claiming preschool ability
