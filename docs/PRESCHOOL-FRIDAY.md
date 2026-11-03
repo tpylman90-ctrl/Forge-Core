@@ -99,3 +99,21 @@ gate*, with only twenty underlying cases per split. A separate source
 check and held-out independent larger benchmark are needed before
 any model promotion or capability claim. The human language criteria
 remain open.
+
+
+## Later Nov 3 measured gains (synthetic research, not a pass)
+
+The 3,200-example compositional apprenticeship improved **direct answer
+exact match** on a new internally authored 200-question challenge:
+verified **49/200**, shuffled-answer control **13/200**, original
+story-only model **0/200**. Giver and recipient questions were **0/40
+each**; color 10/40, location 17/40, count 22/40. A separate one-step
+instruction audit of 50 commands scored **11/50** verified versus
+**4/50** shuffled; word repetition, list selection and recipient
+commands were all 0/10. Public-language held-out BPE loss changed
+2.637959→2.691088. The archived original remains unchanged.
+
+This does **not** meet the provisional preschool instruction or
+comprehension criteria. The next question is whether a targeted
+copy/select and semantic-role curriculum can transfer to *new names*,
+not whether training answers can be memorized.

@@ -164,3 +164,22 @@ as **verified, implemented but unverified, or proposed**.
 - [ ] If promising, independently replicate on new templates/seeds;
       evaluate free-form one-step instructions, not only exact short answers
 - [ ] Preserve source checkpoint integrity and refuse automatic promotion
+
+
+## Nov 3 compositional result / immediate next step
+
+- [x] 3,200-example compositional direct-word training completed successfully
+      (research Actions run 41649770774)
+- [x] Verified **49/200** unseen internal synthetic QA vs shuffled
+      control **13/200**, source original **0/200**; relation gaps persist
+- [x] Independent 50-instruction audit completed:
+      **11/50** verified vs **4/50** shuffled, **0/50** original
+- [x] Found specific skill deficits: **0/40** giver and recipient
+      QA, **0/10** repeat/select/recipient instructions
+- [x] Start new copy/list-selection/semantic-role apprenticeship from
+      a separate copy of verified *research candidate*; source hashes
+      checked, no promotion
+- [ ] Check fresh 120-instruction held-out test and regression in
+      existing 200-QA and story loss
+- [ ] Repeat only truly promising results with different seeds and
+      independently authored natural language examples

@@ -486,3 +486,52 @@ set is excluded from the final challenge. Identical public-language
 rehearsal and optimizer budgets are used in verified versus shuffled
 target-word controls. Neither experimental branch may be promoted
 without independent natural-language testing and multiple seeds.
+
+
+## Compositional word-answer apprenticeship and separate instruction gate — verified Nov 3
+
+**Compositional run:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41649770774
+**Independent one-step instructions audit:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41650739118
+
+- **Source:** original 14k-step scratch-trained 2.22M-parameter TinyStories
+  BPE decoder, unchanged. Two identical adaptations received either
+  rule-verified direct answers or within-skill shuffled answers.
+- **Training:** 160→800→3200 original synthetic questions across color,
+  giver, recipient, location, count. 250+650+1600 updates/arm,
+  identical public-language rehearsal and training schedules.
+- **Final synthetic challenge:** 200 new questions (40 per skill),
+  with disjoint people, objects, story wording and question templates,
+  and a separate 50-case progress-check set excluded from final.
+- **Exact direct-answer results (200):** frozen original 0,
+  verified **49/200 (24.5%)**, shuffled **13/200 (6.5%)**.
+- **Verified per skill:** count 22/40, location 17/40, color 10/40,
+  **giver 0/40, recipient 0/40**. This is not preschool comprehension.
+- **Held-out story token loss:** frozen **2.637959**, verified
+  **2.691088** (~2% higher). This has not catastrophically
+  damaged language prediction, but is a measurable regression.
+- **Final training-preview exact-match:** 92/100 (92%), illustrating
+  a substantial training/transfer gap.
+- **Artifact:** \`forge-v07-compositional-qa\`,
+  GitHub Actions artifact ID **13237601036**, expires Dec 3 2026.
+- **Independent original 50-instruction benchmark:** frozen **0/50**,
+  verified **11/50**, shuffled **4/50**.
+  Verified skill breakdown: colors **7/10**, quantities **4/10**,
+  repeating a word **0/10**, choosing a list entry **0/10**,
+  recipient **0/10**.
+- **Instruction artifact:** ID **13236703816**, expires Dec 3 2026.
+
+### Decision and next tested hypothesis
+
+The new 200/50 test sizes are more informative than the earlier 20-case
+pilots, but still **internally authored synthetic benchmarks** and
+one seed. There is evidence of transfer improvement over shuffled labels
+for familiar color/location/count words; generalizing proper names,
+word copying, selection and person roles remains unproven.
+
+The next bounded, source-verified *copy/select and giver/recipient*
+apprenticeship branches separately from the verified compositional
+**research-only candidate**, never overwriting it or the archived
+pretrained-original. It includes a new 120-case instruction challenge,
+plus previously tested QA/command regression metrics. Its matched
+control receives shuffled answer words. No candidate is automatically
+promoted or called preschool-capable.
