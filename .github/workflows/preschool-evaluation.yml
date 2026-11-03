@@ -1,6 +1,9 @@
 name: Forge Seed v0.7 — preschool capability audit
 
 on:
+  workflow_run:
+    workflows: ["Forge Seed v0.7 — pinned corpus and scratch tokenizer"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       training_run_id:
@@ -18,10 +21,11 @@ permissions:
 
 jobs:
   review:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      RUN_ID: ${{ github.event_name == 'push' && '41572257363' || inputs.training_run_id }}
+      RUN_ID: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || (github.event_name == 'push' && '41572257363' || inputs.training_run_id) }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
