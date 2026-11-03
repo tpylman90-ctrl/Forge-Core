@@ -207,3 +207,22 @@ as **verified, implemented but unverified, or proposed**.
       sentence coherence and retention before any preschool-capability claim
 - [ ] An optional locally supplied licensed GGUF may be connected to
       teacher advice; do not claim it was used during hosted experiments
+
+## Nov 3 — independent frozen-pointer semantic-role diagnostic
+
+- [x] Prespecified three new seeds, four grammar structures, 384 questions
+      with source words and independently checked giver/recipient gold
+- [x] Audited source/parent/pointer SHA256 lineage and frozen weights
+- [x] Verified both Python CI and dedicated no-training experiment in
+      Actions run **41680677587**, artifact **13252862393**
+- [x] Measured **83/384** correct copied names vs **11/384** wrong-source
+      control, but only **9/192** both-correct role questions and
+      **11/192** both-correct entity swaps — NO PROMOTION
+- [ ] Benchmark role-vs-copy errors with an answer-independent entity
+      detector, not a gold-derived candidate filter
+- [ ] Design role-conditioned head against matched shuffled-label
+      control using entirely separate training/exam grammar families
+- [ ] Assess new independently authored natural-language sentences and
+      multiple seeds before any capability claim
+
+[Detailed result and next method](POINTER-ROLE-RESULTS.md).
