@@ -1,0 +1,80 @@
+name: Forge Seed — question-conditioned role learning pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      steps:
+        type: number
+        required: true
+        description: "Research updates per arm (1–900, default 350)"
+        default: 350
+  pull_request:
+    paths:
+      - ".github/workflows/role-conditioned-v1.yml"
+      - "src/forge_core/neural/role_conditioned_v1.py"
+      - "src/forge_core/neural/role_curriculum_v1.py"
+      - "tests/test_role_conditioned_v1.py"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/role-conditioned-v1-001.md"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  role-learning:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      STEPS: ${{ inputs.steps || '350' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only torch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install original scratch BPE codec
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Check deterministic data and verified controls
+        run: python -m unittest discover -s tests -p test_role_conditioned_v1.py -v
+      - name: Strict original experiment lineage and bounded update budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$STEPS" =~ ^[0-9]+$ ]]
+          (( STEPS >= 1 && STEPS <= 900 ))
+      - name: Retrieve previous audited scratch-origin language and pointer models
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original parent pointer results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          gh run download 41649770774 --repo "$GITHUB_REPOSITORY" \
+            --name forge-v07-compositional-qa --dir parent
+          gh run download 41670001958 --repo "$GITHUB_REPOSITORY" \
+            --name forge-teacher-v1-neural-pointer --dir pointer
+          test -f original/checkpoint.pt
+          test -f original/source-manifest.json
+          test -f parent/verified-research.pt
+          test -f pointer/verified-pointer.pt
+          test -f pointer/wrong-source-pointer.pt
+      - name: Train matched gold vs shuffled role-conditioned neural heads
+        shell: bash
+        run: |
+          python -m forge_core.neural.role_conditioned_v1 \
+            --source original --parent parent --pointer pointer \
+            --steps "$STEPS" --seed 7381 --out results
+      - name: Save results and candidate heads, do not promote neural weights
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-role-conditioned-v1-research
+          path: results/
+          retention-days: 30
+          if-no-files-found: error
