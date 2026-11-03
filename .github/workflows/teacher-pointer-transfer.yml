@@ -1,0 +1,77 @@
+name: Forge Teacher v1 — untouched word-pointer transfer exam
+
+on:
+  workflow_dispatch:
+    inputs:
+      original_run_id:
+        type: string
+        required: true
+        default: "41572257363"
+        description: "Audited original scratch-trained language model"
+      parent_run_id:
+        type: string
+        required: true
+        default: "41649770774"
+        description: "Verified compositional research parent"
+      pointer_run_id:
+        type: string
+        required: true
+        default: "41670001958"
+        description: "Finished neural pointer research run"
+  push:
+    branches: [main]
+    paths: ["experiments/requests/teacher-pointer-transfer-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  exam:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      ORIGINAL_RUN: ${{ inputs.original_run_id || '41572257363' }}
+      PARENT_RUN: ${{ inputs.parent_run_id || '41649770774' }}
+      POINTER_RUN: ${{ inputs.pointer_run_id || '41670001958' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU torch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install original BPE decoder
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Download archived original weights, research parent, and trained pointer
+        shell: bash
+        run: |
+          set -euo pipefail
+          for val in "$ORIGINAL_RUN" "$PARENT_RUN" "$POINTER_RUN"; do
+            [[ "$val" =~ ^[0-9]+$ ]]
+          done
+          mkdir -p original parent pointer results
+          gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-v07-compositional-qa --dir parent
+          gh run download "$POINTER_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-teacher-v1-neural-pointer --dir pointer
+          test -f original/checkpoint.pt
+          test -f parent/verified-research.pt
+          test -f pointer/verified-pointer.pt
+      - name: Score unseen names, words and grammatical template families
+        run: |
+          python -m forge_core.neural.pointer_transfer \
+            --source original --parent parent --pointer pointer \
+            --out results/untouched-pointer-exam.json
+      - name: Archive untouched research exam only (no model promotion)
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-teacher-v1-independent-pointer-exam
+          path: results/
+          retention-days: 30
+          if-no-files-found: error
