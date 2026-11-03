@@ -1,4 +1,6 @@
-# Forge Core language bridge — proposal and prototype
+# Forge Core language bridge — optional helper, NOT Forge's pretrained foundation
+
+The canonical training plan is to build Forge's own neural language model from **random initialization**. See [original language training loop](LANGUAGE-TRAINING-LOOP.md). The pretrained teacher does not provide Forge Seed's model weights or replace that training trajectory.
 
 ## Why two models?
 
