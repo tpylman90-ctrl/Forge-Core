@@ -44,6 +44,21 @@ control. Yet it answered BOTH role questions correctly in only
 This isolates a major question-conditioning and semantic-role transfer
 deficit; nothing was promoted. [Read the verified role audit](docs/POINTER-ROLE-RESULTS.md).
 
+## New: role-conditioned Forge Seed research (November 3)
+
+A new, independently trained neural entity-selection head on the **frozen
+scratch-trained language model** scored **162/288 (56.25%)** unfamiliar
+synthetic role questions, versus **148/288 (51.39%)** for a matched
+shuffled-label control and **144/288 (50%)** for an untrained head.
+
+However, only **20/144** event pairs had BOTH giver and recipient questions
+correct. This is insufficient to claim semantic understanding or preschool
+readiness, so no neural weights were promoted. The original Forge
+training checkpoint remains unchanged.
+
+See [Verified Role-Conditioned Results](docs/ROLE-CONDITIONED-RESULTS.md)
+and [Research Method](docs/ROLE-CONDITIONED-V1.md).
+
 ## Master development direction
 
 [**Forge Core Master Blueprint v1.0**](docs/MASTER-BLUEPRINT.md) governs
