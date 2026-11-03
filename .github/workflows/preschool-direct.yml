@@ -1,0 +1,65 @@
+name: Forge Seed v0.7 — direct short-answer teaching
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        type: string
+        required: true
+        description: "Original public TinyStories scratch pretraining run"
+        default: "41572257363"
+  push:
+    branches: [main]
+    paths: ["experiments/requests/preschool-direct-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SOURCE_RUN: ${{ inputs.source_run_id || '41572257363' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install scratch-trained BPE tokenizer implementation
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Check approved source run
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+      - name: Download exact original model and public source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source artifacts/direct
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir source
+          test -f source/checkpoint.pt
+          test -f source/tokenizer.json
+          test -f source/source-manifest.json
+          test -f source/train.txt
+          test -f source/valid.txt
+      - name: Train real-answer completion versus shuffled-answer control
+        shell: bash
+        run: |
+          python -m forge_core.neural.preschool_direct \
+            --checkpoint-dir source --out artifacts/direct
+      - name: Preserve experimental model results without promoting weights
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-v07-direct-qa-research
+          path: artifacts/direct/
+          retention-days: 30
+          if-no-files-found: error

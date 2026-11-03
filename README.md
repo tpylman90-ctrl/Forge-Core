@@ -154,3 +154,7 @@ The v0.7 original model at 14,000 steps now generates more readable story-like t
 ### Semantic relationship training (research only)
 
 A staged 2,600-step QA experiment correctly memorized ~98.8% of its training examples but did not generalize to novel test questions (18/40 vs 20/40 frozen). To avoid assuming that more memorization means understanding, the next experiment explicitly pairs every fact-change with both swapped A/B answer orders. See [Paired relations research](docs/PRESCHOOL-PAIRED-RELATIONS.md). Original Forge Seed remains archived and experimental models are never promoted without transfer evidence.
+
+### Why A/B isn't enough
+
+Our revised counterfactual training experiment scored only 23/40 on unfamiliar two-choice test prompts versus 22/40 with shuffled teaching. It failed the ability threshold, so no candidate was promoted. The next independent experiment teaches Forge to output the actual correct word or name in a short answer rather than choose A or B. See [direct answer research](docs/PRESCHOOL-DIRECT.md) and the [experiment ledger](docs/EXPERIMENTS.md).

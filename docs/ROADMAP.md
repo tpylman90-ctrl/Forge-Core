@@ -138,3 +138,11 @@ as **verified, implemented but unverified, or proposed**.
 - [x] Implement new curriculum of **paired counterfactuals and both A/B choice orders**; test deterministic generation, class balance, and cumulative training
 - [ ] Run gold-label versus shuffled control; audit both-mirror transfer, held-out text loss, and generated stories
 - [ ] Repeat promising results with independent templates and seeds before any research-candidate promotion
+
+## November 3 — counterfactual and direct answer research
+
+- [x] Paired counterfactual training completed (3,250 steps/arm), with exact-source tests and no promotion
+- [x] Verified results: transfer only **23/40** gold vs **22/40** shuffled; both choice orders correct **5/20**; failed quality threshold
+- [x] Story loss 2.6961 vs 2.6380 frozen; close but weak comprehension evidence
+- [x] Implement bounded **direct-answer text** teacher-forcing research with verified gold vs shuffled answers and original-language rehearsal
+- [ ] Evaluate novel short answers and independent free-form instruction following; require larger, untouched tests before claims

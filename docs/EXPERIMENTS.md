@@ -384,3 +384,36 @@ next experiment tests paired **counterfactual facts/questions** and
 swapped A/B choices at every stage. It is explicitly a hypothesis,
 not an evidence-supported upgrade. The original checkpoint remains
 the archived baseline. See docs/PRESCHOOL-PAIRED-RELATIONS.md.
+
+
+## Counterfactual + mirrored answer teaching (research only)
+
+- **Run:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41641115330
+- **Source:** exact original audited Forge Seed v0.7 14,000-step
+  model, 2,219,136 randomly initialized-and-trained parameters.
+- **Design:** five stages of 32/64/128/256/512 verified synthetic
+  questions, each combining changed facts/questions and both swapped
+  A/B answer orders. Identical public language rehearsal and
+  minibatch schedule for verified/gold and shuffled-label control.
+  Total 3,250 optimizer updates per arm, seed 410.
+- **Final gold training-question accuracy:** **70.9%** (unlike
+  the previous single-question staged run's 98.83% memorization).
+- **Original 40-choice evaluation:** frozen 19/40; gold 20/40;
+  shuffled 19/40. Gold both-mirror-correct **3/20** items.
+- **Unfamiliar 40-choice transfer:** frozen 20/40; gold **23/40**,
+  shuffled **22/40**. Both-mirror-correct **5/20** in gold versus
+  **3/20** in shuffled. A 1-answer lead is inconclusive.
+- **Public held-out BPE story loss:** frozen 2.637959; gold
+  **2.696069** (+2.2% worse); shuffled also evaluated. This is
+  within 5% language-loss tolerance but not a comprehending model.
+- **Intermediary transfer accuracy:** stage 3=24/40, stage 4=26/40,
+  stage 5=23/40. These are *development diagnostics*, not independent
+  validation or a valid basis for selecting a better model; no
+  untouched new test has been conducted.
+- **Artifact:** GitHub Actions 13233562193, expiring December 3,
+  2026. No automatic model promotion; original draft checkpoint intact.
+- **Decision:** Candidate fails transfer and both-mirror accuracy
+  criteria. We will NOT increase A/B task scale based on this result.
+  Next: test direct short-answer text generation on original checkpoint,
+  where Forge must output actual words, not select an arbitrary letter,
+  and keep a shuffled-answer control and language regression tests.
