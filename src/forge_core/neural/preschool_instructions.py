@@ -33,8 +33,12 @@ def instruction_examples(seed: int = 233) -> list[DirectExample]:
     rows = []
     for skill in AUDIT_SKILLS:
         for i in range(10):
-            name, other = rng.sample(PEOPLE, 2)
-            word, another, third = rng.sample(WORDS, 3)
+            # Deterministically reserve a distinct anchor per index so
+            # the benchmark cannot accidentally contain duplicate prompts.
+            # Remaining distractors and attributes still vary by seed.
+            name, other = PEOPLE[i], PEOPLE[(i + 3) % len(PEOPLE)]
+            word = WORDS[i]
+            another, third = rng.sample([x for x in WORDS if x != word], 2)
             if skill == "repeat":
                 prompt = (
                     f"Instruction: Write only the word {word}.\nAnswer:"
