@@ -13,7 +13,7 @@ Our long-term ambition is a trustworthy, proactive thinking partner that learns 
 - Make experiments reproducible and report measured improvements honestly.
 - Separate identity, memory, learning and the neural foundation so components can evolve independently.
 
-See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), [Android companion](android/README.md), [Language bridge](docs/LANGUAGE-BRIDGE.md), and [Security](SECURITY.md).
+See [Founding Charter](CHARTER.md), [Architecture](docs/ARCHITECTURE.md), [Roadmap](docs/ROADMAP.md), [First Breath guide](docs/FIRST-BREATH.md), [Android companion](android/README.md), [Language bridge](docs/LANGUAGE-BRIDGE.md), [Original language training](docs/LANGUAGE-TRAINING-LOOP.md), and [Security](SECURITY.md).
 
 ## v0.2 objectives
 
@@ -44,7 +44,7 @@ mkdir -p data
 python -m forge_core.neural.train --text data/train.txt --steps 20 --batch-size 2 --seq-len 64
 ```
 
-The default ~10M-parameter configuration is an **experimental** model, not a capable assistant. Significant training will need GPUs; the tiny CI configuration exists only to catch regressions. Model checkpoints, training corpora and private memory are ignored by Git.
+The default model is an **experimental ~10M-parameter scratch-trained baseline**, not a capable assistant. The separate CPU experiment loop is documented in [Language Training](docs/LANGUAGE-TRAINING-LOOP.md). Significant training will need GPUs; the tiny CI configuration exists only to catch regressions. Model checkpoints, training corpora and private memory are ignored by Git.
 
 ## Status
 
