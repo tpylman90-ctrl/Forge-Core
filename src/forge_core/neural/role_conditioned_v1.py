@@ -190,12 +190,17 @@ def evaluate(head: RoleHead, rows: list[Slots]) -> dict:
 
 
 def shuffled_labels(rows: list[Slots], seed: int) -> list[int]:
-    """Within-template/role shuffling keeps the same 0/1 answer prevalence."""
+    """Within-role shuffling keeps 0/1 prevalence but destroys grammatical links.
+
+    Shuffling within template would be INVALID: in these templates each
+    grammatical form fixes the position of giver and recipient, so labels
+    would remain unchanged and create a fake control.
+    """
     targets = [r.gold for r in rows]
     randomizer = random.Random(seed)
-    groups: dict[tuple[str, str], list[int]] = defaultdict(list)
+    groups: dict[str, list[int]] = defaultdict(list)
     for i, row in enumerate(rows):
-        groups[(row.template, row.role)].append(i)
+        groups[row.role].append(i)
     for indexes in groups.values():
         labels = [targets[i] for i in indexes]
         randomizer.shuffle(labels)
@@ -302,7 +307,7 @@ def experiment(*, source: Path, parent: Path, pointer: Path, out: Path,
         "local_cues": "two positional, one normalized offset, six source-preposition indicators",
         "seed": seed, "steps_per_arm": steps, "batch_size": batch_size, "lr": lr,
         "case_counts": {"train": len(train), "dev": len(dev), "exam": len(exam)},
-        "shuffle_control_preserves_template_role_answer_distribution": True,
+        "shuffle_control_preserves_role_but_breaks_template_answer_relationship": True,
         "train_data_sha256": hashlib.sha256(
             "\n".join(r.prompt for r in train).encode()).hexdigest(),
         "dev_data_sha256": hashlib.sha256(
