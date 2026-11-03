@@ -358,7 +358,8 @@ def pair_loss(head: ContrastRoleHead, rows: list[Feature], pair: tuple[int, ...]
 
 def train(seed: int, *, rows: list[Feature], development: list[Feature],
           exam: list[Feature], max_steps: int, eval_every: int,
-          deadline: float, lr: float = 0.0006) -> dict:
+          deadline: float, lr: float = 0.0006,
+          snapshot_dir: Path | None = None, source_hash: str = "") -> dict:
     if seed not in SEEDS:
         raise ValueError("Unregistered independent initialization")
     pair_indices = groups(rows)
@@ -425,6 +426,24 @@ def train(seed: int, *, rows: list[Feature], development: list[Feature],
                 "dev": snapshot,
             })
             print(json.dumps({"seed": seed, **curve[-1]}), flush=True)
+            if snapshot_dir is not None:
+                # Recovery/research snapshot. No automatic model promotion.
+                snapshot_dir.mkdir(parents=True, exist_ok=True)
+                archive = {
+                    "schema": 2, "experimental_only": True,
+                    "seed": seed, "step": step,
+                    "source_hash": source_hash,
+                    "model_weights": {n: h.state_dict() for n, h in heads.items()},
+                    "optimizers": {n: o.state_dict() for n, o in optimizers.items()},
+                    "best_by_development": best_state,
+                    "dev_curve": curve,
+                    "python_sampler_state": rng.getstate(),
+                    "torch_rng_state": torch.get_rng_state(),
+                }
+                target = snapshot_dir / f"seed-{seed}-recovery.pt"
+                tmp = target.with_suffix(".tmp")
+                torch.save(archive, tmp)
+                os.replace(tmp, target)
             if time.monotonic() >= deadline - 5:
                 break
 
@@ -468,6 +487,8 @@ def experiment(*, source: Path, parent: Path, pointer: Path, out: Path,
     dev_features = features(backbone, codec, dev_rows)
     exam_features = features(backbone, codec, final_rows)
     names = list(SEEDS if not quick else SEEDS[:1])
+    train_hash = hashlib.sha256(
+        "\n".join(r.prompt for r in source_rows).encode()).hexdigest()
     deadline = time.monotonic() + max_minutes * 60
     results = []
     for index, seed in enumerate(names):
@@ -479,7 +500,8 @@ def experiment(*, source: Path, parent: Path, pointer: Path, out: Path,
         results.append(train(
             seed, rows=train_features, development=dev_features,
             exam=exam_features, max_steps=max_steps, eval_every=eval_every,
-            deadline=slice_deadline,
+            deadline=slice_deadline, snapshot_dir=out / "recovery",
+            source_hash=train_hash,
         ))
     report = {
         "schema": 1, "mode": "contrastive-roles-and-question-ablation",
@@ -515,6 +537,7 @@ def experiment(*, source: Path, parent: Path, pointer: Path, out: Path,
             "No attempt to promote any candidate or change archived original Forge weights",
             "Question ablation removes both frozen query and lexical question features",
             "CPU timings do not establish any official GitHub daily allowance",
+            "Recovery snapshots preserve optimizer/RNG state but automated resumption is not yet integrated",
             "No model is evidence of why an actual human made a decision",
         ],
     }
