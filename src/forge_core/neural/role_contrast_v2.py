@@ -466,13 +466,18 @@ def train(seed: int, *, rows: list[Feature], development: list[Feature],
     return output
 
 
-def experiment(*, source: Path, parent: Path, pointer: Path, out: Path,
-               max_minutes: float = 32.0, max_steps: int = 12000,
-               eval_every: int = 300, quick: bool = False) -> dict:
-    if not 0.1 <= max_minutes <= 35.0 or not 1 <= max_steps <= 50000:
+def validate_budget(max_minutes: float, max_steps: int, eval_every: int) -> None:
+    """Keep Python and Actions ceilings identical to prevent wasted runs."""
+    if not 0.1 <= max_minutes <= 36.0 or not 1 <= max_steps <= 50000:
         raise ValueError("Invalid bounded CPU experiment budget")
     if not 1 <= eval_every <= max_steps:
         raise ValueError("Invalid development evaluation cadence")
+
+
+def experiment(*, source: Path, parent: Path, pointer: Path, out: Path,
+               max_minutes: float = 32.0, max_steps: int = 12000,
+               eval_every: int = 300, quick: bool = False) -> dict:
+    validate_budget(max_minutes, max_steps, eval_every)
     torch.set_num_threads(min(2, torch.get_num_threads()))
     verify_disjoint()
     source_rows = make_rows("train")
