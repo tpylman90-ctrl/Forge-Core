@@ -14,7 +14,7 @@ on:
         required: false
   push:
     branches: [main]
-    paths: ["experiments/requests/preschool-v07-001.md"]
+    paths: ["experiments/requests/preschool-v07-002.md"]
 
 permissions:
   contents: read

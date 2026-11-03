@@ -43,40 +43,49 @@ def fetch_prefix(filename: str, byte_limit: int) -> bytes:
     return data[:byte_limit]
 
 
-def clean_prefix(data: bytes) -> tuple[str, int]:
+def story_hash(text: str) -> str:
+    return hashlib.sha256(" ".join(text.casefold().split()).encode("utf-8")).hexdigest()
+
+
+def complete_stories(data: bytes) -> list[str]:
     text = data.decode("utf-8", errors="ignore").replace("\r\n", "\n")
-    # Text records normally use <|endoftext|> between complete stories.
+    # Keep only complete records. A story may contain multiple paragraphs.
     if "<|endoftext|>" in text:
         text = text.rsplit("<|endoftext|>", 1)[0]
-        stories = [v.strip() for v in text.split("<|endoftext|>") if len(v.strip()) > 30]
+        stories = [item.strip() for item in text.split("<|endoftext|>")]
     elif "\n\n" in text:
         text = text.rsplit("\n\n", 1)[0]
-        stories = [v.strip() for v in re.split(r"\n\s*\n", text) if len(v.strip()) > 30]
+        stories = [item.strip() for item in re.split(r"\n\s*\n", text)]
     else:
         raise ValueError("Source prefix contains no recognized document separator")
+    stories = [item for item in stories if len(item) > 30]
     if len(stories) < 30:
         raise ValueError("Too few complete source records")
-    # Exact duplicate screening; we do not falsely claim complete near-dup audit.
+    return stories
+
+
+def clean_prefix(data: bytes, blocked: set[str] | None = None) -> tuple[str, int]:
     accepted, seen = [], set()
-    for item in stories:
-        key = hashlib.sha256(" ".join(item.casefold().split()).encode()).hexdigest()
-        if key not in seen:
+    for item in complete_stories(data):
+        key = story_hash(item)
+        if key not in seen and (blocked is None or key not in blocked):
             seen.add(key)
             accepted.append(item)
     if len(accepted) < 30:
-        raise ValueError("Insufficient independent stories after duplicate check")
+        raise ValueError("Insufficient independent stories after duplicate screening")
     return "\n\n".join(accepted) + "\n", len(accepted)
-
 
 def prepare(out: Path, train_bytes: int = 10 * 1024 * 1024,
             valid_bytes: int = 2 * 1024 * 1024) -> dict:
-    train, train_count = clean_prefix(fetch_prefix(TRAIN_FILE, train_bytes))
-    valid, valid_count = clean_prefix(fetch_prefix(VALID_FILE, valid_bytes))
+    train_raw = fetch_prefix(TRAIN_FILE, train_bytes)
+    valid_raw = fetch_prefix(VALID_FILE, valid_bytes)
+    train, train_count = clean_prefix(train_raw)
+    train_keys = {story_hash(item) for item in complete_stories(train_raw)}
+    valid_before = len(complete_stories(valid_raw))
+    valid, valid_count = clean_prefix(valid_raw, blocked=train_keys)
     if hashlib.sha256(train.encode()).hexdigest() == hashlib.sha256(valid.encode()).hexdigest():
         raise ValueError("Train and validation text identical")
-    if {hashlib.sha256(s.encode()).hexdigest() for s in train.split("\n\n")} & {
-        hashlib.sha256(s.encode()).hexdigest() for s in valid.split("\n\n")}:
-        raise ValueError("Exact story duplicated across source splits")
+    overlap_removed = valid_before - valid_count
     out.mkdir(parents=True, exist_ok=True)
     (out / "train.txt").write_text(train, encoding="utf-8")
     (out / "valid.txt").write_text(valid, encoding="utf-8")
@@ -90,6 +99,7 @@ def prepare(out: Path, train_bytes: int = 10 * 1024 * 1024,
         "source_train_bytes_requested": train_bytes,
         "source_valid_bytes_requested": valid_bytes,
         "train_document_count": train_count, "valid_document_count": valid_count,
+        "validation_records_removed_as_duplicate_or_train_overlap": overlap_removed,
         "train_content_bytes": len(train.encode()), "valid_content_bytes": len(valid.encode()),
         "train_sha256": hashlib.sha256(train.encode()).hexdigest(),
         "valid_sha256": hashlib.sha256(valid.encode()).hexdigest(),

@@ -30,6 +30,21 @@ class TestPinnedCorpus(unittest.TestCase):
                 self.assertEqual(m["train_sha256"],
                     hashlib.sha256((out/"train.txt").read_bytes()).hexdigest())
 
+    def test_cross_split_story_overlap_is_filtered(self):
+        train = "".join(f"Once upon a time the small fox met friend {i} in the forest." +
+                        "<|endoftext|>" for i in range(40))
+        valid = (train.split("<|endoftext|>")[0] + "<|endoftext|>" +
+                 "".join(f"The little bird visited a new garden number {i}." +
+                         "<|endoftext|>" for i in range(40)))
+        with patch("forge_core.neural.pinned_corpus.fetch_prefix",
+                   side_effect=lambda name, limit:
+                   (train if name.endswith("-train.txt") else valid).encode()):
+            with tempfile.TemporaryDirectory() as folder:
+                out = Path(folder)
+                report = prepare(out, 200000, 200000)
+                self.assertEqual(report["validation_records_removed_as_duplicate_or_train_overlap"], 1)
+                self.assertNotIn("fox met friend", (out / "valid.txt").read_text())
+
     def test_incomplete_records_removed(self):
         text = "".join(f"A little story {i} with enough characters to pass the rules." +
                        "<|endoftext|>" for i in range(34))
