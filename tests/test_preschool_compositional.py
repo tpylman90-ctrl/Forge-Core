@@ -41,6 +41,34 @@ class TestCompositionalQA(unittest.TestCase):
             self.assertEqual(sorted(x.answer for x in data if x.skill==skill),
                              sorted(x.answer for x in null if x.skill==skill))
 
+    def test_evaluation_supports_a_new_skill_name(self):
+        # Regression: direct evaluator previously hardcoded only four skills,
+        # so 'giver' crashed before experimental training even started.
+        from types import SimpleNamespace
+        import torch
+        from forge_core.neural.preschool_direct import (
+            DirectExample, evaluate_direct,
+        )
+        class DummyTokenizer:
+            def encode(self, text):
+                return SimpleNamespace(ids=[1, 2])
+            def decode(self, ids):
+                return "Ada."
+        class DummyModel:
+            cfg = SimpleNamespace(max_seq_len=256)
+            def eval(self):
+                return self
+            def __call__(self, x):
+                logits = torch.zeros((1, x.shape[1], 4))
+                logits[0, -1, 2] = 5.0
+                return logits, None
+        rows=[DirectExample("giver-test","giver",
+                            "Story: Ada gave a toy to Ben.\nQuestion: Who gave it?\nAnswer:",
+                            "Ada")]
+        score=evaluate_direct(DummyModel(),DummyTokenizer(),rows,max_tokens=2)
+        self.assertEqual(score["correct"], 1)
+        self.assertEqual(score["by_skill"]["giver"]["total"], 1)
+
     def test_bounds_prevent_unsafe_runs(self):
         with self.assertRaisesRegex(ValueError,"Bounded"):
             run(folder=Path("missing"),out=Path("missing"),

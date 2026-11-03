@@ -142,7 +142,9 @@ def normalize_answer(answer: str) -> str:
 def evaluate_direct(model: ByteTransformer, tokenizer,
                     rows: list[DirectExample], max_tokens: int = 10) -> dict:
     model.eval()
-    scores = {skill: {"correct": 0, "total": 0} for skill in SKILLS}
+    # Evaluation must support new audited language skills, e.g. giver;
+    # the old four-skill fixed dictionary silently blocked expansions.
+    scores: dict[str, dict[str, int]] = {}
     examples = []
     successes = 0
     for row in rows:
@@ -159,8 +161,9 @@ def evaluate_direct(model: ByteTransformer, tokenizer,
                 break
         text = tokenizer.decode(continuation)
         correct = int(normalize_answer(text) == normalize_answer(row.answer))
-        scores[row.skill]["total"] += 1
-        scores[row.skill]["correct"] += correct
+        bucket = scores.setdefault(row.skill, {"correct": 0, "total": 0})
+        bucket["total"] += 1
+        bucket["correct"] += correct
         successes += correct
         if len(examples) < 8:
             examples.append({"skill": row.skill, "question": row.prompt,

@@ -15,7 +15,7 @@ on:
         default: 707
   push:
     branches: [main]
-    paths: ["experiments/requests/preschool-compositional-001.md"]
+    paths: ["experiments/requests/preschool-compositional-002.md"]
 
 permissions:
   contents: read
