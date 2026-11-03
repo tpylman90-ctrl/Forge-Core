@@ -40,10 +40,10 @@ from forge_core.neural.role_curriculum_v1 import (
 
 SEEDS = (8311, 8312)
 EXAM_SEEDS = (12311, 12312)
-EXAM_NAMES = ("Dalena", "Omaris", "Suri", "Bento", "Calder", "Nadine",
+EXAM_NAMES = ("Dalena", "Omaris", "Sariah", "Bento", "Calder", "Nadine",
               "Mikkel", "Iris", "Yvette", "Samir", "Eamon", "Tilda",
-              "Pavel", "Marina", "Neron", "Belinda")
-EXAM_OBJECTS = ("sundial", "satchel", "brooch", "rudder", "spool",
+              "Perelda", "Marina", "Neron", "Belinda")
+EXAM_OBJECTS = ("sundial", "pulley", "brooch", "rudder", "spool",
                 "trinket", "carafe", "flask", "sandal", "amulet")
 # Every new final exam template has an independently anchored grammar.
 EXAM_SYNTAX = (
