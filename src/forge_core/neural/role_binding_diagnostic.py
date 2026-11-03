@@ -22,11 +22,11 @@ from forge_core.neural.preschool_qa import verify_source
 from forge_core.neural.span_pointer_lab import WordPointer, features_for
 
 # Deliberately independent from existing pointer/development/exam vocabularies.
-PEOPLE = ("Nola", "Quinn", "Elio", "Vera", "Basil", "Cassia", "Hugo",
-          "Leila", "Talia", "Oren", "Priya", "Soren", "Juno", "Mina",
-          "Felix", "Arlo", "Uma", "Kira")
-OBJECTS = ("ribbon", "magnet", "notebook", "puzzle", "basket",
-           "scarf", "telescope", "suitcase", "pillow", "ticket")
+PEOPLE = ("Nola", "Quinn", "Elio", "Vera", "Basil", "Cassia", "Leila",
+          "Oren", "Priya", "Soren", "Felix", "Uma", "Celia", "Nico",
+          "Petra", "Imani", "Gideon", "Lyra")
+OBJECTS = ("magnet", "notebook", "puzzle", "telescope", "suitcase",
+           "pillow", "ticket", "tablet", "jar", "necklace")
 TEMPLATES = ("handed", "received", "passive", "sent")
 ROLES = ("giver", "recipient")
 SEEDS = (6101, 6102, 6103)
