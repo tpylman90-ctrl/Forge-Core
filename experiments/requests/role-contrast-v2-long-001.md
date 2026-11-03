@@ -23,3 +23,7 @@ experiment using the existing free standard GitHub-hosted CPU runner.
 Success means a measured, reproducible answer about this architecture,
 including negative results. It does NOT imply general preschool
 comprehension or a known GitHub daily compute entitlement.
+
+## Corrected launch record
+
+The first attempted run (41727684679) stopped before training because the Python budget bound rejected the workflow's 36-minute input. This was a configuration error, not a model result. Commit a795d386 aligned the bounds and commit 8ab12984 added an explicit regression test. CI run 41728000710 passed. This amended request triggers exactly **one** corrected long run under the original 36-minute single-run cap; no repeat schedule or extra parallel workers are authorized.
