@@ -61,3 +61,46 @@ The observed loss reduction may primarily reflect learning byte frequencies
 and local patterns. The next experiment should use a longer controlled run,
 a fixed/provenance-pinned corpus, more comprehensive held-out scoring, and
 readable generation tests before promoting any capability claim.
+
+
+## Run 003: same 1.875M Forge Seed learns more on locked public text
+
+- **Date:** 2026-11-02 (US Eastern; 2026-11-03 UTC)
+- **Run and logs:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41556317228
+- **Commit:** ca2f7245379952d5a8acc48b41f4ca49b204a09a
+- **Starting checkpoint:** Run 002, step 20. Same weights, optimizer,
+  minibatch random state and model architecture; no pretrained model.
+- **Data:** same 200 TinyStories training rows and 50 independent validation
+  rows as Run 002. Both split SHA256 and complete source manifest SHA256
+  validated against the checked-in exact-content lock. This is not an
+  immutable upstream revision or complete TinyStories distribution.
+- **Additional training:** 1,000 AdamW CPU steps, batch 2, context 64;
+  **total steps = 1,020**, trained target bytes this run = 128,000.
+- **Model:** original 1,875,072-parameter byte-level Forge Seed.
+- **Fixed 16-window held-out loss:** **3.581682 → 2.214508**,
+  approximately 38.17% lower over the continuation.
+- **Expanded 128-window held-out audit:** **3.582403 → 2.127761**.
+- **Final held-out bits per byte:** **3.194860** (fixed 16 windows).
+- **Measured training wall-time:** 20.14 seconds (CPU training stage only).
+- **Validation trajectory (global optimizer step, loss):**
+  20: 3.581682; 120: 2.660929; 220: 2.536801; 320: 2.425791;
+  420: 2.416255; 520: 2.387213; 620: 2.363225; 720: 2.301203;
+  820: 2.276215; 920: 2.263386; 1020: 2.214508.
+- **Generated sample:** starts "Once upon a time whas pime. Le thee tracresom..."
+  with letter-like fragments, but **not coherent language**.
+- **Artifact:** \`forge-scratch-language-checkpoint\`, ID \`13193808375\`,
+  about 20.5 MB; expires **2026-12-03 UTC**. This artifact includes
+  weights, optimizer, RNG, metrics, provenance, source notice and the exact
+  public training/validation slices for resumption.
+- **CI:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41556317233
+  passed all Python unit tests and the training smoke test.
+
+### Interpretation
+
+This is a verified second checkpoint on the same public text. Validation
+improved consistently and the model is beginning to learn byte-level English
+patterns. Its sample is not fluent, and the corpus is very small. It would
+be inaccurate to describe Forge Seed as understanding language, following
+instructions or reasoning. The next research gate is more *diverse*,
+immutable, properly licensed text and independent sample-quality benchmarks,
+not adding Android features.

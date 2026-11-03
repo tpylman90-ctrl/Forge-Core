@@ -77,7 +77,7 @@ Source: https://huggingface.co/datasets/roneneldan/TinyStories
 Dataset card currently labels it CDLA-Sharing-1.0. Confirm current terms,
 provenance, and text usage before any larger training.
 
-## Run 003: content-locked extended CPU continuation
+## Run 003: verified extended continuation (completed 1,020 total steps)
 
 The workflow's one-time request at
 `experiments/requests/seed-run003.md` resumes **Run 002**
@@ -90,14 +90,14 @@ If the remote data changes, training fails rather than silently continuing
 on different text. Future full-corpus training still needs immutable source
 revisions and an appropriate license/contamination audit.
 
-Run 003 requests 1,000 additional CPU steps, keeps the exact prior network
+Run 003 completed 1,000 additional CPU steps, keeping the exact prior network
 weights/optimizer/RNG, and records validation loss every 100 steps. A second
 held-out audit covers 128 fixed windows. The artifact now carries the exact
 public train/validation slices and a notice to make the experiment resumable
 within the limited retention period; these data must never include personal
 memories.
 
-Even if held-out loss improves, **text readability must be checked separately**.
+The held-out loss **did improve** (3.581682 to 2.214508 on 16 windows; 3.582403 to 2.127761 on 128 windows). The generated text remains largely incoherent. **Text readability must be checked separately**.
 We will not promote this to a functioning conversational AI without evidence.
 
 ## GitHub Actions
@@ -123,3 +123,11 @@ Observe (explicit opt-in) → Ask Why → Understand → Propose Principle →
 That is a separate personal learning pipeline, not immediate weight updates.
 It will be connected only after basic language quality is demonstrated and
 private-memory/security requirements are tested.
+
+## Preserving a successful research experiment
+
+See [checkpoint archive](CHECKPOINT-ARCHIVE.md). The public-data-only
+archive workflow audits the checkpoint, exact corpus and manifest before
+creating a **DRAFT** GitHub Release. Neither private memory nor phone
+observations may enter the public archive. Draft archive existence is not
+proof of language quality or a guarantee of permanent storage.

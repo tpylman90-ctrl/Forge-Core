@@ -39,17 +39,20 @@ See [language-first roadmap](docs/ROADMAP.md) and the
 
 ## Current bounded research run
 
-Forge Seed Run 003 is a **one-time GitHub Actions continuation** of Run 002,
+Forge Seed Run 003 **completed successfully as a one-time continuation** of Run 002,
 using the same 1,875,072-parameter randomly initialized network and
 source-locked 200/50-document TinyStories preview. The new source content
 lock at `data/locks/tinystories-preview-200-50-v0.4.json` validates the
 **exact SHA256 bytes**, not a permanent upstream dataset revision.
 
-The run adds 1,000 CPU optimization steps with validation every 100 steps,
+The run added 1,000 CPU optimization steps with validation every 100 steps,
 a wider held-out audit and a fixed-seed text sample. Its GitHub artifact includes
 the training checkpoint, optimizer and RNG state, exact public text slices,
 dataset provenance and measured learning curve. The artifact expires after 30 days;
 a separate reviewed archive is needed for long-term preservation.
+
+The measured held-out loss fell from 3.581682 to 2.214508 in this continuation,
+while the generated sample remained incoherent. See [the experiment ledger](docs/EXPERIMENTS.md).
 
 It is important to distinguish statistical next-byte learning from coherent
 sentences, instruction following and independent judgment. None is assumed.
@@ -88,3 +91,7 @@ not training time, downloads, model size, or appearance of autonomy.
 
 Code license selection is pending. Do not presume rights to distribute this
 code or third-party datasets beyond their documented terms.
+
+For long-lived, audited preservation of a public research checkpoint,
+see the [draft archive procedure](docs/CHECKPOINT-ARCHIVE.md). Nothing
+is automatically published as a trained conversational assistant.

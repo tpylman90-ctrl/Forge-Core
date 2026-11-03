@@ -34,9 +34,9 @@ held-out documents and reproducible hashes. A passing smoke test is not language
 - [x] GitHub Actions real-text experiment with modest bounded CPU steps, artifacts,
       prior-checkpoint resume and explicit source/hash checks
 - [x] **Verified:** first TinyStories preview run; 1,875,072 params, 20 steps, held-out loss 5.5328 → 3.5817; see experiment ledger
-- [ ] Show repeatable held-out improvements over more than one checkpoint (Run 003 continuation requested)
+- [x] Verified improvement from step 20 to 1020 on the same content-locked held-out corpus (Run 003); wider audit independently improved
 - [ ] Compare a scratch run to a matched random-weight baseline and record text samples
-- [ ] Select durable checkpoint storage beyond 30-day CI artifacts (run archives and public-source metadata retained temporarily)
+- [ ] Verify a draft GitHub Release checkpoint archive before artifact expiry (manual review/promotion remains required)
 
 **Gate:** genuine public-text learning evidence; not just memorizing a tiny demo.
 
