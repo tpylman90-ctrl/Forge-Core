@@ -1,0 +1,94 @@
+name: Forge Teacher v1 — verified adaptive lesson and neural student pilot
+
+on:
+  workflow_dispatch:
+    inputs:
+      original_run_id:
+        type: string
+        description: "Audited scratch-trained Forge Seed pretraining run"
+        required: true
+        default: "41572257363"
+      parent_run_id:
+        type: string
+        description: "Verified compositional research baseline, not the final promoted model"
+        required: true
+        default: "41649770774"
+      updates:
+        type: number
+        description: "Per-arm bounded optimization steps (1 to 2000)"
+        required: true
+        default: 280
+  push:
+    branches: [main]
+    paths: ["experiments/requests/teacher-v1-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  teacher-student:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      ORIGINAL_RUN: ${{ inputs.original_run_id || '41572257363' }}
+      PARENT_RUN: ${{ inputs.parent_run_id || '41649770774' }}
+      UPDATES: ${{ inputs.updates || '280' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only torch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install scratch BPE codec
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Validate bounded identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$ORIGINAL_RUN" =~ ^[0-9]+$ ]]
+          [[ "$PARENT_RUN" =~ ^[0-9]+$ ]]
+          [[ "$UPDATES" =~ ^[0-9]+$ ]]
+          (( UPDATES >= 1 && UPDATES <= 2000 ))
+      - name: Download audited scratch model and original verified research branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source parent artifacts/teacher-v1
+          gh run download "$ORIGINAL_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir source
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-v07-compositional-qa --dir parent
+          test -f source/checkpoint.pt
+          test -f source/source-manifest.json
+          test -f source/train.txt
+          test -f source/valid.txt
+          test -f parent/verified-research.pt
+      - name: Teacher generates and audits strictly rule-verified curriculum
+        run: |
+          python -m forge_core.learning.teacher_v1 \
+            --out artifacts/teacher-v1/lessons \
+            --seed 1701 --train-count 240 --dev-count 120
+      - name: Two matched neural student experiments with public rehearsal
+        run: |
+          python -m forge_core.neural.teacher_student_v1 \
+            --original source --parent parent \
+            --lessons artifacts/teacher-v1/lessons \
+            --out artifacts/teacher-v1/study --updates "$UPDATES"
+      - name: Prepare feedback-adjusted NEXT lesson bundle, do not auto-train or promote
+        run: |
+          python -m forge_core.learning.teacher_v1 \
+            --out artifacts/teacher-v1/next-lessons --seed 1702 \
+            --train-count 240 --dev-count 120 \
+            --progress-json artifacts/teacher-v1/study/next-development-scores.json
+      - name: Save audited lessons, feedback, research-only weights and metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-teacher-v1-research
+          path: artifacts/teacher-v1/
+          retention-days: 30
+          if-no-files-found: error

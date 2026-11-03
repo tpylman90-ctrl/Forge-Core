@@ -64,9 +64,27 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Optional local GGUF language-teacher demo")
     parser.add_argument("--llama-cli", type=Path, required=True)
     parser.add_argument("--gguf", type=Path, required=True)
-    parser.add_argument("--observation", required=True)
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--observation", help="Ask a curiosity question about a supplied observation")
+    mode.add_argument("--development-scores", type=Path,
+                      help="JSON with aggregate six-skill development scores only")
+    parser.add_argument("--proposal-out", type=Path,
+                        help="Optional path to write vetted curriculum proposal JSON")
     args = parser.parse_args()
-    print(LocalTeacher(args.llama_cli, args.gguf).question(args.observation))
+    teacher = LocalTeacher(args.llama_cli, args.gguf)
+    if args.observation is not None:
+        if args.proposal_out:
+            parser.error("--proposal-out requires --development-scores")
+        print(teacher.question(args.observation))
+    else:
+        import json
+        scores = json.loads(args.development_scores.read_text(encoding="utf-8"))
+        proposal = teacher.curriculum_proposal(scores)
+        result = json.dumps(proposal, indent=2) + "\n"
+        if args.proposal_out:
+            args.proposal_out.parent.mkdir(parents=True, exist_ok=True)
+            args.proposal_out.write_text(result, encoding="utf-8")
+        print(result, end="")
 
 
 if __name__ == "__main__":
