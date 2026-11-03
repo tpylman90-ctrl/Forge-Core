@@ -36,3 +36,15 @@ Training and evaluation nouns are disjoint, but their **verb list and sentence t
 This lab is **the first half** of our two different Why systems. The later personal Why loop requires a user's consent and confirmation and always writes to private, encrypted memory, not to this public fixture or neural weights by default.
 
 See [Master Blueprint](MASTER-BLUEPRINT.md), [Evaluation](EVALUATION.md) and [Founding Charter](../CHARTER.md).
+
+## Neural A/B study (implemented, experimental)
+
+The next milestone connects these rule-derived labels to the actual
+scratch-trained Forge Seed checkpoint in a controlled experiment. See
+[Linguistic Why A/B experiment](LINGUISTIC-WHY-EXPERIMENT.md).
+Two independently initialized optimizer branches receive identical prompts
+and schedules; only correct vs shuffled answer labels differ. A third frozen
+branch measures the prior knowledge. Evaluators report held-out structural
+answer accuracy and regression in next-byte language loss. This is not
+self-training or personal reasoning, and **no trained candidate is promoted
+without independent replication**.

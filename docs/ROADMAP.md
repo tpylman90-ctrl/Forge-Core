@@ -54,8 +54,8 @@ held-out documents and reproducible hashes. A passing smoke test is not language
 - [x] Deterministic tests reject overlapping actor vocabularies and verify
   labels and public-question separation
 - [ ] Add template-, verb- and corpus-disjoint external evaluation
-- [ ] Implement a matched-compute control/intervention comparison AFTER
-  the next immutable licensed text baseline
+- [x] Implement first **small null-label controlled A/B study**, starting from preserved Run 005 public-data scratch model; run and independent validation pending
+- [ ] Repeat on an immutable fully reviewed corpus with matched-compute text-only control, multiple seeds, unseen constructions and external labels
 - [ ] Adopt auxiliary tasks only if structural transfer improves without
   degrading general language or creating unacceptable artifacts
 

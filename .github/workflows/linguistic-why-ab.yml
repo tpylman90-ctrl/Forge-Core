@@ -1,0 +1,74 @@
+name: Forge Linguistic Why — controlled A/B experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      checkpoint_run_id:
+        description: "Previously reviewed public TinyStories language-training checkpoint"
+        type: string
+        required: true
+        default: "41558008416"
+      adaptation_steps:
+        description: "Equal number of optimizer steps for both experimental arms (1–500)"
+        type: number
+        required: true
+        default: 120
+  push:
+    branches: [main]
+    paths: ["experiments/requests/why-ab-run001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      SOURCE_RUN: ${{ github.event_name == 'push' && '41558008416' || inputs.checkpoint_run_id }}
+      TRAIN_STEPS: ${{ github.event_name == 'push' && '120' || inputs.adaptation_steps }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Verify bounded inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$TRAIN_STEPS" =~ ^[0-9]+$ ]]
+          (( TRAIN_STEPS >= 1 && TRAIN_STEPS <= 500 ))
+      - name: Download trusted scratch-model public corpus checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checkpoint artifacts/why-ab
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-scratch-language-checkpoint --dir checkpoint
+          test -f checkpoint/checkpoint.pt
+          test -f checkpoint/valid.txt
+          test -f checkpoint/dataset-manifest.json
+      - name: Gold-label versus shuffled-labels teaching experiment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.why_experiment \
+            --archive checkpoint \
+            --out artifacts/why-ab \
+            --steps "$TRAIN_STEPS" \
+            --batch 2 \
+            --seed 1234
+      - name: Preserve measured comparison, not promoted model weights
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-linguistic-why-ab-research
+          path: artifacts/why-ab/
+          retention-days: 30
+          if-no-files-found: error
