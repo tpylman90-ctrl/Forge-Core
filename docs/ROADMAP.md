@@ -226,3 +226,24 @@ as **verified, implemented but unverified, or proposed**.
       multiple seeds before any capability claim
 
 [Detailed result and next method](POINTER-ROLE-RESULTS.md).
+
+## Nov 3 — question-conditioned neural entity-slot experiment
+
+- [x] Frozen scratch-model lineage, separate two-person candidate extraction,
+      and a newly initialized question-conditioned role head
+- [x] Disjoint original synthetic training/development/exam grammar, names,
+      objects, questions, source parser checks and counterfactual pairs
+- [x] Correctly shuffled within question role ACROSS grammar templates;
+      matched gold vs null update count and initialization; test control
+- [x] Full CI success and experiment run **41712121652** with research
+      artifact **13268059936** (no weight promotion)
+- [x] Measured **162/288** gold versus **148/288** shuffled and **144/288**
+      untrained; both correct giver/recipient questions only **20/144**
+- [ ] Isolate whether question wording changes the answer using a
+      query-ablated matched baseline and paired-question contrastive training
+- [ ] Prepare a NEW independently sourced/annotated final challenge;
+      do not reuse the now-examined 288 cases as untouched evidence
+- [ ] Replicate promising results across multiple initialization seeds,
+      new syntax sources and language-retention benchmarks before promotion
+
+[Detailed independent research report](ROLE-CONDITIONED-RESULTS.md).
