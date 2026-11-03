@@ -140,7 +140,7 @@ def make_rows(split: str) -> list[RoleRow]:
                         for role in ("giver", "recipient"):
                             variants = QUESTION_VARIANTS[split][role]
                             question = variants[(trial + swap) % len(variants)].format(obj=obj)
-                            prompt = f"Story: {story}\\nQuestion: {question}\\nAnswer:"
+                            prompt = f"Story: {story}\nQuestion: {question}\nAnswer:"
                             proposed.append(RoleRow(
                                 id=f"{split}:{seed}:{name}:{trial}:{swap}:{role}",
                                 split=split, template=name, story=story,
