@@ -1,0 +1,98 @@
+name: Forge Seed fixed-prompt language inspection
+
+on:
+  workflow_dispatch:
+    inputs:
+      baseline_run_id:
+        description: "Earlier successful research checkpoint run"
+        required: true
+        type: string
+      candidate_run_id:
+        description: "Later successful checkpoint from same model/corpus"
+        required: true
+        type: string
+  push:
+    branches: [main]
+    paths: ["experiments/requests/evaluate-run005.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  samples:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      BEFORE_RUN: ${{ github.event_name == 'push' && '41557239198' || inputs.baseline_run_id }}
+      AFTER_RUN: ${{ github.event_name == 'push' && '41558008416' || inputs.candidate_run_id }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Download both public training checkpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BEFORE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$AFTER_RUN" =~ ^[0-9]+$ ]]
+          [[ "$BEFORE_RUN" != "$AFTER_RUN" ]]
+          mkdir -p before after results
+          gh run download "$BEFORE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-scratch-language-checkpoint --dir before
+          gh run download "$AFTER_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-scratch-language-checkpoint --dir after
+      - name: Check identical training data and original model configuration
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          a=json.loads(Path("before/metrics.json").read_text())["last_run"]
+          b=json.loads(Path("after/metrics.json").read_text())["last_run"]
+          for key in ("train_sha256", "valid_sha256", "manifest_sha256", "model_size", "parameter_count", "seed", "batch_size", "seq_len", "lr"):
+              if a.get(key)!=b.get(key):
+                  raise SystemExit(f"Cannot compare different training setups: {key}")
+          if not b["global_step"] > a["global_step"]:
+              raise SystemExit("Candidate must be a later model checkpoint")
+          print("Comparison integrity verified:", a["global_step"], "->", b["global_step"])
+          PY
+      - name: Generate identical fixed-seed samples from both checkpoints
+        run: |
+          python -m forge_core.neural.qualitative --checkpoint before/checkpoint.pt \
+            --out results/before.json --generated-bytes 128
+          python -m forge_core.neural.qualitative --checkpoint after/checkpoint.pt \
+            --out results/after.json --generated-bytes 128
+      - name: Save qualitative comparison for human review
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          a=json.loads(Path("before.json").read_text()) if Path("before.json").exists() else json.loads(Path("results/before.json").read_text())
+          b=json.loads(Path("results/after.json").read_text())
+          lines=["# Forge Seed language inspection", "",
+                 f"Baseline optimizer steps: {a['checkpoint_step']}",
+                 f"Candidate optimizer steps: {b['checkpoint_step']}", "",
+                 "These are fixed-seed generated examples, NOT automatically graded fluency.", ""]
+          for i, x in enumerate(a["samples"]):
+              y=b["samples"][i]
+              lines.extend([f"## {i+1}. {x['prompt']}", "",
+                            "**Earlier:**", "", "    "+repr(x["continuation"]), "",
+                            "**Later:**", "", "    "+repr(y["continuation"]), ""])
+          Path("results/side-by-side.md").write_text("\n".join(lines)+"\n")
+          print("\n".join(lines))
+          PY
+      - name: Upload test outputs, not public model weights
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-language-inspection
+          path: results/
+          if-no-files-found: error
+          retention-days: 30
