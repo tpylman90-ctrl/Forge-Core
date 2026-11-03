@@ -60,6 +60,44 @@ class LocalTeacher:
         return answer
 
 
+    def curriculum_proposal(self, development_scores: dict) -> dict:
+        """Ask a LOCAL GGUF for one skill focus, never for trusted gold answers.
+
+        Only aggregate development correct/total counts are transmitted to
+        a *local process*. No personal memory, user observations, or cloud
+        API is provided. The output remains a strictly checked suggestion.
+        """
+        import json
+        from forge_core.learning.teacher_v1 import (
+            validate_development_scores, validate_teacher_proposal,
+        )
+        scores = validate_development_scores(development_scores)
+        prompt = (
+            "You are an optional curriculum planner for Forge's small "
+            "scratch-trained language model. Choose ONE skill from: "
+            "copy, select, recipient, giver, color, quantity. "
+            "Read ONLY aggregate development correct/total counts; "
+            "no user data is present. Return ONLY a JSON object with "
+            "exact keys focus_skill and reason, e.g. "
+            '{"focus_skill":"copy","reason":"Copy score is low."}. '
+            "Never supply training answers, new trusted facts, private "
+            "observations, model weights or action requests.\n\n"
+            "Development scores:\n" + json.dumps(scores, sort_keys=True) +
+            "\n\nJSON:"
+        )
+        completed = self.run(
+            [str(self.binary), "-m", str(self.model), "-c", "2048",
+             "-n", str(self.max_tokens), "-p", prompt, "--temp", "0.1"],
+            capture_output=True, text=True, check=True,
+            timeout=self.timeout_seconds,
+        )
+        try:
+            suggestion = json.loads(completed.stdout.strip())
+        except (ValueError, TypeError) as exc:
+            raise ValueError("Local AI teacher did not return strict JSON") from exc
+        return validate_teacher_proposal(suggestion)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Optional local GGUF language-teacher demo")
     parser.add_argument("--llama-cli", type=Path, required=True)
