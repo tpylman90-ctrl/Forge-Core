@@ -299,6 +299,7 @@ def train(*, seed: int, training: list[Feature], dev: list[Feature],
     if not 10 <= max_seconds <= 600:
         raise ValueError("Invalid CPU training time limit")
     pair_idx = groups(training)
+    null_targets = group_flip_null(training, pair_idx, seed + 321)
     rng = random.Random(seed + 109)
     torch.manual_seed(seed)
     original = TwoStageHead(training[0].slot.query.numel())
@@ -331,7 +332,9 @@ def train(*, seed: int, training: list[Feature], dev: list[Feature],
             else:
                 loss = torch.stack([
                     auxiliary_loss(
-                        net, training[i], false_giver=arm == "wrong_story",
+                        net, training[i], false_giver=(
+                            arm == "wrong_story" and
+                            null_targets[i] != training[i].slot.gold),
                         ablate=arm == "question_off")
                     for i in p
                 ]).mean()
@@ -451,7 +454,7 @@ def experiment(*, source: Path, parent: Path, pointer: Path,
             "Synthetic two-person tasks with deterministic capitalization heuristic",
             "Question paraphrases are manually specified and not language-wide knowledge",
             "The old monolithic arm has different capacity and a contrastive objective",
-            "Wrong-story control flips giver labels; it is a counterfactual null not chance",
+            "Wrong-story control randomly flips entire paired events while preserving roles and answer balance",
             "A positive synthetic score does not establish natural-language understanding",
             "Original scratch-language weights are unchanged; no automatic promotion",
             "Original public datasets and user-confirmed personal memory stay separate",
