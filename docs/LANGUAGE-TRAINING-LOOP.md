@@ -77,12 +77,33 @@ Source: https://huggingface.co/datasets/roneneldan/TinyStories
 Dataset card currently labels it CDLA-Sharing-1.0. Confirm current terms,
 provenance, and text usage before any larger training.
 
+## Run 003: content-locked extended CPU continuation
+
+The workflow's one-time request at
+`experiments/requests/seed-run003.md` resumes **Run 002**
+(`41554336734`) at 20 optimizer steps, provided the upstream public
+TinyStories preview still produces the **identical manifest SHA256** recorded
+in `data/locks/tinystories-preview-200-50-v0.4.json`.
+
+This is a **content lock** rather than a pinned immutable upstream revision.
+If the remote data changes, training fails rather than silently continuing
+on different text. Future full-corpus training still needs immutable source
+revisions and an appropriate license/contamination audit.
+
+Run 003 requests 1,000 additional CPU steps, keeps the exact prior network
+weights/optimizer/RNG, and records validation loss every 100 steps. A second
+held-out audit covers 128 fixed windows. The artifact now carries the exact
+public train/validation slices and a notice to make the experiment resumable
+within the limited retention period; these data must never include personal
+memories.
+
+Even if held-out loss improves, **text readability must be checked separately**.
+We will not promote this to a functioning conversational AI without evidence.
+
 ## GitHub Actions
 
 **Actions → Forge Scratch Language Experiment → Run workflow.**
-Default settings now select *tinystories + seed + 20 steps*, not synthetic
-demo + test control. A bounded initial push-triggered experiment is included
-when this canonical plan changes, to verify the real data path.
+Manual runs default to *tinystories + seed + 1,000 steps*, and must explicitly specify a prior run ID to resume. The one-time Run 003 push trigger is limited to its request marker and is not a recurring schedule.
 
 For continuation, specify a previous run ID with the **same corpus and
 settings**. Artifacts include checkpoint.pt, metrics.json and dataset-manifest.json.

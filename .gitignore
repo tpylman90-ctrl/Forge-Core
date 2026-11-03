@@ -8,7 +8,10 @@ __pycache__/
 venv/
 dist/
 build/
-data/
+data/*
+!data/locks/
+data/locks/*
+!data/locks/*.json
 datasets/
 artifacts/
 checkpoints/

@@ -16,17 +16,18 @@ on:
         options: [tiny, seed, base]
         default: seed
       steps:
-        description: "ADDITIONAL steps (tiny <=100; seed <=60; base <=5)"
+        description: "ADDITIONAL steps (tiny <=500; seed <=2000; base <=5)"
         required: true
         type: number
-        default: 20
+        default: 1000
       resume_run_id:
         description: "Optional prior successful run ID with identical dataset and configuration"
         required: false
         type: string
+  # One intentionally requested longer-run experiment; no automatic schedule.
   push:
     branches: [main]
-    paths: ["docs/LANGUAGE-TRAINING-LOOP.md"]
+    paths: ["experiments/requests/seed-run003.md"]
 
 permissions:
   contents: read
@@ -35,12 +36,12 @@ permissions:
 jobs:
   train:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 70
     env:
       DATASET: ${{ inputs.dataset || 'tinystories' }}
       MODEL_SIZE: ${{ inputs.model_size || 'seed' }}
-      STEPS: ${{ inputs.steps || '20' }}
-      RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
+      STEPS: ${{ inputs.steps || '1000' }}
+      RESUME_RUN_ID: ${{ github.event_name == 'push' && '41554336734' || inputs.resume_run_id || '' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -59,14 +60,23 @@ jobs:
           [[ "$MODEL_SIZE" == tiny || "$MODEL_SIZE" == seed || "$MODEL_SIZE" == base ]]
           [[ "$STEPS" =~ ^[0-9]+$ ]]
           (( STEPS >= 1 ))
-          if [[ "$MODEL_SIZE" == tiny ]]; then (( STEPS <= 100 )); fi
-          if [[ "$MODEL_SIZE" == seed ]]; then (( STEPS <= 60 )); fi
+          if [[ "$MODEL_SIZE" == tiny ]]; then (( STEPS <= 500 )); fi
+          if [[ "$MODEL_SIZE" == seed ]]; then (( STEPS <= 2000 )); fi
           if [[ "$MODEL_SIZE" == base ]]; then (( STEPS <= 5 )); fi
           if [[ -n "$RESUME_RUN_ID" ]]; then [[ "$RESUME_RUN_ID" =~ ^[0-9]+$ ]]; fi
       - name: Prepare document-separated language data
         run: |
           python -m forge_core.neural.prepare \
             --source "$DATASET" --out data/experiment --train-rows 200 --valid-rows 50
+      - name: Verify exact public corpus content before any training
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$DATASET" == tinystories ]]; then
+            python -m forge_core.neural.lock \
+              --manifest data/experiment/manifest.json \
+              --lock data/locks/tinystories-preview-200-50-v0.4.json
+          fi
       - name: Download prior approved experiment checkpoint
         if: ${{ env.RESUME_RUN_ID != '' }}
         shell: bash
@@ -89,11 +99,21 @@ jobs:
             --manifest data/experiment/manifest.json \
             --model-size "$MODEL_SIZE" --steps "$STEPS" \
             --batch-size 2 --seq-len 64 --eval-batches 8 \
-            --sample-tokens 48 --seed 42 \
+            --sample-tokens 96 --seed 42 \
+            --eval-every 100 --audit-batches 64 \
             --out artifacts/checkpoint.pt --report artifacts/metrics.json \
             "${ARGS[@]}"
-      - name: Preserve dataset provenance and reproducibility record
-        run: cp data/experiment/manifest.json artifacts/dataset-manifest.json
+      - name: Preserve exact public corpus, provenance and loss curve
+        shell: bash
+        run: |
+          cp data/experiment/manifest.json artifacts/dataset-manifest.json
+          cp data/experiment/train.txt artifacts/train.txt
+          cp data/experiment/valid.txt artifacts/valid.txt
+          if [[ "$DATASET" == tinystories ]]; then
+            printf '%s\n' 'Public TinyStories preview: roneneldan/TinyStories (CDLA-Sharing-1.0)' 'https://huggingface.co/datasets/roneneldan/TinyStories' 'Content SHA256 pinned to Forge Seed Run 002; this is not an immutable full upstream dataset snapshot.' > artifacts/SOURCE-NOTICE.txt
+          else
+            printf '%s\n' 'Forge Core original synthetic CI test fixtures; not a real language corpus.' > artifacts/SOURCE-NOTICE.txt
+          fi
       - name: Retain checkpoint, optimizer, validation and generated sample
         uses: actions/upload-artifact@v4
         with:

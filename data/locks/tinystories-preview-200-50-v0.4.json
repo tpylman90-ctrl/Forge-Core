@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "tinystories-preview-200-50-v0.4",
+  "dataset": "roneneldan/TinyStories",
+  "license": "cdla-sharing-1.0",
+  "source_revision_status": "not-fixed-upstream; content SHA256 pinned to Forge Seed run 002",
+  "train_rows": 200,
+  "valid_rows": 50,
+  "train_sha256": "eb64058bf1b8d343a4b27d3ab72e4347824ad2fc3b26083f43d88fcb23392ac2",
+  "valid_sha256": "55bd3f4c715a1c72db66b9f85ca6170c97d18018d8c4b0bdc4a1d96e35635c54",
+  "manifest_sha256": "73cbb539cc01459ef43ec5df960134b8fcb6500c8b8e000bf2a7a60c91aeddbd",
+  "original_workflow_run": 41554336734
+}

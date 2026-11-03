@@ -12,6 +12,7 @@ import hashlib
 import json
 import math
 import os
+import time
 from pathlib import Path
 
 import torch
@@ -99,6 +100,7 @@ def run(
     eval_batches: int = 8, resume: Path | None = None,
     report: Path | None = None, device_name: str = "cpu",
     manifest_file: Path | None = None, sample_tokens: int = 0,
+    eval_every: int = 0, audit_batches: int = 0,
 ) -> dict:
     if not 1 <= steps <= 100000 or batch_size < 1 or seq_len < 1:
         raise ValueError("Steps, batch size and sequence length must be positive")
@@ -106,6 +108,8 @@ def run(
         raise ValueError("Invalid learning rate or evaluation count")
     if not 0 <= sample_tokens <= 128:
         raise ValueError("Sample token budget must be within 0..128")
+    if eval_every < 0 or not 0 <= audit_batches <= 128:
+        raise ValueError("Invalid evaluation interval or audit batch count")
     cfg = configuration(model_size)
     if seq_len > cfg.max_seq_len:
         raise ValueError("Sequence length exceeds model context")
@@ -153,10 +157,14 @@ def run(
         sample_rng.set_state(checkpoint["sample_rng_state"])
         completed = int(checkpoint["step"])
         history = list(checkpoint["history"])
+    clock_started = time.monotonic()
     valid_before = evaluate(model, valid, batch_size, seq_len, eval_batches, seed, device)
+    audited_before = (evaluate(model, valid, batch_size, seq_len, audit_batches, seed, device)
+                      if audit_batches else None)
+    progress = [{"global_step": completed, "heldout_loss": round(valid_before, 6)}]
     train_loss = math.nan
     model.train()
-    for _ in range(steps):
+    for local_step in range(1, steps + 1):
         x, y = make_batch(train, batch_size, seq_len, sample_rng)
         _, loss = model(x.to(device), y.to(device))
         opt.zero_grad(set_to_none=True)
@@ -164,8 +172,18 @@ def run(
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         opt.step()
         train_loss = float(loss.detach().cpu())
+        if eval_every and (local_step % eval_every == 0 or local_step == steps):
+            score = evaluate(model, valid, batch_size, seq_len, eval_batches, seed, device)
+            point = {"global_step": completed + local_step,
+                     "heldout_loss": round(score, 6),
+                     "train_loss_last_batch": round(train_loss, 6)}
+            progress.append(point)
+            print(json.dumps({"training_progress": point}), flush=True)
     completed += steps
-    valid_after = evaluate(model, valid, batch_size, seq_len, eval_batches, seed, device)
+    valid_after = (progress[-1]["heldout_loss"] if eval_every else
+                   evaluate(model, valid, batch_size, seq_len, eval_batches, seed, device))
+    audited_after = (evaluate(model, valid, batch_size, seq_len, audit_batches, seed, device)
+                     if audit_batches else None)
     row = {
         "global_step": completed, "additional_steps": steps,
         "train_loss_last_batch": round(train_loss, 6),
@@ -180,6 +198,12 @@ def run(
         "lr": lr, "device": device_name,
         "improved_this_run": valid_after < valid_before,
         "validation_windows": eval_batches * batch_size,
+        "audit_validation_windows": audit_batches * batch_size,
+        "audit_heldout_loss_before": round(audited_before, 6) if audited_before is not None else None,
+        "audit_heldout_loss_after": round(audited_after, 6) if audited_after is not None else None,
+        "evaluation_curve": progress,
+        "training_tokens_this_run": steps * batch_size * seq_len,
+        "wall_seconds": round(time.monotonic() - clock_started, 2),
         "manifest_sha256": manifest_hash,
         "note": "Lower loss is progress on held-out bytes, not proof of conversation ability.",
     }
@@ -192,6 +216,9 @@ def run(
             produced = model.generate(prefix, sample_tokens)
             sample = bytes(produced[0].tolist()).decode("utf-8", errors="replace")
             row["sample_text"] = sample[:512]
+            # Readability is a low-level quality signal, not a fluency score.
+            row["sample_printable_fraction"] = round(
+                sum(ch.isprintable() for ch in sample) / max(1, len(sample)), 4)
             model.train()
     history.append(row)
     checkpoint = {
@@ -229,6 +256,8 @@ def main() -> None:
     p.add_argument("--eval-batches", type=int, default=8)
     p.add_argument("--manifest", type=Path, help="Verified source and document-split manifest")
     p.add_argument("--sample-tokens", type=int, default=0, help="Emit one reproducible sample, 0..128")
+    p.add_argument("--eval-every", type=int, default=0, help="Interval for held-out learning curve, 0 disables")
+    p.add_argument("--audit-batches", type=int, default=0, help="Additional widely distributed held-out checks")
     p.add_argument("--resume", type=Path)
     p.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     a = p.parse_args()
@@ -236,7 +265,8 @@ def main() -> None:
               model_size=a.model_size, steps=a.steps, batch_size=a.batch_size,
               seq_len=a.seq_len, lr=a.lr, seed=a.seed, eval_batches=a.eval_batches,
               resume=a.resume, report=a.report, device_name=a.device,
-              manifest_file=a.manifest, sample_tokens=a.sample_tokens)
+              manifest_file=a.manifest, sample_tokens=a.sample_tokens,
+              eval_every=a.eval_every, audit_batches=a.audit_batches)
     print(json.dumps(row, indent=2))
 
 
