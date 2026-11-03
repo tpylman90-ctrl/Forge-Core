@@ -1,0 +1,75 @@
+name: Forge Seed v0.7 — balanced QA teaching experiment
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        type: string
+        description: "Trusted original Forge Seed v0.7 training run"
+        required: true
+        default: "41572257363"
+      steps:
+        type: number
+        description: "Per-arm bounded steps (1–4000)"
+        required: true
+        default: 1400
+  push:
+    branches: [main]
+    paths: ["experiments/requests/preschool-qa-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      SOURCE_RUN: ${{ inputs.source_run_id || '41572257363' }}
+      STEPS: ${{ github.event_name == 'push' && '1400' || inputs.steps || '1400' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install scratch BPE tokenizer
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install research package
+        run: python -m pip install --no-deps -e .
+      - name: Verify bounded input
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$STEPS" =~ ^[0-9]+$ ]]
+          (( STEPS >= 1 && STEPS <= 4000 ))
+      - name: Download original model, tokenizer and public corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p base artifacts/qa
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir base
+          test -f base/checkpoint.pt
+          test -f base/train.txt
+          test -f base/valid.txt
+          test -f base/tokenizer.json
+          test -f base/source-manifest.json
+      - name: Original-weights QA teaching versus shuffled-labels experiment
+        shell: bash
+        run: |
+          python -m forge_core.neural.preschool_qa \
+            --checkpoint-dir base --out artifacts/qa \
+            --steps "$STEPS" --examples 1600 --batch 4 \
+            --seed 913 --text-weight 0.25
+      - name: Retain separated experimental results and research-only weights
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-v07-qa-teaching-comparison
+          path: artifacts/qa/
+          if-no-files-found: error
+          retention-days: 30
