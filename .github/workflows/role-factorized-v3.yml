@@ -1,0 +1,97 @@
+name: Forge Seed — factorized question-role research v3
+
+on:
+  workflow_dispatch:
+    inputs:
+      budget_minutes:
+        description: "Bounded CPU research period: 1–8 minutes"
+        type: number
+        required: true
+        default: 6
+      steps:
+        description: "Maximum optimizer rounds per seed, 1–10000"
+        type: number
+        required: true
+        default: 1800
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/role-factorized-v3-001.md"
+
+concurrency:
+  group: forge-core-factorized-v3-cpu
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  factorized-role-pilot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUDGET_MINUTES: ${{ inputs.budget_minutes || '6' }}
+      STEPS: ${{ inputs.steps || '1800' }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Prepare artifact folder and start marker
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/run-start.txt
+      - name: Install CPU-only PyTorch and scratch BPE tokenizer
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge experiment code
+        run: python -m pip install --no-deps -e .
+      - name: Verify unit tests and CPU bounds before model downloads
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BUDGET_MINUTES" =~ ^[0-9]+$ ]]
+          [[ "$STEPS" =~ ^[0-9]+$ ]]
+          (( BUDGET_MINUTES >= 1 && BUDGET_MINUTES <= 8 ))
+          (( STEPS >= 1 && STEPS <= 10000 ))
+          python -m unittest discover -s tests -p test_role_factorized_v3.py -v
+      - name: Retrieve original verified Forge Seed and pointer lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original parent pointer
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          gh run download 41649770774 --repo "$GITHUB_REPOSITORY" \
+            --name forge-v07-compositional-qa --dir parent
+          gh run download 41670001958 --repo "$GITHUB_REPOSITORY" \
+            --name forge-teacher-v1-neural-pointer --dir pointer
+          test -f original/checkpoint.pt
+          test -f original/source-manifest.json
+          test -f parent/verified-research.pt
+          test -f pointer/verified-pointer.pt
+      - name: Train disjoint two-stage question and event-role learners
+        shell: bash
+        run: |
+          python -m forge_core.neural.role_factorized_v3 \
+            --source original --parent parent --pointer pointer \
+            --out results --max-minutes "$BUDGET_MINUTES" \
+            --steps "$STEPS" --seeds 2
+      - name: Record end and checkpoint footprint
+        if: always()
+        run: |
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/run-end.txt
+          du -sh results || true
+      - name: Upload research-only metrics and local recovery states
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-factorized-role-v3-research
+          path: results/
+          retention-days: 30
+          if-no-files-found: warn
