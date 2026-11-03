@@ -467,3 +467,22 @@ cross-template composition, with a **new independently generated,
 unseen** larger test split, repeated seeds and free-form one-step
 instruction checks. Do not tune on the two small fixed held-out
 sets indefinitely. No weight promotion.
+
+
+## Forge Seed v0.7 — compositional direct-word apprenticeship [pending results]
+
+Earlier direct-answer test reached 9/20 familiar and 6/20 transfer
+cases with verified labels, compared with 4/20 and 3/20 for shuffled
+answers. It was a single-seed pilot with small internally authored
+held-out sets and **not** proof of semantic comprehension.
+
+Next experiment (request preschool-compositional-001.md) starts with
+the original archived scratch-trained Forge Seed and two new
+independent adaptations. It uses 160 → 800 → 3,200 training questions
+across color, giver, recipient, location and count, preserving a
+new 200-question final challenge with different names, objects,
+narratives and question templates. A separate 50-question progress
+set is excluded from the final challenge. Identical public-language
+rehearsal and optimizer budgets are used in verified versus shuffled
+target-word controls. Neither experimental branch may be promoted
+without independent natural-language testing and multiple seeds.

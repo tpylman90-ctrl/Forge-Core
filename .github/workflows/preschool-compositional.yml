@@ -1,0 +1,75 @@
+name: Forge Seed v0.7 — compositional short-answer generalization
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Audited original Forge Seed v0.7 public-data source run"
+        type: string
+        required: true
+        default: "41572257363"
+      seed:
+        description: "Experiment random seed"
+        type: number
+        required: true
+        default: 707
+  push:
+    branches: [main]
+    paths: ["experiments/requests/preschool-compositional-001.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  study:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 65
+    env:
+      SOURCE_RUN: ${{ inputs.source_run_id || '41572257363' }}
+      SEED: ${{ inputs.seed || '707' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install scratch BPE decoder
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Validate bounded research identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$SEED" =~ ^[0-9]+$ ]]
+          (( SEED >= 1 && SEED <= 1000000 ))
+      - name: Download original scratch model and pinned, audited public corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source artifacts/compositional
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir source
+          test -f source/checkpoint.pt
+          test -f source/tokenizer.json
+          test -f source/source-manifest.json
+          test -f source/train.txt
+          test -f source/valid.txt
+      - name: Verified word answers versus class-balanced shuffled control
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.preschool_compositional \
+            --checkpoint-dir source --out artifacts/compositional \
+            --seed "$SEED"
+      - name: Save research-only weights and metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-v07-compositional-qa
+          path: artifacts/compositional/
+          retention-days: 30
+          if-no-files-found: error

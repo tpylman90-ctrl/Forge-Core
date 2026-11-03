@@ -167,3 +167,15 @@ practiced examples but answered only **6/20 unfamiliar questions** correctly
 checkpoint remains archived and unmodified. This is a pilot improvement,
 not preschool-level comprehension. Details:
 [Direct-answer research](docs/PRESCHOOL-DIRECT.md).
+
+
+### New compositional generalization study
+
+The prior direct-word-answer pilot scored 6/20 on unfamiliar short
+questions; its challenge set was too small to judge broad understanding.
+A new controlled study expands training to 3,200 original verified
+questions across five semantic skills, while protecting a **new 200-case
+held-out exam** with different entities and syntactic templates. Gold
+teaching is compared against shuffled-answer teaching from exactly
+the same original scratch model. [Study methods and gating](docs/PRESCHOOL-COMPOSITIONAL.md).
+Candidate weights remain research-only until independently replicated.

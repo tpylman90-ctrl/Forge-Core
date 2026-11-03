@@ -150,3 +150,17 @@ as **verified, implemented but unverified, or proposed**.
 - [ ] Larger independent, novel direct-answer test and multiple training seeds
 - [ ] Broaden colors/quantities/roles/wording with controlled data compositions, preserve language rehearsal
 - [ ] Evaluate authentic single-step instructions and coherence before claiming preschool ability
+
+
+## November 3 — next broad language-generalization cycle
+
+- [x] 3,200-question compositional direct-answer generator (five skills)
+- [x] Separate 50-question progress set and 200-question final challenge
+      with disjoint names, objects and surface-form templates
+- [x] Original-weight versus gold-text and shuffled-text controls, with
+      shared public-language next-token rehearsal
+- [ ] Run CI and 2,500-update-per-arm bounded experiment; inspect
+      held-out per-skill exact answers and any general language regression
+- [ ] If promising, independently replicate on new templates/seeds;
+      evaluate free-form one-step instructions, not only exact short answers
+- [ ] Preserve source checkpoint integrity and refuse automatic promotion
