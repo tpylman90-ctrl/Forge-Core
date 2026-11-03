@@ -22,7 +22,7 @@ on:
   # Only an explicit, reviewed request file may launch an initial draft archive.
   push:
     branches: [main]
-    paths: ["experiments/requests/archive-run003.md"]
+    paths: ["experiments/requests/archive-run005.md"]
 
 permissions:
   contents: write
@@ -34,8 +34,8 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      RUN_ID: ${{ github.event_name == 'push' && '41556317228' || inputs.training_run_id }}
-      RELEASE_TAG: ${{ github.event_name == 'push' && 'forge-seed-run003-v0.5' || inputs.release_tag }}
+      RUN_ID: ${{ github.event_name == 'push' && '41558008416' || inputs.training_run_id }}
+      RELEASE_TAG: ${{ github.event_name == 'push' && 'forge-seed-run005-v0.6' || inputs.release_tag }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4

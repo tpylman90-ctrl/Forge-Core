@@ -43,9 +43,10 @@ held-out documents and reproducible hashes. A passing smoke test is not language
 ## Milestone L2 — Coherent language and dialogue [NEXT]
 
 - [ ] Move beyond preview rows to immutable, complete, licensed training documents
-- [ ] Train a useful Forge Seed with sufficient steps, data, and suitable GPU compute
+- [ ] Train a useful Forge Seed with sufficient steps, diverse immutable documents and suitable compute; Run 005 at 8,000 steps remains fragmentary
 - [ ] Review byte-level tokenizer inefficiency; benchmark subword tokenizer alternatives
-- [ ] Quantify generated text coherence, held-out language behavior and simple QA
+- [x] Added fixed-prompt qualitative comparison tool and CI tests; Run 005 versus Run 004 comparison requested
+- [ ] Human-review generated text coherence, unseen narrative behavior and simple QA; no fluent language claim yet
 - [ ] Add instruction/conversation finetuning after basic language ability is demonstrated
 - [ ] Avoid claiming general reasoning until independently tested
 

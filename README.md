@@ -74,9 +74,12 @@ Run the tiny synthetic control:
 For the expanded 800/200 public TinyStories experiment, see
 [the experiment ledger](docs/EXPERIMENTS.md). Run 004 trained a fresh Forge
 Seed for 4,000 steps, reducing fixed held-out next-byte loss from 5.5463 to
-1.4101. Generated output is still not coherent English. Run 005 is
-a controlled continuation on the exact source-locked text to test whether
-further language training improves rather than merely overfits.
+1.4101. Generated output is still not coherent English. Run 005 completed 8,000 total steps on the exact source-locked corpus,
+reducing held-out loss further to 1.2533. The generated sample now has some
+English-like clauses, but is not coherent enough for conversation.
+
+Five fixed nonpersonal prompt samples compare checkpoints via the
+[language-quality inspection workflow](docs/LANGUAGE-QUALITY-TESTS.md).
 
 For the first bounded real-language experiment, follow
 [the training guide](docs/LANGUAGE-TRAINING-LOOP.md) or manually use the

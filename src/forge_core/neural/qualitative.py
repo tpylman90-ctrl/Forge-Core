@@ -31,13 +31,12 @@ def inspect(checkpoint_path: Path, *, generated_bytes: int = 96,
     # Use only a checkpoint from a trusted Forge training workflow.
     ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     cfg = ModelConfig(**ckpt["config"])
+    model = ByteTransformer(cfg)
+    model.load_state_dict(ckpt["model"])
+    model.eval()
     results = []
-    # Preserve the caller's RNG while constructing the model AND generating
-    # samples. Model initialization itself consumes random numbers.
+    # Preserve the caller's RNG and use a separate fixed seed for each prompt.
     with torch.random.fork_rng():
-        model = ByteTransformer(cfg)
-        model.load_state_dict(ckpt["model"])
-        model.eval()
         for i, prompt in enumerate(PROMPTS):
             prefix = list(prompt.encode("utf-8"))
             if len(prefix) >= cfg.max_seq_len:

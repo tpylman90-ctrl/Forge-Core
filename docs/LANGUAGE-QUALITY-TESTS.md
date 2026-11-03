@@ -19,3 +19,10 @@ generalization to arbitrary English or proper dialogue. Later gates require
 multiple unseen tasks, blind human ratings, factual consistency and coherent
 multi-turn evaluation. It provides an early, repeatable visual signal to
 supplement quantitative loss measurements.
+
+## First controlled evaluation request
+
+The one-time Run 005 comparison checks the step-4,000 and step-8,000
+checkpoints trained on the identical 800/200 source corpus. The side-by-side
+samples remain public research artifacts, with no user memories or other
+private inputs. Human review is required before declaring any language gate.

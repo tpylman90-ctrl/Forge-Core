@@ -147,3 +147,42 @@ statistics, on a substantially larger set of texts. It is still a small
 research language model, not an assistant, and the dataset remains narrow and
 synthetic. Judge further progress by unseen held-out results and readable
 generation, not just training-step count.
+
+
+## Run 005: continued language learning on exact same expanded corpus
+
+- **Date:** 2026-11-02 US Eastern / 2026-11-03 UTC
+- **Workflow:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41558008416
+- **Code commit:** d51cfade7ea7d98462bd917aa5da3138c157a65c
+- **Previous model:** exact Forge Seed Run 004 checkpoint, same optimizer
+  and RNG state; the neural model originated from random initialization.
+- **Corpus:** unchanged, content-locked 800 TinyStories train and 200
+  validation documents, training SHA256 c4f483c4..., validation SHA256
+  263f2b99..., complete manifest 4b59232f...
+- **Training:** 4,000 additional AdamW steps, cumulative step **8,000**,
+  same 1,875,072-parameter model, batch 4, window 128 bytes, seed 42.
+- **Fixed 32-window held-out loss:** **1.410106 → 1.253251** (~11.1% lower).
+- **256-window held-out audit:** **1.281533 → 1.109719**.
+- **Fixed-window bits per byte at step 8000:** **1.808059**.
+- **Validation by global step:** 4000:1.410106; 4400:1.406927;
+  4800:1.365598; 5200:1.344570; 5600:1.322622; 6000:1.287775;
+  6400:1.276165; 6800:1.273620; 7200:1.246898;
+  7600:1.259833 (minor regression); 8000:1.253251.
+- **Measured CPU training time:** 216.19 seconds.
+- **Generated sample:** starts "Once upon a time, there was a vasiling or
+  some as her ways..." with recognizable grammatical scaffolding, but still
+  made-up words and disconnected clauses. **Not fluent or conversational.**
+- **Artifact ID:** \`13196360153\`, about 20.7 MB, includes public
+  training/validation text, optimizer/RNG, manifest, losses and model.
+  Expires on **2026-12-03 UTC** unless archived.
+- **Next:** preserve this promising checkpoint as an unpublished draft
+  Release; compare five generic, fixed-seed prompts with Run 004 before
+  making any decision to add compute or change model architecture.
+
+### Promotion decision
+
+**Engineering progress verified.** The trained model has not met the language
+quality gate. No Android agent, pretrained teacher, user memory, subjective
+personality or autonomy has been added to these training weights. Keep the
+model distinct from the historical draft Run 003 and preserve both reference
+checkpoints for reproducibility.
