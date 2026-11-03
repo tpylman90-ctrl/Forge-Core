@@ -33,7 +33,7 @@ on:
   # One intentionally requested longer-run experiment; no automatic schedule.
   push:
     branches: [main]
-    paths: ["experiments/requests/seed-run004.md"]
+    paths: ["experiments/requests/seed-run005.md"]
 
 permissions:
   contents: read
@@ -47,7 +47,7 @@ jobs:
       DATASET: ${{ inputs.dataset || 'tinystories' }}
       MODEL_SIZE: ${{ inputs.model_size || 'seed' }}
       STEPS: ${{ github.event_name == 'push' && '4000' || inputs.steps || '1000' }}
-      RESUME_RUN_ID: ${{ inputs.resume_run_id || '' }}
+      RESUME_RUN_ID: ${{ github.event_name == 'push' && '41557239198' || inputs.resume_run_id || '' }}
       RUN_PROFILE: ${{ github.event_name == 'push' && 'extended800' || inputs.corpus_profile || 'locked200' }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -93,10 +93,15 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$DATASET" == tinystories && "$RUN_PROFILE" == locked200 ]]; then
+          if [[ "$DATASET" == tinystories ]]; then
+            if [[ "$RUN_PROFILE" == locked200 ]]; then
+              CORPUS_LOCK=data/locks/tinystories-preview-200-50-v0.4.json
+            else
+              CORPUS_LOCK=data/locks/tinystories-preview-800-200-v0.6.json
+            fi
             python -m forge_core.neural.lock \
               --manifest data/experiment/manifest.json \
-              --lock data/locks/tinystories-preview-200-50-v0.4.json
+              --lock "$CORPUS_LOCK"
           fi
       - name: Download prior approved experiment checkpoint
         if: ${{ env.RESUME_RUN_ID != '' }}
@@ -131,7 +136,7 @@ jobs:
           cp data/experiment/train.txt artifacts/train.txt
           cp data/experiment/valid.txt artifacts/valid.txt
           if [[ "$DATASET" == tinystories ]]; then
-            printf '%s\n' 'Public TinyStories preview: roneneldan/TinyStories (CDLA-Sharing-1.0)' 'https://huggingface.co/datasets/roneneldan/TinyStories' 'Locked200 is SHA256-pinned; extended800 captures a new dataset manifest and must be locked before any continuation. This is not a full immutable upstream snapshot.' > artifacts/SOURCE-NOTICE.txt
+            printf '%s\n' 'Public TinyStories preview: roneneldan/TinyStories (CDLA-Sharing-1.0)' 'https://huggingface.co/datasets/roneneldan/TinyStories' 'Both viewer profiles have exact SHA256 content locks. This is not a full immutable upstream dataset snapshot.' > artifacts/SOURCE-NOTICE.txt
           else
             printf '%s\n' 'Forge Core original synthetic CI test fixtures; not a real language corpus.' > artifacts/SOURCE-NOTICE.txt
           fi

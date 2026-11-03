@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "name": "tinystories-preview-800-200-v0.6",
+  "dataset": "roneneldan/TinyStories",
+  "license": "cdla-sharing-1.0",
+  "source_revision_status": "unverified live viewer; exact input content SHA256 pinned to Run 004",
+  "train_rows": 800,
+  "valid_rows": 200,
+  "train_sha256": "c4f483c478000d994b86ac0f934b097856062e4e9b8a995b8e742717ba16a32c",
+  "valid_sha256": "263f2b99da67ee1870327e8e48a11b243f52db96acd7d8f1ae02ed8c5fb100e9",
+  "manifest_sha256": "4b59232f5ae7d92b6002109340e0a11df405e58f6b7fb8ef2e872c336e02a563",
+  "original_workflow_run": 41557239198
+}

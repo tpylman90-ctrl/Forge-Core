@@ -35,8 +35,8 @@ held-out documents and reproducible hashes. A passing smoke test is not language
       prior-checkpoint resume and explicit source/hash checks
 - [x] **Verified:** first TinyStories preview run; 1,875,072 params, 20 steps, held-out loss 5.5328 → 3.5817; see experiment ledger
 - [x] Verified improvement from step 20 to 1020 on the same content-locked held-out corpus (Run 003); wider audit independently improved
-- [ ] Compare a scratch run to a matched random-weight baseline and record text samples
-- [ ] Verify a draft GitHub Release checkpoint archive before artifact expiry (manual review/promotion remains required)
+- [x] Verified expanded-corpus scratch initialization versus matched zero-step random-weight baseline (Run 004); text samples remain fragmentary
+- [x] Verified Run 003 draft archive `forge-seed-run003-v0.5` after integrity audit; remains unpublished
 
 **Gate:** genuine public-text learning evidence; not just memorizing a tiny demo.
 

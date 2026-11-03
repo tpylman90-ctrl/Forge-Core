@@ -71,6 +71,13 @@ Run the tiny synthetic control:
       --valid data/control/valid.txt --manifest data/control/manifest.json \
       --model-size tiny --steps 5 --out artifacts/control.pt
 
+For the expanded 800/200 public TinyStories experiment, see
+[the experiment ledger](docs/EXPERIMENTS.md). Run 004 trained a fresh Forge
+Seed for 4,000 steps, reducing fixed held-out next-byte loss from 5.5463 to
+1.4101. Generated output is still not coherent English. Run 005 is
+a controlled continuation on the exact source-locked text to test whether
+further language training improves rather than merely overfits.
+
 For the first bounded real-language experiment, follow
 [the training guide](docs/LANGUAGE-TRAINING-LOOP.md) or manually use the
 "Forge Scratch Language Experiment" GitHub Actions workflow.

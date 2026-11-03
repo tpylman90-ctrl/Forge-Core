@@ -104,3 +104,46 @@ be inaccurate to describe Forge Seed as understanding language, following
 instructions or reasoning. The next research gate is more *diverse*,
 immutable, properly licensed text and independent sample-quality benchmarks,
 not adding Android features.
+
+
+## Run 004: expanded TinyStories corpus, new scratch-initialized Forge Seed
+
+- **Date:** 2026-11-02 US Eastern / 2026-11-03 UTC
+- **Workflow and logs:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41557239198
+- **Commit:** 60c2a98be062b44228d3ab0954f64b2c3306cfde
+- **Starting weights:** RANDOMLY INITIALIZED (not Run 003, not pretrained).
+- **Model:** original 1,875,072-parameter byte-token Transformer.
+- **Public data:** 800 TinyStories train documents (709,378 UTF-8 bytes)
+  and 200 separate validation documents (154,880 UTF-8 bytes).
+  The source remains a live dataset-viewer preview, not immutable upstream.
+  The exact bytes/manifest from Run 004 are now checked into the next run's
+  **content lock**, not the public repository training text.
+- **Training:** 4,000 AdamW steps on CPU, batch size 4, sequence length 128,
+  learning rate 0.0003, seed 42; 2,048,000 target bytes processed.
+- **Fixed 32-window held-out cross-entropy:** **5.546279 → 1.410106**.
+- **Expanded 256-window held-out audit:** **5.539601 → 1.281533**.
+- **Fixed-window bits per byte:** 2.034353.
+- **Measured training stage wall time:** 216 seconds.
+- **Loss by step:** 0=5.546279; 400=2.294955; 800=2.108493;
+  1200=1.910141; 1600=1.780169; 2000=1.674432; 2400=1.588722;
+  2800=1.545458; 3200=1.492737; 3600=1.461816; 4000=1.410106.
+- **Fixed-seed generated text:** starts "Once upon a time who pull to
+  safs. He worls man she who world..." with common words and fragmentary
+  structure, but still **not coherent English**. A 1.0 printable fraction is
+  NOT fluency, reasoning or comprehension.
+- **Saved temporary artifact:** ID \`13194264682\`, with model weights,
+  optimizer/RNG, full bounded public split, manifest and metrics;
+  expires **2026-12-03 UTC**.
+- **CI:** https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41557239190
+  passed.
+- **Next experiment:** Run 005 resumes this exact checkpoint with unchanged
+  data/settings for 4,000 additional steps. Its expanded-corpus SHA lock
+  fails closed on an upstream content change.
+
+### Assessment
+
+Forge Seed is showing substantial measured progress on byte-level language
+statistics, on a substantially larger set of texts. It is still a small
+research language model, not an assistant, and the dataset remains narrow and
+synthetic. Judge further progress by unseen held-out results and readable
+generation, not just training-step count.
