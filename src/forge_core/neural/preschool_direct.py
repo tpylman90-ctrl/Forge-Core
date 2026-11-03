@@ -41,33 +41,47 @@ class DirectExample:
 
 
 def direct_examples(choices: list[Task]) -> list[DirectExample]:
-    """Converts correctly labeled multiple-choice fixtures to direct answers.
+    """Convert adjacent A/B mirrors into one verified natural answer.
 
-    Every pair of mirrored A/B options describes the SAME fact, so retain
-    only the first mirror. No gold answer is inferred from model output.
+    The two official generators use different mirror ID conventions.
+    Validate content instead of assuming any particular ID spelling.
+    A mirrored pair is one independent underlying question.
     """
-    results = []
-    for task in choices:
-        if task.id.endswith(":mirror1"):
-            continue
-        if "\nA) " not in task.prompt or "\nB) " not in task.prompt:
-            raise ValueError("Missing options in verified question")
-        prefix, remainder = task.prompt.split("\nA) ", 1)
-        if "\nAnswer:" not in remainder:
-            raise ValueError("Missing answer marker")
-        opt_a, remainder = remainder.split("\nB) ", 1)
-        opt_b = remainder.rsplit("\nAnswer:", 1)[0]
-        right = opt_a if task.answer == "A" else opt_b
-        if right not in (opt_a, opt_b) or opt_a == opt_b or not right.strip():
-            raise ValueError("Corrupt verified answer")
-        results.append(DirectExample(task.id[:-8], task.skill,
-                                     prefix + "\nAnswer:", right))
-    if len(results) * 2 != len(choices):
+    if not choices or len(choices) % 2:
         raise ValueError("Expected complete mirrored source pairs")
-    if len({x.id for x in results}) != len(results):
-        raise ValueError("Duplicate direct teaching cases")
-    return results
+    results = []
+    for index in range(0, len(choices), 2):
+        first, second = choices[index:index + 2]
+        if first.skill != second.skill or first.answer != "A" or second.answer != "B":
+            raise ValueError("Corrupt or out-of-order mirrored answer pairs")
 
+        def parse(task: Task):
+            if "\nA) " not in task.prompt or "\nB) " not in task.prompt:
+                raise ValueError("Missing options in verified question")
+            prefix, remainder = task.prompt.split("\nA) ", 1)
+            if "\nAnswer:" not in remainder:
+                raise ValueError("Missing answer marker")
+            opt_a, remainder = remainder.split("\nB) ", 1)
+            opt_b = remainder.rsplit("\nAnswer:", 1)[0]
+            if not opt_a.strip() or not opt_b.strip() or opt_a == opt_b:
+                raise ValueError("Invalid verified answer options")
+            return prefix, opt_a, opt_b
+
+        prefix, a, b = parse(first)
+        other_prefix, mirrored_a, mirrored_b = parse(second)
+        if prefix != other_prefix or a != mirrored_b or b != mirrored_a:
+            raise ValueError("Mirrors do not preserve the same underlying fact")
+        # Both mirror labels are checked and derive the identical gold word.
+        if (a if first.answer == "A" else b) != (
+            mirrored_a if second.answer == "A" else mirrored_b):
+            raise ValueError("Contradictory gold source labels")
+        results.append(DirectExample(
+            f"direct:{index // 2:04d}", first.skill,
+            prefix + "\nAnswer:", a))
+
+    if len({x.id for x in results}) != len(results):
+        raise ValueError("Duplicate direct teaching IDs")
+    return results
 
 def shuffle_answers(rows: list[DirectExample], seed: int) -> list[DirectExample]:
     rng = random.Random(seed)

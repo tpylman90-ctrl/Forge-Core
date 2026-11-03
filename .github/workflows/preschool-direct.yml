@@ -10,7 +10,7 @@ on:
         default: "41572257363"
   push:
     branches: [main]
-    paths: ["experiments/requests/preschool-direct-001.md"]
+    paths: ["experiments/requests/preschool-direct-002.md"]
 
 permissions:
   contents: read

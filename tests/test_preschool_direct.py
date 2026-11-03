@@ -49,7 +49,10 @@ class TestDirectAnswers(unittest.TestCase):
         self.assertEqual(normalize_answer("  BLUE.  "), "blue")
         self.assertEqual(normalize_answer(" Ada.\nMore text"), "ada")
         with self.assertRaisesRegex(ValueError, "Missing options"):
-            direct_examples([Task("x:mirror0", "color", "not a prompt", "A")])
+            direct_examples([
+                Task("x:mirror0", "color", "not a prompt", "A"),
+                Task("x:mirror1", "color", "not a prompt", "B"),
+            ])
 
 
 if __name__ == "__main__":
