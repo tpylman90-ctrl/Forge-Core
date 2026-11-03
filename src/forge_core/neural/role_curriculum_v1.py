@@ -120,28 +120,41 @@ def make_rows(split: str) -> list[RoleRow]:
     if split not in SOURCES:
         raise ValueError("Unknown curriculum split")
     output: list[RoleRow] = []
+    seen_prompts: set[str] = set()
     for seed in SEEDS[split]:
         rng = random.Random(seed)
         for name, format_text, _ in SOURCES[split]:
             for trial in range(TRIALS[split]):
-                left, right = rng.sample(NAMES[split], 2)
-                obj = rng.choice(OBJECTS[split])
-                for swap in (0, 1):
-                    giver, recipient = ((left, right) if swap == 0
-                                        else (right, left))
-                    story = format_text.format(giver=giver,
-                                               recipient=recipient, obj=obj)
-                    for role in ("giver", "recipient"):
-                        variants = QUESTION_VARIANTS[split][role]
-                        question = variants[(trial + swap) % len(variants)].format(obj=obj)
-                        prompt = f"Story: {story}\nQuestion: {question}\nAnswer:"
-                        output.append(RoleRow(
-                            id=f"{split}:{seed}:{name}:{trial}:{swap}:{role}",
-                            split=split, template=name, story=story,
-                            prompt=prompt, answer=giver if role == "giver" else recipient,
-                            role=role, giver=giver, recipient=recipient,
-                            object_name=obj, seed=seed, trial=trial, swap=swap,
-                        ))
+                # Reject overlapping *source questions*, not just duplicated IDs.
+                # Resampling keeps session/seed identifiers OUT of model inputs
+                # and preserves paired questions and counterfactual swaps.
+                for attempt in range(128):
+                    left, right = rng.sample(NAMES[split], 2)
+                    obj = rng.choice(OBJECTS[split])
+                    proposed: list[RoleRow] = []
+                    for swap in (0, 1):
+                        giver, recipient = ((left, right) if swap == 0
+                                            else (right, left))
+                        story = format_text.format(giver=giver,
+                                                   recipient=recipient, obj=obj)
+                        for role in ("giver", "recipient"):
+                            variants = QUESTION_VARIANTS[split][role]
+                            question = variants[(trial + swap) % len(variants)].format(obj=obj)
+                            prompt = f"Story: {story}\\nQuestion: {question}\\nAnswer:"
+                            proposed.append(RoleRow(
+                                id=f"{split}:{seed}:{name}:{trial}:{swap}:{role}",
+                                split=split, template=name, story=story,
+                                prompt=prompt, answer=giver if role == "giver" else recipient,
+                                role=role, giver=giver, recipient=recipient,
+                                object_name=obj, seed=seed, trial=trial, swap=swap,
+                            ))
+                    phrases = [r.prompt for r in proposed]
+                    if len(set(phrases)) == len(phrases) and not (set(phrases) & seen_prompts):
+                        output.extend(proposed)
+                        seen_prompts.update(phrases)
+                        break
+                else:
+                    raise ValueError("Unable to generate unique paired role questions")
     verify_rows(output)
     return output
 
