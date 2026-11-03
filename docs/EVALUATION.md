@@ -12,6 +12,25 @@
 5. No personal memories, observation logs, secrets or private user data in Git,
    CI logs, public datasets or weights without an additional explicit opt-in.
 
+## Structural-language "why" test track (prototype)
+
+- Diagnostic labels must distinguish **grammaticality** from **semantic
+  roles** and **event polarity**. Two sentences may be grammatical yet
+  express different events.
+- Gold answers come from reviewed fixtures or verified annotations, never
+  the candidate model's speculative explanations.
+- The current generated lexical split alone is **not** an independent
+  generalization result. Add out-of-distribution verbs/constructions,
+  independently sourced examples and human review before making claims.
+- Compare a text-only control to an auxiliary-task intervention at
+  equivalent training compute and multiple seeds. Record structured-label
+  accuracy, language-model perplexity and readable-generation regressions.
+- A language model's "because" statement is a **testable assertion**, not
+  a transparent account of hidden neural causes.
+
+See [Master Blueprint](MASTER-BLUEPRINT.md) and
+[Linguistic Why Lab](LINGUISTIC-WHY-LAB.md).
+
 ## Measurements for **every** language experiment
 
 - Code SHA, data source/revision/rights, accepted/rejected source documents,

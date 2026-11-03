@@ -7,6 +7,16 @@ randomly initialized weights. This—not Android app-switch observation—is the
 current engineering priority. The pretrained teacher remains an **optional
 separate tool**, never the source of Forge Seed's parameters.
 
+## Complementary linguistic Why research
+
+We are building a **separate, deterministic** contrastive-language probe
+generator now. See [Linguistic Why Lab](LINGUISTIC-WHY-LAB.md).
+No probe data is currently being inserted into scratch-model training.
+An auxiliary objective will only be introduced in a fair baseline-versus-
+intervention experiment on pinned, approved data, with held-out structural
+and natural-language benchmarks. Personal inquiry remains independent,
+consent-based and stored locally.
+
 ## Sequence of operations (do not skip gates)
 
 1. **Provenance:** choose properly licensed public language text. Record the

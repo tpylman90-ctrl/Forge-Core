@@ -2,6 +2,21 @@
 
 **Implementation priority:** original-language training and evaluation first. The Android observer is preserved but paused until the language quality gates in [the active roadmap](ROADMAP.md) are met. The following describes the long-term architecture, not completed intelligence.
 
+## Two intentionally separate inquiry systems
+
+- **Linguistic Why Lab** (prototype now): controlled, gold-labeled minimal
+  sentence pairs for understanding agreement, actor/patient roles and
+  negation. The current fixtures only support test-data generation and
+  evaluation; they do not currently alter Forge Seed's learned weights.
+- **Personal Why** (later): user-consented observation or volunteered
+  experience → specific question → user-confirmed principle → private
+  encrypted memory → future application and correction. It cannot infer a
+  person's true motivation from app usage alone.
+
+Reasoning must also maintain a distinction between *evidence* and
+*post-hoc explanation* of a model answer. The architecture and
+experimental gates are in [Master Blueprint](MASTER-BLUEPRINT.md).
+
 ## Separation of concerns
 
 - **Neural core:** Original causal Transformer initialized with random weights; trains on approved public or user-provided non-sensitive corpora.

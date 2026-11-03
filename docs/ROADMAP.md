@@ -1,4 +1,11 @@
-# Forge Core — Language-first roadmap (v0.4)
+# Forge Core — Language-first roadmap (v1.0; aligned to the Master Blueprint)
+
+## Canonical blueprint
+
+[Master Blueprint v1.0](MASTER-BLUEPRINT.md) defines the complete system,
+the two different meanings of "why", trial design, compute restrictions and
+long-term priorities. The initial [Linguistic Why Lab](LINGUISTIC-WHY-LAB.md)
+is a separate diagnostic research fixture and **does not modify Forge Seed**.
 
 ## Governing rule
 
@@ -39,6 +46,18 @@ held-out documents and reproducible hashes. A passing smoke test is not language
 - [x] Verified Run 003 draft archive `forge-seed-run003-v0.5` after integrity audit; remains unpublished
 
 **Gate:** genuine public-text learning evidence; not just memorizing a tiny demo.
+
+## Linguistic Why mini-gate [prototype now; train only after controlled baseline]
+
+- [x] Original rule-labeled minimal pairs for role reversal, agreement and
+  negation; separate hidden-gold eval export; disjoint subject vocabularies
+- [x] Deterministic tests reject overlapping actor vocabularies and verify
+  labels and public-question separation
+- [ ] Add template-, verb- and corpus-disjoint external evaluation
+- [ ] Implement a matched-compute control/intervention comparison AFTER
+  the next immutable licensed text baseline
+- [ ] Adopt auxiliary tasks only if structural transfer improves without
+  degrading general language or creating unacceptable artifacts
 
 ## Milestone L2 — Coherent language and dialogue [NEXT]
 

@@ -13,10 +13,25 @@ personality that learns how and *why* its user makes decisions. It may propose
 ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
+## Master development direction
+
+[**Forge Core Master Blueprint v1.0**](docs/MASTER-BLUEPRINT.md) governs
+the research order. It distinguishes the **linguistic why** research loop
+(verified language-structure comparisons, prototype now) from the later
+**personal why** conversation/memory loop (explicit consent and confirmation).
+The first [Linguistic Why Lab](docs/LINGUISTIC-WHY-LAB.md) ships only
+deterministic gold-labeled probes and tests; it does not train or change model
+weights. All additional learning objectives must beat controlled baselines
+before adoption. The user remains final authority on charter changes.
+
 ## Development order
 
-**L0 provenance → L1 real-text pretraining → L2 language and dialogue quality →
-L3 independent identity → L4 personal understanding and memory → L5 Android.**
+**L0 provenance → L1 real-text pretraining + linguistic probe design →
+L2 tested linguistic supervision and coherent dialogue → L3 distinct identity →
+L4 personal understanding/private memory → L5 user-approved actions and mobile.**
+
+Designing the later layers can proceed early, but deploying them depends on
+demonstrated language, privacy and authorization gates.
 
 See [language-first roadmap](docs/ROADMAP.md) and the
 [training pipeline](docs/LANGUAGE-TRAINING-LOOP.md).
