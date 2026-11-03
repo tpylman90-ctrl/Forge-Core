@@ -49,7 +49,7 @@ class TestRoleBindingDiagnostic(unittest.TestCase):
             verify_cases([replace(row, prompt=row.prompt.replace("Story:", "Prompt:"))])
         with self.assertRaisesRegex(ValueError, "Role query"):
             verify_cases([replace(row, prompt=row.prompt.replace("Who gave", "Who received"))])
-        with self.assertRaisesRegex(ValueError, "Duplicate"):
+        with self.assertRaisesRegex(ValueError, "duplicate"):
             verify_cases([row, row])
 
     def test_pair_metrics_cannot_be_faked_by_constant_copy(self):
