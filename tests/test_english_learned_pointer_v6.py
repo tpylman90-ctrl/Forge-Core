@@ -56,6 +56,7 @@ class DataIntegrityTests(unittest.TestCase):
                                     p.twin[p.changed_index])
                 if split != "words":
                     self.assertEqual(sequence_bucket(p.original),split)
+                    self.assertEqual(sequence_bucket(p.twin),split)
                 if split == "long":
                     self.assertTrue(9 <= len(p.original) <= 12)
                 elif split != "words":
@@ -63,6 +64,33 @@ class DataIntegrityTests(unittest.TestCase):
         self.assertEqual(self.exam,generate_pairs("exam",28,12347))
         self.assertEqual(len(self.real),36)
         self.assertEqual(len(set(p.original for p in self.real)),36)
+
+    def test_exact_production_count_has_no_train_dev_or_exam_twin_leakage(self):
+        # Regression for initial v6 pilot's valid fail-closed barrier:
+        # one train *twin* previously appeared as a dev base.
+        development=generate_pairs("dev",80,10219)
+        exam=generate_pairs("exam",128,12347)
+        long=generate_pairs("long",72,17193)
+        curated=word_pairs()
+        for seed in (13631,13632):
+            training=generate_pairs("train",512,seed)
+            assert_firewall(training,development,exam,long,curated)
+        # A valid-looking one-change twin from ANOTHER hash bucket is
+        # now rejected by the independent source-pair validator.
+        pair=self.train[0]
+        variant=None
+        for character in ALPHABET:
+            if character == pair.original[pair.changed_index]:
+                continue
+            candidate=(pair.original[:pair.changed_index]+character+
+                       pair.original[pair.changed_index+1:])
+            if sequence_bucket(candidate)!=pair.split:
+                variant=Pair(pair.original,candidate,
+                             pair.changed_index,pair.split)
+                break
+        self.assertIsNotNone(variant)
+        with self.assertRaisesRegex(ValueError,"split firewall"):
+            validate_pairs([variant])
 
     def test_uniform_random_characters_not_old_alternating_vowels(self):
         # The previous v4 result suffered a systematic vowel at index 2.
