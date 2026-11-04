@@ -435,12 +435,19 @@ def experiment(*, source: Path, out: Path, updates: int = 800,
     regular=generate_pairs("exam",128,12347)
     longer=generate_pairs("long",72,17193)
     natural=word_pairs()
+    # Preflight ALL scheduled training seeds and all test splits before
+    # the first optimizer step. A late split collision must never waste
+    # a full seed's CPU training or contaminate its checkpoint.
+    source_by_seed={
+        seed:generate_pairs("train",512,seed) for seed in seeds
+    }
+    for training_set in source_by_seed.values():
+        assert_firewall(training_set,dev,regular,longer,natural)
     out.mkdir(parents=True,exist_ok=True)
     started=time.monotonic()
     frozen_results=[]
     for seed in seeds:
-        train=generate_pairs("train",512,seed)
-        assert_firewall(train,dev,regular,longer,natural)
+        train=source_by_seed[seed]
         shuffle=corrupted_map(train,seed+311)
         batches=training_batches(train,updates,seed=seed+811)
         row={"seed":seed,"arms":{}}
