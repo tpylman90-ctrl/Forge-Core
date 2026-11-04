@@ -232,7 +232,8 @@ def make_lessons(split: str, *, per_skill: int, seed: int) -> list[Lesson]:
                     source = (f"verb={rng.choice(lex['verbs'])};context="
                               f"{rng.choice(lex['people'])}")
                 elif skill == "past_verb":
-                    source = f"verb={rng.choice(lex['verbs'])}"
+                    source = (f"verb={rng.choice(lex['verbs'])};context="
+                              f"{rng.choice(lex['people'])}")
                 elif skill in ("write_sentence", "negate_sentence"):
                     source = (f"sentence={rng.choice(lex['people'])}|"
                               f"{rng.choice(lex['verbs'])}|{rng.choice(lex['nouns'])}")
