@@ -83,7 +83,10 @@ def random_pair(rng: random.Random, minimum: int, maximum: int,
         options = [x for x in ALPHABET if x != word[index]]
         different = rng.choice(options)
         twin = word[:index] + different + word[index+1:]
-        if sequence_bucket(word) == split:
+        # Both members of a changed-letter pair MUST map to the SAME
+        # partition. Partitioning only the base previously allowed a
+        # dev source string to reappear as a train twin.
+        if sequence_bucket(word) == split and sequence_bucket(twin) == split:
             return Pair(word, twin, index, split)
     raise ValueError("Failed to generate random source pair")
 
@@ -144,8 +147,10 @@ def validate_pairs(pairs: list[Pair]) -> None:
             raise ValueError("Incorrect exact-one-change source pair")
         if pair.split not in ("train", "dev", "exam", "long", "words"):
             raise ValueError("Unrecognized evaluation split")
-        if pair.split not in ("words",) and sequence_bucket(a) != pair.split:
-            raise ValueError("Hash-partitioned source in wrong split")
+        if pair.split != "words" and (
+                sequence_bucket(a) != pair.split
+                or sequence_bucket(b) != pair.split):
+            raise ValueError("Base or changed-letter twin crossed split firewall")
         if a in seen or b in seen:
             raise ValueError("Repeated source or twin")
         seen.update((a,b))
