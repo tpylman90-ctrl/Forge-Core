@@ -311,3 +311,40 @@ as **verified, implemented but unverified, or proposed**.
       benchmark gains and language retention gates pass
 
 [Detailed verifier learning results](RLVR-PROCESS-RESULTS.md).
+
+## Nov 3 — Verifiable rejection and step-balanced proof learning
+
+- [x] Original scratch-started RLVR policy supports **REJECT BOTH**
+      when neither candidate is a valid formal reasoning step
+- [x] Independently verify 0-or-1 valid candidates in both arithmetic
+      and finite propositional logic, with balanced VV/VN/NV/NN offers
+- [x] Test against exact-verifier **240/240** reference and
+      always-reject **120/240** baseline, across two independent seeds
+- [x] GitHub v3 run **41747102937**, artifact **13283828294**:
+      all learned policies collapsed to **always reject**; 0/60
+      feasible proofs per seed — NO PROMOTION
+- [x] Identify class imbalance: 75% raw validity accuracy equals
+      the **always-invalid** majority-class baseline
+- [x] Build v4 offline process-learning curriculum exposing both
+      steps through formally verified canonical prefixes
+- [x] Compare 3:1 positive-balanced candidate BCE, unweighted BCE
+      and supervised three-action CE; development-only thresholds
+- [x] GitHub v4 run **41747933263**, artifact **13284074002**:
+      no arm consistently exceeds 50% shifted balanced validity
+      accuracy; some coverage gains produced unsafe invalid accepts
+- [x] Publish permanent [v3 results](RLVR-ABSTENTION-V3-RESULTS.md)
+      and [v4 results](RLVR-STEP-VERIFIER-V4-RESULTS.md) before
+      temporary artifact expiration
+- [ ] Prototype a **constrained proof-action proposal model** that
+      generates candidate formal operations/states rather than only
+      choosing between two externally provided proposals
+- [ ] Measure verified *constructed* proofs, oracle calls,
+      false acceptances, and abstention on new operation families
+- [ ] Keep symbolic proof-checking authoritative and independent
+      of any neural process model or natural-language explanation
+- [ ] Only later connect to the random-initialized Forge language
+      network, after separate transfer and retention gates
+
+**Decision:** no promotion and no further 36-minute repeats of the
+same failed candidate-ranking architecture. The engineering
+infrastructure is validated; genuine neural proof reasoning is not.
