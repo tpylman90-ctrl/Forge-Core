@@ -282,3 +282,32 @@ as **verified, implemented but unverified, or proposed**.
       artifacts, with no personal memory in public repositories
 
 [Detailed v3 research results](ROLE-FACTORIZED-V3-RESULTS.md).
+
+## Nov 3 — RLVR and formal process-verifier research
+
+- [x] Implement pure arithmetic and six-proposition implication
+      verifiers for explicit two-step candidate-state proof traces
+- [x] Implement genuine on-policy grouped-baseline REINFORCE
+      from randomly initialized weights, with outcome-only, process
+      reward, and process-supervised branches
+- [x] Include independent formal oracle step-check labels and
+      learned process-validity head, with actor-step CE distillation
+- [x] Verify correct-final-with-invalid-steps **fails** full-proof metric,
+      test controlled CPU budgets, no arbitrary code execution
+- [x] Pass full Python CI and GitHub research runs **41744993637**
+      and **41745560943**; record durable report
+- [x] Observe negative transfer: process-supervised **45/200**
+      full proofs vs final-only RLVR **51/200** after 120 updates;
+      process validity classification **443/800**
+- [x] Refuse checkpoint promotion, leave original neural language
+      model weights and private memory unchanged
+- [ ] Audit in-distribution versus arithmetic-range and
+      symbolic-premise shifts using NEW held-out samples
+- [ ] Test independent confidence calibration and verifier
+      abstention when neither proposed step is legal
+- [ ] Separate the learned step-checker from symbolic oracle
+      and evaluate adversarial/counterfactual proof chains
+- [ ] Consider text-to-symbolic proof interface only after
+      benchmark gains and language retention gates pass
+
+[Detailed verifier learning results](RLVR-PROCESS-RESULTS.md).
