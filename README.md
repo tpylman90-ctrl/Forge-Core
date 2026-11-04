@@ -14,7 +14,35 @@ ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
 
-## New experimental track: verifiable reasoning (RLVR)
+## Latest RLVR result — safe refusal is not proof construction
+
+Two additional bounded RLVR-related studies (v3 and v4) tested whether
+Forge could **reject both offered reasoning steps** when neither was
+formally valid. Both Python CI and GitHub CPU workflows passed.
+
+The v3 neural policies all collapsed to **always reject** across two
+independent seeds: **120/240** correctly resolved episodes per seed,
+but **0/60** valid complete proofs. The exact reference verifier scored
+**240/240**, while the always-reject baseline also scored **120/240**.
+
+The v4 correction trained on both canonical proof steps and compared
+unweighted candidate validity, positive-balanced validity and a direct
+three-action head. On larger-number and altered-premise test problems,
+**none consistently beat the always-invalid 50% balanced-accuracy
+reference**, and safer policies still rejected nearly everything.
+A few completed proofs came with many incorrectly accepted states.
+
+**No experimental policy was promoted** and original scratch-trained
+Forge Seed weights are unchanged. Further long runs on this
+candidate-ranking setup are not justified. The next proposal is an
+independently verifiable *proof-action generator*: propose an operation
+or formal step and reject incorrect proposals with the exact oracle.
+
+[Verified v3 measurements](docs/RLVR-ABSTENTION-V3-RESULTS.md) ·
+[Verified v4 measurements](docs/RLVR-STEP-VERIFIER-V4-RESULTS.md) ·
+[Design of the corrected verifier study](docs/RLVR-STEP-VERIFIER-V4.md)
+
+## Earlier experimental track: verifiable reasoning (RLVR)
 
 Forge now has a **standalone, scratch-started RLVR research policy**
 for small two-step arithmetic and propositional proofs. It generates
