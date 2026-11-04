@@ -1,4 +1,12 @@
-# Forge Core Android v0.3 — Communication Shell
+# Forge Core Android v0.3.1 — Communication Shell & Release Signing
+
+> **Android release signing:** Version 0.3.1 (code 4) adds a permanent
+> signing workflow using four GitHub Actions repository secrets.
+> See [Release signing and upgrade instructions](docs/RELEASE-SIGNING.md).
+> The release APK is produced only after the secrets are configured;
+> previously signed debug APKs may not update in place, and uninstalling
+> erases local encrypted data.
+
 
 The launcher opens a new five-tab interface: **Chat, History, Memory, Settings,
 Diagnostics**. Chat is an **encrypted offline note journal**, not yet an
