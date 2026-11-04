@@ -1,0 +1,77 @@
+name: Forge Seed — v5 independent word-source audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-v5-word-challenge-001.md"
+
+# Serialize after the main v5 training artifact has completed.
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  new-word-source-transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 28
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install source-compatible CPU-only inference dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Verify independent original-word and twin nonword challenge
+        run: |
+          python -m unittest discover -s tests -p test_english_v5_word_challenge.py -v
+      - name: Read exact original Forge and completed v5 research-only weights
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source trained results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir source
+          gh run download 41886375209 --repo "$GITHUB_REPOSITORY" \
+            --name forge-english-unbiased-counterfactual-v5-research --dir trained
+          test -f source/checkpoint.pt
+          test -f source/tokenizer.json
+          test -f source/source-manifest.json
+          test -f trained/english-unbiased-copy-v5.json
+          test -f trained/seed-11631-paired_verified-research.pt
+          test -f trained/seed-11632-source_masked-research.pt
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-utc.txt
+      - name: Recheck source lineage and evaluate independent word/nonword sources only
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_v5_word_challenge \
+            --source source --trained trained --out results
+      - name: Record final timestamp
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-utc.txt
+      - name: Publish lightweight read-only transfer metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-english-v5-independent-word-source-audit
+          path: results/
+          retention-days: 30
+          if-no-files-found: warn
