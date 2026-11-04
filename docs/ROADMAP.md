@@ -247,3 +247,38 @@ as **verified, implemented but unverified, or proposed**.
       new syntax sources and language-retention benchmarks before promotion
 
 [Detailed independent research report](ROLE-CONDITIONED-RESULTS.md).
+
+## Nov 3 — completed 36-minute contrastive study and factorized v3 pilot
+
+- [x] Verified single CPU 36-minute run **41728138301**, artifact
+      **13278198241**, original Forge language backbone frozen
+- [x] Three independently initialized control sets; **84,221** rounds
+      per arm over **35m 58s** at ~39.1 rounds/s
+- [x] Reported **95/540 (17.6%)** both-correct pairs for contrastive,
+      **81/540 (15.0%)** cross-entropy, **63/540 (11.7%)** shuffled,
+      **0/540** question ablation; *no promotion*
+- [x] Preserved [verified long-run report](ROLE-CONTRAST-V2-RESULTS.md)
+      before expiring GitHub artifacts
+- [x] Implemented original-weight-frozen two-stage question-intent and
+      event-giver classifier, with controlled synthetic augmentation
+- [x] Full CI and two-seed v3 research run **41743517853** passed;
+      research artifact **13281429407**
+- [x] Verified story giver labels at **204/288** and **246/288**,
+      but question-intent labels only **194/288** and **146/288**
+      across different initializations
+- [x] Paired v3 factorized **43/288**, wrong-story control **47/288**,
+      monolithic comparator **56/288** — **no checkpoint promotion**
+- [ ] Build a question-only, balanced paraphrase benchmark with
+      **independently authored** sentences and held-out language families
+- [ ] Study question-intent accuracy and negative examples where no
+      giver/recipient inference is possible
+- [ ] Compare contrastive question supervision to a plain classifier
+      with matched updates and independent seeds, sealed new exam
+- [ ] Attach a question encoder to the story-role head only after
+      evidence of question transfer across unseen wording
+- [ ] Preserve frozen language-model validation-loss and original
+      source/checkpoint provenance when considering any model fusion
+- [ ] Implement durable checkpoint retention beyond ephemeral Actions
+      artifacts, with no personal memory in public repositories
+
+[Detailed v3 research results](ROLE-FACTORIZED-V3-RESULTS.md).
