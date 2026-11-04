@@ -1,0 +1,65 @@
+name: Forge Seed — English Class v1 read-only retention audit
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-class-v1-audit-001.md"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only research dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Test artifact provenance and identical frozen/adapted windows
+        run: |
+          python -m unittest discover -s tests -p test_english_class_v1_audit.py -v
+          python -m unittest discover -s tests -p test_english_class_v1.py -v
+      - name: Retrieve exactly original model and all three saved research arms
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original trained results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          gh run download 41775152111 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-english-class-v1-experiment --dir trained
+          test -f original/checkpoint.pt
+          test -f trained/english-class-v1.json
+          test -f trained/english_class-research.pt
+          test -f trained/same_lessons_interleaved-research.pt
+          test -f trained/corrupted_answers-research.pt
+      - name: Read-only 48-window source and trained-model retention comparison
+        run: |
+          python -m forge_core.neural.english_class_v1_audit \
+            --source original --trained trained --out results
+      - name: Publish lightweight corrected metrics only (no duplicate weights)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-english-class-v1-retention-audit
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
