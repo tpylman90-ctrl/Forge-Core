@@ -84,6 +84,9 @@ class TestPolicyResearch(unittest.TestCase):
         self.assertIsInstance(sampled["logp"].requires_grad, bool)
         self.assertTrue(sampled["logp"].requires_grad)
         self.assertTrue(sampled["process_loss"].requires_grad)
+        self.assertTrue(sampled["actor_step_loss"].requires_grad)
+        self.assertGreaterEqual(sampled["process_head_correct_labels"], 0)
+        self.assertLessEqual(sampled["process_head_correct_labels"], 4)
         result = sampled["verdict"]
         self.assertEqual(sampled["reward_outcome"], float(result["final"]))
         self.assertEqual(sampled["reward_process"], float(result["final"]) +
@@ -94,7 +97,12 @@ class TestPolicyResearch(unittest.TestCase):
                               examples_per_update=2, rollouts_per_example=2)
         self.assertEqual(len(curve), 2)
         report = evaluate(policy, seed=777, n=12)
+        self_checked = evaluate(policy, seed=777, n=12, use_self_check=True)
         self.assertEqual(report["total"], 12)
+        self.assertEqual(report["process_head_total_labels"], 48)
+        self.assertEqual(self_checked["decision_method"], "learned_process_head")
+        self.assertLessEqual(self_checked["all_steps_and_final"],
+                             self_checked["total"])
         self.assertEqual(report["total_local_steps"], 24)
         self.assertLessEqual(report["all_steps_and_final"], report["outcome_correct"])
         self.assertLessEqual(report["all_steps_and_final"] * 2,
@@ -115,6 +123,9 @@ class TestPolicyResearch(unittest.TestCase):
             for arm, output in report["arms"].items():
                 self.assertEqual(output["exam"]["total"], 200)
                 self.assertEqual(output["curve"][-1]["update"], 10)
+                self.assertEqual(output["process_head_driven_exam"]["total"], 200)
+                self.assertEqual(
+                    output["process_head_driven_exam"]["process_head_total_labels"], 800)
             with self.assertRaises(ValueError):
                 experiment(Path(folder), steps=400)
 
