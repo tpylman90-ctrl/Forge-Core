@@ -2,6 +2,14 @@ plugins {
     id "com.android.application"
 }
 
+// GitHub Actions supplies these only while building an explicitly signed
+// offline release. Never commit credentials or a keystore to this repository.
+def forgeSigningFile = System.getenv("FORGE_ANDROID_SIGNING_KEYSTORE")
+def forgeStorePassword = System.getenv("FORGE_ANDROID_STORE_PASSWORD")
+def forgeKeyAlias = System.getenv("FORGE_ANDROID_KEY_ALIAS")
+def forgeKeyPassword = System.getenv("FORGE_ANDROID_KEY_PASSWORD")
+def forgeCanSign = forgeSigningFile && forgeStorePassword && forgeKeyAlias && forgeKeyPassword
+
 android {
     namespace "ai.forgecore.mobile"
     compileSdk 35
@@ -10,8 +18,28 @@ android {
         applicationId "ai.forgecore.mobile"
         minSdk 26
         targetSdk 35
-        versionCode 3
-        versionName "0.3.0"
+        versionCode 4
+        versionName "0.3.1"
+    }
+
+    signingConfigs {
+        release {
+            if (forgeCanSign) {
+                storeFile file(forgeSigningFile)
+                storePassword forgeStorePassword
+                keyAlias forgeKeyAlias
+                keyPassword forgeKeyPassword
+                storeType "jks"
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            if (forgeCanSign) {
+                signingConfig signingConfigs.release
+            }
+        }
     }
 
     compileOptions {
