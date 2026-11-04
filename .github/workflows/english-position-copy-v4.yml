@@ -1,0 +1,92 @@
+name: Forge Seed — source-position letter retrieval v4
+
+on:
+  workflow_dispatch:
+    inputs:
+      steps_per_phase:
+        description: "Bounded update count per 4 phases (4–220)"
+        type: number
+        required: true
+        default: 110
+      seeds:
+        description: "Independent training/schedule seeds"
+        type: choice
+        required: true
+        default: "2"
+        options: ["1", "2"]
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-position-copy-v4-001.md"
+
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  teach-position-copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      STEPS: ${{ inputs.steps_per_phase || '110' }}
+      SEEDS: ${{ inputs.seeds || '2' }}
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original scratch-trained model dependencies on CPU
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Check independent source-position oracle and resource bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$STEPS" =~ ^[0-9]+$ ]]
+          [[ "$SEEDS" =~ ^[12]$ ]]
+          (( STEPS >= 4 && STEPS <= 220 ))
+          python -m unittest discover -s tests -p test_english_position_copy_v4.py -v
+          python -m unittest discover -s tests -p test_english_char_copy_v3.py -v
+      - name: Download and cryptographically validate approved original Forge Seed lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          test -f original/checkpoint.pt
+          test -f original/tokenizer.json
+          test -f original/source-manifest.json
+          test -f original/train.txt
+          test -f original/valid.txt
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-utc.txt
+      - name: Learn position-indexed character retrieval and compare all five controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_position_copy_v4 \
+            --checkpoint-dir original --out results \
+            --steps-per-phase "$STEPS" --seeds "$SEEDS"
+      - name: Record finish and artifact size
+        if: always()
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-utc.txt
+          du -sh results || true
+      - name: Preserve unpromoted results, source hashes and research-only models
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-position-copy-v4-research
+          path: results/
+          retention-days: 30
+          if-no-files-found: warn
