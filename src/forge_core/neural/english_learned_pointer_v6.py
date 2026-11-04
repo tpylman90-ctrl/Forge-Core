@@ -83,7 +83,10 @@ def random_pair(rng: random.Random, minimum: int, maximum: int,
         options = [x for x in ALPHABET if x != word[index]]
         different = rng.choice(options)
         twin = word[:index] + different + word[index+1:]
-        if sequence_bucket(word) == split:
+        # Both members of a changed-letter pair MUST map to the SAME
+        # partition. Partitioning only the base previously allowed a
+        # dev source string to reappear as a train twin.
+        if sequence_bucket(word) == split and sequence_bucket(twin) == split:
             return Pair(word, twin, index, split)
     raise ValueError("Failed to generate random source pair")
 
@@ -144,8 +147,10 @@ def validate_pairs(pairs: list[Pair]) -> None:
             raise ValueError("Incorrect exact-one-change source pair")
         if pair.split not in ("train", "dev", "exam", "long", "words"):
             raise ValueError("Unrecognized evaluation split")
-        if pair.split not in ("words",) and sequence_bucket(a) != pair.split:
-            raise ValueError("Hash-partitioned source in wrong split")
+        if pair.split != "words" and (
+                sequence_bucket(a) != pair.split
+                or sequence_bucket(b) != pair.split):
+            raise ValueError("Base or changed-letter twin crossed split firewall")
         if a in seen or b in seen:
             raise ValueError("Repeated source or twin")
         seen.update((a,b))
@@ -430,12 +435,19 @@ def experiment(*, source: Path, out: Path, updates: int = 800,
     regular=generate_pairs("exam",128,12347)
     longer=generate_pairs("long",72,17193)
     natural=word_pairs()
+    # Preflight ALL scheduled training seeds and all test splits before
+    # the first optimizer step. A late split collision must never waste
+    # a full seed's CPU training or contaminate its checkpoint.
+    source_by_seed={
+        seed:generate_pairs("train",512,seed) for seed in seeds
+    }
+    for training_set in source_by_seed.values():
+        assert_firewall(training_set,dev,regular,longer,natural)
     out.mkdir(parents=True,exist_ok=True)
     started=time.monotonic()
     frozen_results=[]
     for seed in seeds:
-        train=generate_pairs("train",512,seed)
-        assert_firewall(train,dev,regular,longer,natural)
+        train=source_by_seed[seed]
         shuffle=corrupted_map(train,seed+311)
         batches=training_batches(train,updates,seed=seed+811)
         row={"seed":seed,"arms":{}}

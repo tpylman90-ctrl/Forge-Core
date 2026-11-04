@@ -55,3 +55,22 @@ on in-distribution strings but fails on longer new strings, do not
 claim full language literacy. Any neural integration into Forge's
 main BPE network requires a new, separate exact-answer and
 language-retention experiment.
+
+## Preflight correction, revision 002 — Nov 4
+
+The original pilot run **41894948008** exited **before any optimizer
+step** because a train-set counterfactual **twin** reappeared as a
+development-set original string. The firewall correctly failed closed.
+The mistake was sampling source strings by the base string's hash
+partition while allowing its one-letter-edited twin to belong to
+a different partition.
+
+This revision requires **both strings** in a counterfactual
+family to hash into the same split. It adds the exact production
+dataset-count regression test and prevalidates both training seeds
+against development, short, long and curated-word tests **before
+any optimizer update**. No labels, model architecture, training
+budget, exam-selection logic or checkpoint promotion gates change.
+
+One rerun is authorized after revised CI passes. Any later failure
+must be diagnosed, not bypassed by relaxing the leakage firewall.
