@@ -1,0 +1,96 @@
+name: Forge Seed — learned character copy pointer v6
+
+on:
+  workflow_dispatch:
+    inputs:
+      updates:
+        description: "Optimizer updates per arm/seed (20–1200)"
+        type: number
+        required: true
+        default: 800
+      seeds:
+        description: "Independent training seeds"
+        type: choice
+        required: true
+        default: "2"
+        options: ["1", "2"]
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-learned-pointer-v6-001.md"
+
+# Avoid CPU overlap with the language experiments; Android stays independent.
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  learned-source-copy:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      UPDATES: ${{ inputs.updates || '800' }}
+      SEEDS: ${{ inputs.seeds || '2' }}
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only open-source original research environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Verify strict trainability, source boundaries, source/target isolation and exact oracle
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPDATES" =~ ^[0-9]+$ ]]
+          [[ "$SEEDS" =~ ^[12]$ ]]
+          (( UPDATES >= 20 && UPDATES <= 1200 ))
+          python -m unittest discover -s tests -p test_english_learned_pointer_v6.py -v
+          python -m unittest discover -s tests -p test_english_unbiased_v5.py -v
+      - name: Verify immutable original Forge Seed checkpoint provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          test -f original/checkpoint.pt
+          test -f original/tokenizer.json
+          test -f original/source-manifest.json
+          test -f original/train.txt
+          test -f original/valid.txt
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-utc.txt
+      - name: Train original small neural copier and strict source/target ablations
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_learned_pointer_v6 \
+            --source original --out results \
+            --updates "$UPDATES" --seeds "$SEEDS"
+      - name: Preserve study end timestamp
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-utc.txt
+          du -sh results || true
+      - name: Save provenance, metrics, experimental neural states
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-original-learned-charcopy-v6-research
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
