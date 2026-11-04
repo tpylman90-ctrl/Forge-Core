@@ -14,7 +14,32 @@ ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
 
-## Current language research — copying unfamiliar letters (v2–v5)
+## Current engineering: original neural whole-string copy study (v6)
+
+After v5's difficult uniform-letter test confirmed a small but
+incomplete indexing skill (**173/1,016** individual letters,
+**3/80** exact changed-character twin pairs, **zero** complete
+whole strings), we built an **original, randomly initialized
+character-aligned neural decoder**. It learns attention to
+source characters and emits entire output strings and EOS, without
+asking Python to copy each letter in a loop.
+
+The component is standalone **research**, NOT a replacement for
+Forge Seed's scratch-trained BPE language network. Its training
+uses new model weights; the canonical language checkpoint is only
+source-verified and remains unchanged. Paired/counterfactual
+controls, source-hidden/wrong-label ablations, unseen longer
+strings, and words with one-letter edits test genuine behavior.
+
+[Source and preregistered metrics](docs/ENGLISH-LEARNED-POINTER-V6.md) ·
+[One-time GitHub experiment](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41894948008) ·
+[v5 final results](docs/ENGLISH-UNBIASED-COPY-V5-RESULTS.md).
+
+**No experimental weights are promoted.** The engineering milestone
+is to verify full source-to-string reproduction *before* considering
+separate integration with Forge Seed's language model or Android.
+
+## Earlier language research — copying individual letters (v2–v5)
 
 Forge's real scratch-trained Seed v0.7 language network is receiving
 controlled English lessons **without replacing its original weights**:
@@ -33,11 +58,12 @@ controlled English lessons **without replacing its original weights**:
   position 2 was easier: **84/96** correct at position 2, but
   only **89/306** at positions 3–7. External assembly produced only
   **3/96** correct complete strings.
-- [v5 independent counterfactual design](docs/ENGLISH-UNBIASED-COPY-V5.md):
-  a currently bounded research pilot removes position-based letter
-  shortcuts, using uniformly random letters, single-letter-changed
-  string twins, exact equal-exposure training comparisons, answer
-  shuffling and source-blind controls.
+- [v5 unbiased counterfactual results](docs/ENGLISH-UNBIASED-COPY-V5-RESULTS.md):
+  correctly supervised paired models generated **173/1,016**
+  individual letters compared with 51/1,016 shuffled-label
+  controls, but only **3/80** full changed-letter pairs and zero
+  fully assembled strings. A separate 36-word source exam also
+  found no complete words.
 
 **No candidate neural checkpoint has been promoted** to canonical
 Forge Seed or Android. The objective is actual source-sensitive text
