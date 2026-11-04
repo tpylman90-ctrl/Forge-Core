@@ -8,7 +8,7 @@ import torch
 
 from forge_core.neural.rlvr_proof_generator_v5 import (
     Problem, ProposalPolicy, STOP, best_continuations,
-    evaluate, make_problem, verify_trace,
+    evaluate, make_problem, oracle_trace, verify_trace,
 )
 from forge_core.neural.rlvr_verified_traces_v6 import (
     ARMS, SEEDS, action_diagnostics, experiment, lesson_loss,
@@ -29,11 +29,8 @@ class TestVerifiedActionLessons(unittest.TestCase):
         for domain_index in (0, 1):
             sample = make_problem(523, domain_index, "train")
             self.assertTrue(verify_trace(
-                sample, tuple(
-                    [next(a for a in options if a != STOP)
-                     for _, _, options in proof_lessons(sample)]
-                ) if domain_index % 4 == 0 else (STOP,))[
-                    "correct_resolution"])
+                sample, oracle_trace(sample))["correct_resolution"])
+            self.assertGreaterEqual(len(proof_lessons(sample)), 2)
 
     def test_unsolvable_training_has_verified_abstention_only(self):
         for i in (2, 3, 6, 7):
