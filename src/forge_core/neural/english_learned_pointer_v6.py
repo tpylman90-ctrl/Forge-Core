@@ -41,12 +41,12 @@ ARMS = ("pointer_alignment", "pointer_token_only", "pooled_source",
         "pointer_source_hidden", "pointer_wrong_targets")
 SEEDS = (13631, 13632)
 WORDS = (
-    "banana", "carpet", "violet", "rabbit", "hammer", "puzzle",
+    "banana", "carpet", "melody", "rabbit", "hammer", "puzzle",
     "castle", "lizard", "sunrise", "ticket", "butter", "spoon",
     "flower", "anchor", "camera", "jacket", "napkin", "pepper",
-    "forest", "planet", "travel", "salmon", "pocket", "winter",
-    "orange", "guitar", "rabbit", "museum", "painter", "garden",
-    "velvet", "rocket", "circle", "copper", "basket", "island",
+    "valley", "guitar", "beacon", "picnic", "timber", "winter",
+    "sunset", "violin", "cabin", "glider", "sailor", "sprout",
+    "clover", "funnel", "ripple", "crayon", "falcon", "pillow",
 )
 # The manually authored words above are illustrative, not a third-party
 # independently certified human-authored dataset. Duplicates prohibited.
@@ -335,10 +335,11 @@ def training_batches(pairs: list[Pair],updates: int,seed: int):
 
 
 @torch.no_grad()
-def greedy_generate(model: NeuralCopyDecoder, words: list[str]) -> list[str]:
+def greedy_generate(model: NeuralCopyDecoder, words: list[str],
+                    *, mask_source: bool = False) -> list[str]:
     """The model, not a source-index loop, chooses ALL output letters/EOS."""
     model.eval()
-    source,_,_,_ = batch_tensors(words)
+    source,_,_,_ = batch_tensors(words,mask_source=mask_source)
     previous = torch.full((len(words),1),BOS,dtype=torch.long)
     sequences = [[] for _ in words]
     finished = torch.zeros(len(words),dtype=torch.bool)
@@ -371,13 +372,15 @@ def edit_distance(left: str,right: str) -> int:
 
 
 @torch.no_grad()
-def evaluate(model: NeuralCopyDecoder, pairs: list[Pair]) -> dict:
+def evaluate(model: NeuralCopyDecoder, pairs: list[Pair],
+             *, mask_source: bool = False) -> dict:
     validate_pairs(pairs)
     model.eval()
     words = expanded(pairs)
     guesses = []
     for start in range(0,len(words),64):
-        guesses.extend(greedy_generate(model,words[start:start+64]))
+        guesses.extend(greedy_generate(model,words[start:start+64],
+                                       mask_source=mask_source))
     exact = sum(a==b for a,b in zip(words,guesses))
     ed = sum(edit_distance(a,b) for a,b in zip(words,guesses))
     chars = sum(len(word) for word in words)
@@ -408,6 +411,7 @@ def evaluate(model: NeuralCopyDecoder, pairs: list[Pair]) -> dict:
         "total_target_characters":chars,
         "examples":previews,
         "inference":"Unassisted source-to-whole-output greedy neural decoder with learned EOS",
+        "source_letters_hidden":mask_source,
     }
 
 
@@ -455,7 +459,8 @@ def experiment(*, source: Path, out: Path, updates: int = 800,
                 nn.utils.clip_grad_norm_(model.parameters(),1.0)
                 optim.step()
                 if step==1 or step%200==0 or step==updates:
-                    dev_score=evaluate(model,dev)
+                    dev_score=evaluate(model,dev,
+                                       mask_source=(arm=="pointer_source_hidden"))
                     key=(dev_score["pair_exact"],
                          dev_score["exact"],
                          -dev_score["total_character_edits"],step)
@@ -472,12 +477,17 @@ def experiment(*, source: Path, out: Path, updates: int = 800,
                     }
                     curve.append(metrics)
                     print(json.dumps({"seed":seed,"arm":arm,**metrics}),flush=True)
+            last_weights=copy.deepcopy(model.state_dict())
             model.load_state_dict(best["weights"])
             scores={
-                "development":evaluate(model,dev),
-                "novel_short":evaluate(model,regular),
-                "unseen_longer":evaluate(model,longer),
-                "curated_words":evaluate(model,natural),
+                "development":evaluate(
+                    model,dev,mask_source=arm=="pointer_source_hidden"),
+                "novel_short":evaluate(
+                    model,regular,mask_source=arm=="pointer_source_hidden"),
+                "unseen_longer":evaluate(
+                    model,longer,mask_source=arm=="pointer_source_hidden"),
+                "curated_words":evaluate(
+                    model,natural,mask_source=arm=="pointer_source_hidden"),
             }
             torch.save({
                 "schema":1,"research_only":True,
@@ -489,6 +499,7 @@ def experiment(*, source: Path, out: Path, updates: int = 800,
                 "architecture":{"width":model.width,"pointer":model.pointer},
                 "best_development_step":best["update"],
                 "best_weights":best["weights"],
+                "last_weights":last_weights,
                 "last_optimizer_state":optim.state_dict(),
                 "last_torch_rng_state":torch.get_rng_state(),
             },out/f"seed-{seed}-{arm}-research.pt")
