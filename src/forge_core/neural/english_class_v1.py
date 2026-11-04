@@ -115,7 +115,7 @@ class Exercise:
 def independent_gold(skill: str, source: str) -> str:
     """Reconstruct gold WITHOUT reading the stored answer or choices."""
     if skill in ("alphabet_case", "vowels"):
-        m = re.fullmatch(r"letter=([a-z])", source)
+        m = re.fullmatch(r"letter=([a-z]);sample_word=([a-z]+)", source)
         if not m:
             raise ValueError("Malformed letter evidence")
         c = m.group(1)
@@ -217,7 +217,9 @@ def make_exercises(split: str, *, per_skill: int = 64,
                                             "bcdfghjklmnpqrstvwxyz")
                         right = "vowel" if letter in VOWELS else "consonant"
                         wrong = "consonant" if right == "vowel" else "vowel"
-                    source = f"letter={letter}"
+                    source = (f"letter={letter};sample_word="
+                              f"{rng.choice(lex['prefixes'])}"
+                              f"{rng.choice(lex['suffixes'])}")
                 elif skill == "word_parts":
                     first = rng.choice(lex["prefixes"])
                     second = rng.choice(lex["suffixes"])
