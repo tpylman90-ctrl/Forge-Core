@@ -55,9 +55,8 @@ class TestExactOracles(unittest.TestCase):
                         self.assertEqual(sum(labels), 1)
                     state = expected_step(task, step, state)
                     self.assertEqual(encode(task, step, task.initial, state).shape, (32,))
-                    with self.assertRaises(ValueError):
-                        encode(task, step, state, state) if False else (
-                            Task("invalid", 0, (0, 0), ((0, 1), (1, 2)), 0))
+        with self.assertRaises(ValueError):
+            Task("invalid", 0, (0, 0), ((0, 1), (1, 2)), 0)
 
     def test_proof_verifier_rejects_missing_or_extra_steps(self):
         p = generate_task(12, 0)
