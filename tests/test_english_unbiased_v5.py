@@ -107,7 +107,7 @@ class TestV5CounterfactualData(unittest.TestCase):
         altered=replace(self.train[0],answer="!")
         with self.assertRaisesRegex(ValueError,"Wrong character"):
             validate([altered]+self.train[1:])
-        altered=replace(self.train[0],changed_position=3)
+        altered=replace(self.train[0],changed_position=(self.train[0].changed_position % len(self.train[0].text))+1)
         with self.assertRaises(ValueError):
             validate([altered]+self.train[1:])
         altered=replace(self.train[0],prompt="Answer: q")
