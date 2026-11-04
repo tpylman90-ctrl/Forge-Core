@@ -1,0 +1,92 @@
+name: Forge Seed — generative English production v2
+
+on:
+  workflow_dispatch:
+    inputs:
+      updates_per_level:
+        description: "Update count per seven English skills, 4–150"
+        required: true
+        type: number
+        default: 80
+      seeds:
+        description: "Independent training/schedule seeds"
+        required: true
+        type: choice
+        options: ["1", "2"]
+        default: "2"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-production-v2-001.md"
+
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  generate-written-english:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+      UPDATES: ${{ inputs.updates_per_level || '80' }}
+      SEEDS: ${{ inputs.seeds || '2' }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original CPU-only neural dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Verify new productive grammar oracles, disjoint exams and gradients
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPDATES" =~ ^[0-9]+$ ]]
+          [[ "$SEEDS" =~ ^[12]$ ]]
+          (( UPDATES >= 4 && UPDATES <= 150 ))
+          python -m unittest discover -s tests -p test_english_production_v2.py -v
+          python -m unittest discover -s tests -p test_english_class_v1_audit.py -v
+      - name: Retrieve immutable scratch-trained original Forge Seed and public rehearsal
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          test -f original/checkpoint.pt
+          test -f original/tokenizer.json
+          test -f original/source-manifest.json
+          test -f original/train.txt
+          test -f original/valid.txt
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-time-utc.txt
+      - name: Train and compare actual written-answer policies with untouched test words
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_production_v2 \
+            --checkpoint-dir original --out results \
+            --updates-per-level "$UPDATES" --seeds "$SEEDS"
+      - name: Record end timestamp and artifact size
+        if: always()
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-time-utc.txt
+          du -sh results || true
+      - name: Preserve source-lineage, unpromoted research states and per-skill results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-english-production-v2-research
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
