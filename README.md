@@ -14,7 +14,31 @@ ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
 
-## Latest: Forge Teacher v1 and source-word copying research
+## Latest: verified two-stage language research — November 3
+
+The **36-minute** role-contrast experiment completed three seeds and
+84,221 optimizer rounds per arm. It reached **95/540 (17.6%)**
+both-correct giver/recipient question pairs, but still failed a
+reliable two-person reasoning gate. See
+[36-minute research report](docs/ROLE-CONTRAST-V2-RESULTS.md).
+
+The subsequent **factorized-question v3** pilot separately trained a
+story-giver detector and a question-intent classifier using the
+original **frozen, scratch-trained** Forge language backbone.
+It produced **43/288 (14.9%)** both-correct pairs versus **56/288**
+for a freshly trained monolithic comparator and **47/288** for a
+group-corrupted-label control. The factorized story detector scored
+**70.8–85.4%** on source giver labels, but question-intent
+classification ranged from **50.7–67.4%** across the two independent
+seeds. Question generalization is the immediate research bottleneck;
+**no v3 weights were promoted**.
+
+[Read the verified v3 report](docs/ROLE-FACTORIZED-V3-RESULTS.md)
+and [v3 design](docs/ROLE-FACTORIZED-V3.md).
+Our next gate is a genuinely new, independently annotated question
+paraphrase study before any further long training run.
+
+## Earlier: Forge Teacher v1 and source-word copying research
 
 Teacher v1 now implements a **verified, feedback-adaptive lesson
 curriculum** and an optional **local GGUF AI curriculum advisor**.
