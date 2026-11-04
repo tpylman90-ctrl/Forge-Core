@@ -324,8 +324,21 @@ def fit_arm(arm: str, seed: int, *, updates: int = 80,
                 "dev_feasible_proofs": result["correct_feasible"],
                 "dev_safe_rejections": result["correct_infeasible"],
             })
+    # The last-step optimizer state and sampler states are recovery-only.
+    # They must not be paired with development-selected model weights.
+    recovery = {
+        "schema": 1, "research_only": True, "arm": arm, "seed": seed,
+        "completed_updates": updates, "best_development_step": best_step,
+        "last_model_state": {k: v.detach().cpu().clone()
+                             for k, v in model.state_dict().items()},
+        "last_optimizer_state": optimizer.state_dict(),
+        "python_rng_state": rng.getstate(),
+        "torch_rng_state": torch.get_rng_state(),
+        "best_model_state": best_state,
+        "development_curve": curve,
+    }
     model.load_state_dict(best_state)
-    return model, curve, best_step
+    return model, curve, best_step, recovery
 
 
 def experiment(out: Path, *, updates: int = 80,
@@ -336,7 +349,6 @@ def experiment(out: Path, *, updates: int = 80,
     out.mkdir(parents=True, exist_ok=True)
     results = []
     for seed in seeds:
-        initial = AbstentionPolicy()
         # Fixed seed and deterministic dev/shift test indices.
         torch.manual_seed(seed)
         initial = AbstentionPolicy()
@@ -350,8 +362,10 @@ def experiment(out: Path, *, updates: int = 80,
         }
         results_for_seed = {}
         for arm in ARMS:
-            model, curve, best_step = fit_arm(arm, seed, updates=updates,
-                                             development_every=min(20, updates))
+            model, curve, best_step, recovery = fit_arm(
+                arm, seed, updates=updates,
+                development_every=min(20, updates))
+            torch.save(recovery, out / f"seed-{seed}-{arm}-research.pt")
             results_for_seed[arm] = {
                 "best_dev_update": best_step,
                 "development_curve": curve,
