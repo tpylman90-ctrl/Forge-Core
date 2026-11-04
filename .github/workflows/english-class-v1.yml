@@ -1,0 +1,87 @@
+name: Forge Seed — English Class literacy foundations v1
+
+on:
+  workflow_dispatch:
+    inputs:
+      updates_per_level:
+        type: number
+        required: true
+        default: 120
+        description: "Training steps at each of six lesson levels (4–350)"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-class-v1-001.md"
+
+# Do not overlap a second experiment on the same scratch-language backbone.
+# Android APK workflows and their branches are entirely independent.
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  english-curriculum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      UPDATES_PER_LEVEL: ${{ inputs.updates_per_level || '120' }}
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original-weight CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install original scratch BPE tokenizer
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core research package
+        run: python -m pip install --no-deps -e .
+      - name: Verify exact grammar answers and strict experiment bounds
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPDATES_PER_LEVEL" =~ ^[0-9]+$ ]]
+          (( UPDATES_PER_LEVEL >= 4 && UPDATES_PER_LEVEL <= 350 ))
+          python -m unittest discover -s tests -p test_english_class_v1.py -v
+      - name: Retrieve exact source-verified frozen Forge Seed public-language lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          test -f original/checkpoint.pt
+          test -f original/tokenizer.json
+          test -f original/source-manifest.json
+          test -f original/train.txt
+          test -f original/valid.txt
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-time-utc.txt
+      - name: Compare classroom order, equal-exposure mixed lessons, corrupted labels
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_class_v1 \
+            --checkpoint-dir original --out results \
+            --seed 7331 --updates-per-level "$UPDATES_PER_LEVEL"
+      - name: Record finish time and resources
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-time-utc.txt
+          du -sh results || true
+      - name: Preserve unpromoted curriculum metrics and research-only checkpoints
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-english-class-v1-experiment
+          path: results/
+          retention-days: 30
+          if-no-files-found: warn
