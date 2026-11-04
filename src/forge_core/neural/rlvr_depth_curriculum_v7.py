@@ -20,14 +20,13 @@ import time
 
 import torch
 from torch import nn
+from torch.nn import functional as F
 
 from forge_core.neural.rlvr_proof_generator_v5 import (
-    HORIZON, STOP, ProposalPolicy, Problem, best_continuations,
-    make_problem, reachable_states, rollout,
+    HORIZON, STOP, ProposalPolicy, Problem, achieved,
+    make_problem, reachable_states, rollout, transition, verify_trace,
 )
-from forge_core.neural.rlvr_verified_traces_v6 import (
-    lesson_loss, policy_loss, proof_lessons,
-)
+from forge_core.neural.rlvr_verified_traces_v6 import policy_loss
 
 ARMS = ("flat_long_proofs", "staged_proof_imitation", "staged_then_rlvr")
 SEEDS = (5321, 5322)
@@ -73,9 +72,53 @@ def problem_at_depth(seed: int, index: int, split: str,
     candidate = replace(base, target=rng.choice(choices))
     if proof_depth(candidate) != depth:
         raise AssertionError("Generated curriculum goal violates exact depth")
-    if best_continuations(candidate, candidate.initial, HORIZON) == (STOP,):
+    if proof_depth(candidate) is None:
         raise AssertionError("Curriculum task marked feasible but has no proof")
     return candidate
+
+
+def shortest_prefixes(p: Problem) -> list[tuple[int, int, tuple[int, ...]]]:
+    """Formally verify a SHORTEST teacher trace and all shortest actions.
+
+    Merely allowing a solution inside the three-step horizon would be
+    incorrect for curriculum labels: a one-step task could be taught
+    using a three-step detour.
+    """
+    distance = proof_depth(p)
+    if distance is None:
+        if not verify_trace(p, (STOP,))["sound_refusal"]:
+            raise AssertionError("Impossible goal failed proof oracle")
+        return [(p.initial, HORIZON, (STOP,))]
+    if distance == 0:
+        raise ValueError("Initial state is already solved")
+    state = p.initial
+    examples = []
+    path = []
+    for step in range(distance):
+        actions = []
+        for action in range(STOP):
+            following = transition(p, state, action)
+            if following is not None:
+                remainder = proof_depth(replace(p, initial=following))
+                if remainder == distance - step - 1:
+                    actions.append(action)
+        if not actions:
+            raise AssertionError("Exact BFS found no shortest next operation")
+        examples.append((state, HORIZON - step, tuple(actions)))
+        chosen = actions[0]
+        path.append(chosen)
+        state = transition(p, state, chosen)
+    if not achieved(p, state) or not verify_trace(p, tuple(path))["proved"]:
+        raise AssertionError("Canonical shortest trace does not prove the goal")
+    return examples
+
+
+def shortest_lesson_loss(policy: ProposalPolicy, p: Problem) -> torch.Tensor:
+    losses = []
+    for state, remaining, allowed in shortest_prefixes(p):
+        scores = F.log_softmax(policy(p, state, remaining), dim=0)
+        losses.append(-torch.logsumexp(scores[list(allowed)], dim=0))
+    return torch.stack(losses).mean()
 
 
 def staged_task(seed: int, index: int, update: int,
@@ -105,7 +148,7 @@ def evaluate_depth(policy: ProposalPolicy, *, seed: int,
         proved += int(output["verdict"]["proved"])
         refused += int(output["verdict"]["sound_refusal"])
         illegal += output["invalid_proposals"]
-        for state, remaining, acceptable in proof_lessons(task):
+        for state, remaining, acceptable in shortest_prefixes(task):
             if acceptable != (STOP,):
                 nonstop_total += 1
                 good_nonstop += int(
@@ -147,7 +190,7 @@ def train_arm(arm: str, *, seed: int,
                 p = make_problem(seed, index, "train")
             else:
                 p, phase = staged_task(seed, index, update, updates)
-            loss = lesson_loss(policy, p)
+            loss = shortest_lesson_loss(policy, p)
             if arm == "staged_then_rlvr" and update > updates // 3:
                 loss = loss + .1 * policy_loss(
                     policy, p, rng, reward_mode="dense")
