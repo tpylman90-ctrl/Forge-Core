@@ -1,4 +1,36 @@
-# Forge Core Android Companion — First Breath
+# Forge Core Android v0.3 — Communication Shell
+
+The launcher opens a new five-tab interface: **Chat, History, Memory, Settings,
+Diagnostics**. Chat is an **encrypted offline note journal**, not yet an
+AI-generated conversation. The model-unavailable banner is explicit.
+No fake AI answers or hidden third-party teacher are included.
+
+- The previous v0.2 MainActivity and ObserveService remain operational inside
+  **Settings > Observation & permission controls**. Observation is optional
+  and foreground-visible; manual teaching requires no Usage Access.
+  Observation notifications still open the original why-question dialog.
+- Confirmed principles use the original EncryptedMemory schema and Keystore
+  alias; no reset, migration or automatic conversion of journal notes.
+- History and Memory have separately confirmed deletion; neither silently
+  modifies the other encrypted store.
+- Diagnostics identifies missing inference, app and permission state.
+  No INTERNET permission or screen-reading accessibility service.
+- Native integration handoff: [Model Adapter Contract](docs/MODEL-ADAPTER.md).
+- Application ID remains ai.forgecore.mobile. Version 0.3.0 (code 3).
+  Build command and existing free GitHub Actions workflow are unchanged.
+
+**Install caveat:** GitHub-hosted debug builds may use different temporary
+debug signing keys. If Android refuses an in-place update due to a signing
+mismatch, uninstalling the installed app erases its encrypted local memories.
+There is no automatic backup/export or recovery in this build. Preserve
+important memories rather than uninstalling solely for a visual review.
+
+**Verification status:** Source changes do not prove a green Actions build
+or working phone experience. Check the actual run and test the APK.
+
+---
+
+# Previous v0.2 Companion — First Breath
 
 This is a **standalone experimental Android app** (package ai.forgecore.mobile), separate from Forge-ai and the Python neural model. It has no internet permission, no screen capture and no content-reading accessibility service.
 
