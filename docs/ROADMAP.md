@@ -335,9 +335,9 @@ as **verified, implemented but unverified, or proposed**.
 - [x] Publish permanent [v3 results](RLVR-ABSTENTION-V3-RESULTS.md)
       and [v4 results](RLVR-STEP-VERIFIER-V4-RESULTS.md) before
       temporary artifact expiration
-- [ ] Prototype a **constrained proof-action proposal model** that
-      generates candidate formal operations/states rather than only
-      choosing between two externally provided proposals
+- [x] Prototype a **constrained proof-action proposal model** that
+      emits real symbolic operation tokens and verifies every state
+      transition without supplied candidate answers
 - [ ] Measure verified *constructed* proofs, oracle calls,
       false acceptances, and abstention on new operation families
 - [ ] Keep symbolic proof-checking authoritative and independent
@@ -348,3 +348,47 @@ as **verified, implemented but unverified, or proposed**.
 **Decision:** no promotion and no further 36-minute repeats of the
 same failed candidate-ranking architecture. The engineering
 infrastructure is validated; genuine neural proof reasoning is not.
+
+## Nov 3 — Formal action generation and shortest-depth curriculum (v5–v7)
+
+- [x] Create a random-initialized five-action neural proof proposer,
+      explicit arithmetic/Horn-logic executor and exact bounded
+      reachability oracle. No raw hidden model CoT.
+- [x] CI and one-off v5 GitHub run **41769105341** passed:
+      all three RLVR/process arms abstained on 240/240 impossible
+      examples but solved **0/240** feasible cases across two seeds.
+      [Verified v5 report](RLVR-PROOF-GENERATOR-V5-RESULTS.md).
+- [x] Add fully verified, teacher-forced canonical proof trace
+      supervision for second and third stages of an operation sequence.
+- [x] CI and v6 run **41769831575** passed:
+      complete trace imitation learned **22–29%** correct non-STOP
+      actions on teacher prefixes but only **1/240** full feasible
+      proofs across seeds. [Verified v6 report](RLVR-VERIFIED-TRACES-V6-RESULTS.md).
+- [x] Fix depth mislabeling: formally require **shortest** action
+      sequences for 1-, 2- and 3-step curriculum lessons.
+- [x] CI and v7 run **41770908240** passed:
+      900 matched updates/arm/seed in **78.1 seconds**. Staged
+      1-step shifted success **93/240** vs flat control **24/240**;
+      staged 3-step success **2/240** vs flat **10/240**.
+      [Verified v7 report](RLVR-DEPTH-CURRICULUM-V7-RESULTS.md).
+- [x] Research-only checkpoints and audit data retained temporarily.
+      **No** experimental neural policy promoted to canonical Forge Seed,
+      Android, or personal memory.
+- [ ] Balance late-stage short-proof rehearsal with sufficient
+      **3-step examples**, and compare matched exposure counts to
+      isolate genuine compositional transfer.
+- [ ] Evaluate on externally authored new operation families and
+      longer formal proofs, not repeatedly on the same synthetic
+      procedural generator.
+- [ ] Consider an auditable, bounded **propose → exact verify →
+      retry** execution interface, measuring verifier call cost and
+      errors against plain symbolic search before attributing gains
+      to the neural policy.
+- [ ] Keep language-model training separately reproducible, and
+      only later evaluate text-to-formal transfer with language
+      retention and user authorization gates.
+
+**Decision:** The original, scratch-started Forge language model and
+Android companion can develop independently. These experiments
+show an early improvement in single formal operations, **not**
+competent three-step reasoning.
