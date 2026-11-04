@@ -364,6 +364,15 @@ def score(model: ByteTransformer, examples: list[Exercise], codec,
                          for k, v in by_skill.items()}}
 
 
+def comparable_story_loss(model: ByteTransformer, valid_tokens: torch.Tensor) -> float:
+    """Same windows and sequence length before and after adaptation.
+
+    Using fewer baseline windows than post-training windows creates a
+    non-comparable language retention ratio. Both use 48 fixed positions.
+    """
+    return round(heldout(model, valid_tokens, windows=48, seq_len=64), 6)
+
+
 def experiment(*, folder: Path, out: Path, seed: int = 7331,
                updates_per_level: int = 120, lr: float = 1.2e-4,
                rehearsal_weight: float = .20) -> dict:
@@ -404,8 +413,7 @@ def experiment(*, folder: Path, out: Path, seed: int = 7331,
                        for i in range(len(rows_train))]
     frozen_dev = score(original, dev, codec, answer_ids)
     frozen_exam = score(original, exam, codec, answer_ids)
-    frozen_text_loss = round(heldout(original, valid_tokens,
-                                    windows=32, seq_len=64), 6)
+    frozen_text_loss = comparable_story_loss(original, valid_tokens)
     sequences = {
         "english_class": staged_order,
         "same_lessons_interleaved": interleaved_order,
@@ -460,8 +468,7 @@ def experiment(*, folder: Path, out: Path, seed: int = 7331,
         model.load_state_dict(best["weights"])
         final = score(model, exam, codec, answer_ids)
         final_dev = score(model, dev, codec, answer_ids)
-        text_loss = round(heldout(model, valid_tokens,
-                                  windows=48, seq_len=64), 6)
+        text_loss = comparable_story_loss(model, valid_tokens)
         out.mkdir(parents=True, exist_ok=True)
         torch.save({
             "schema": 1, "research_only": True,
