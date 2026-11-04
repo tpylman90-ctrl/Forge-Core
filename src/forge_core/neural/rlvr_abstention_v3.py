@@ -118,14 +118,17 @@ class AbstentionPolicy(nn.Module):
 
 
 def rollout(policy: AbstentionPolicy | None, case: Case,
-            rng: random.Random, *, mode: str = "sample") -> dict:
+            rng: random.Random, *, mode: str = "sample",
+            threshold: float = .5) -> dict:
     """The verifier observes decisions but never supplies network inputs.
 
     Modes oracle and always_reject are explicit non-neural reference baselines.
     """
-    if mode not in ("sample", "greedy", "always_reject", "oracle"):
+    if mode not in ("sample", "greedy", "checker", "always_reject", "oracle"):
         raise ValueError("Unknown policy selection mode")
-    if mode in ("sample", "greedy") and policy is None:
+    if not 0 <= threshold <= 1:
+        raise ValueError("Candidate validity threshold outside [0, 1]")
+    if mode in ("sample", "greedy", "checker") and policy is None:
         raise ValueError("Neural selection requires a policy")
     state = case.task.initial
     trace = []
@@ -145,13 +148,20 @@ def rollout(policy: AbstentionPolicy | None, case: Case,
     for step in range(2):
         offered = candidates(case, step, state, rng)
         target, labels = gold_action(case.task, step, state, offered)
-        if mode in ("sample", "greedy"):
+        if mode in ("sample", "greedy", "checker"):
             tensor = torch.stack([
                 encode(case.task, step, state, v) for v in offered])
             logits, validity = policy(tensor)
             distribution = torch.distributions.Categorical(logits=logits)
-            chosen = (int(distribution.sample()) if mode == "sample"
-                      else int(logits.argmax()))
+            if mode == "checker":
+                # This action is chosen using ONLY the learned validity
+                # scores; the exact oracle labels remain evaluation-only.
+                probabilities = torch.sigmoid(validity)
+                chosen = (int(probabilities.argmax()) if
+                          float(probabilities.max()) >= threshold else REJECT)
+            else:
+                chosen = (int(distribution.sample()) if mode == "sample"
+                          else int(logits.argmax()))
             if mode == "sample":
                 logps.append(distribution.log_prob(
                     torch.tensor(chosen, dtype=torch.long)))
@@ -210,7 +220,7 @@ def rollout(policy: AbstentionPolicy | None, case: Case,
 @torch.no_grad()
 def evaluate(policy: AbstentionPolicy | None, *, seed: int,
              split: str, n: int = 240,
-             mode: str = "greedy") -> dict:
+             mode: str = "greedy", threshold: float = .5) -> dict:
     if split not in SPLITS or not 8 <= n <= 1000 or n % 8:
         raise ValueError("Evaluation needs balanced, bounded task count")
     if policy is not None:
@@ -221,7 +231,8 @@ def evaluate(policy: AbstentionPolicy | None, *, seed: int,
     for i in range(n):
         case = case_for(seed, i, split)
         rng = random.Random(seed * 9871 + i * 127 + 43)
-        result = rollout(policy, case, rng, mode=mode)
+        result = rollout(policy, case, rng, mode=mode,
+                         threshold=threshold)
         feasible = all(case.availability)
         fields = {
             "resolved": int(result["resolved"]),
@@ -250,7 +261,9 @@ def evaluate(policy: AbstentionPolicy | None, *, seed: int,
             subset[key]["completed"] += int(result["complete_proof"])
         totals["brier_scaled"] += round(result["brier"] * 1_000_000)
     return {
-        "total_tasks": n, "mode": mode, "split": split, **totals,
+        "total_tasks": n, "mode": mode, "split": split,
+        "candidate_threshold": threshold if mode == "checker" else None,
+        **totals,
         "resolved_rate": round(totals["resolved"] / n, 4),
         "feasible_proof_rate": round(totals["correct_feasible"] /
                                      max(1, totals["feasible"]), 4),
