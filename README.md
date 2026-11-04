@@ -14,6 +14,37 @@ ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
 
+## Current language research — copying unfamiliar letters (v2–v5)
+
+Forge's real scratch-trained Seed v0.7 language network is receiving
+controlled English lessons **without replacing its original weights**:
+
+- [v2 generated-English results](docs/ENGLISH-PRODUCTION-V2-RESULTS.md):
+  all trained methods scored **0/112** exactly correct *new* words or
+  sentences, despite learning to imitate practice-answer formats.
+- [v3 character-copy results](docs/ENGLISH-CHAR-COPY-V3-RESULTS.md):
+  verified teaching produced **19/192 staged** and **21/192 mixed**
+  exact unfamiliar answers, largely single letters; shuffled and
+  public-text-only controls produced **0/192**.
+- [v4 indexed-copy results](docs/ENGLISH-POSITION-COPY-V4-RESULTS.md):
+  mixed lessons generated **214/498** correct individual letters
+  versus **67/498** with shuffled labels. However the synthetic
+  strings systematically alternated consonants and vowels, so
+  position 2 was easier: **84/96** correct at position 2, but
+  only **89/306** at positions 3–7. External assembly produced only
+  **3/96** correct complete strings.
+- [v5 independent counterfactual design](docs/ENGLISH-UNBIASED-COPY-V5.md):
+  a currently bounded research pilot removes position-based letter
+  shortcuts, using uniformly random letters, single-letter-changed
+  string twins, exact equal-exposure training comparisons, answer
+  shuffling and source-blind controls.
+
+**No candidate neural checkpoint has been promoted** to canonical
+Forge Seed or Android. The objective is actual source-sensitive text
+copying, then genuine word manipulation, then elementary grammar.
+A correct letter at an explicitly supplied index is an early skill,
+not fluent English or full autonomous writing.
+
 ## Latest language study: English Class foundations v1
 
 We added a six-level original English-teaching experiment to the
