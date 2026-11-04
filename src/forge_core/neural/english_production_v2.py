@@ -43,7 +43,7 @@ LEX = {
         "people": ("Amina", "Benton", "Camila", "Davin", "Emery", "Flora",
                    "Gideon", "Harper", "Isla", "Jasper"),
         "nouns": ("kite", "daisy", "lamp", "shell", "button",
-                  "window", "cookie", "fox", "dish", "cherry"),
+                  "window", "cookie", "cup", "dish", "cherry"),
         "verbs": ("carry", "paint", "push", "bake", "try",
                   "watch", "help", "move", "dry", "wash"),
         "prefix": ("sun", "moon", "water", "forest", "paper",
@@ -53,21 +53,21 @@ LEX = {
     },
     "development": {
         "people": ("Kiran", "Leona", "Milo", "Nessa", "Orion"),
-        "nouns": ("piano", "puppy", "brush", "bench", "story"),
-        "verbs": ("fix", "enjoy", "dance", "reach", "reply"),
+        "nouns": ("piano", "puppy", "brush", "stool", "story"),
+        "verbs": ("fix", "glide", "dance", "reach", "reply"),
         "prefix": ("frost", "night", "cloud", "berry", "sand"),
-        "suffix": ("ridge", "song", "bloom", "crest", "pool"),
+        "suffix": ("ridge", "chant", "bloom", "crest", "pool"),
     },
     "exam": {
         "people": ("Pippa", "Quentin", "Rosa", "Soren", "Talia",
                    "Uma", "Victor", "Wendy", "Yara", "Zeke"),
         "nouns": ("trophy", "apple", "box", "river", "bench",
                   "pillow", "garden", "fox", "baby", "pear"),
-        "verbs": ("visit", "carry", "hurry", "close", "finish",
+        "verbs": ("visit", "race", "hurry", "close", "finish",
                   "mix", "play", "change", "follow", "enjoy"),
         "prefix": ("silver", "morning", "ocean", "dragon", "winter",
                    "meadow", "copper", "maple", "canyon", "dream"),
-        "suffix": ("bridge", "field", "stone", "gate", "song",
+        "suffix": ("bridge", "field", "ring", "gate", "song",
                    "glow", "trail", "flower", "bank", "shore"),
     },
 }
@@ -144,7 +144,7 @@ def truth(skill: str, source: str) -> str:
     if skill in ("plural_noun", "present_verb", "past_verb"):
         key = {"plural_noun": "noun", "present_verb": "verb",
                "past_verb": "verb"}[skill]
-        m = re.fullmatch(key+r"=([a-z]+)", source)
+        m = re.fullmatch(key+r"=([a-z]+);context=([A-Z][a-z]+)", source)
         if m:
             return {"plural_noun": plural, "present_verb": present,
                     "past_verb": past}[skill](m.group(1))
@@ -226,13 +226,11 @@ def make_lessons(split: str, *, per_skill: int, seed: int) -> list[Lesson]:
                 if skill == "join_parts":
                     source = f"parts={rng.choice(lex['prefix'])}+{rng.choice(lex['suffix'])}"
                 elif skill == "plural_noun":
-                    source = f"noun={rng.choice(lex['nouns'])}"
-                    # Allows repeating a source only if the question
-                    # is genuinely different. Avoid repeated practice
-                    # when train count > number of base nouns.
-                    source += "" if i < len(lex["nouns"]) else ""
+                    source = (f"noun={rng.choice(lex['nouns'])};context="
+                              f"{rng.choice(lex['people'])}")
                 elif skill == "present_verb":
-                    source = f"verb={rng.choice(lex['verbs'])}"
+                    source = (f"verb={rng.choice(lex['verbs'])};context="
+                              f"{rng.choice(lex['people'])}")
                 elif skill == "past_verb":
                     source = f"verb={rng.choice(lex['verbs'])}"
                 elif skill in ("write_sentence", "negate_sentence"):
