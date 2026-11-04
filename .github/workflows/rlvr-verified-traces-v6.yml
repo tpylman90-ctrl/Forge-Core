@@ -1,0 +1,81 @@
+name: Forge Seed — complete verified-trace bootstrap v6
+
+on:
+  workflow_dispatch:
+    inputs:
+      updates:
+        description: "Bounded updates per arm and seed (10–1000)"
+        type: number
+        required: true
+        default: 600
+      seeds:
+        description: "Independent policy initializations"
+        type: choice
+        options: ["1", "2"]
+        required: true
+        default: "2"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/rlvr-verified-traces-v6-001.md"
+
+# Prevent this research from competing with other RLVR trials.
+# Android workflows are independent and never touched.
+concurrency:
+  group: forge-rlvr-proof-pilot-cpu
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  imitate-then-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      UPDATES: ${{ inputs.updates || '600' }}
+      SEEDS: ${{ inputs.seeds || '2' }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original-weight CPU training dependencies
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install Forge research project
+        run: python -m pip install --no-deps -e .
+      - name: Check completed proof-trace supervision and strict runner limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPDATES" =~ ^[0-9]+$ ]]
+          [[ "$SEEDS" =~ ^[12]$ ]]
+          (( UPDATES >= 10 && UPDATES <= 1000 ))
+          python -m unittest discover -s tests -p test_rlvr_proof_generator_v5.py -v
+          python -m unittest discover -s tests -p test_rlvr_verified_traces_v6.py -v
+      - name: Record CPU runner provenance
+        shell: bash
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-utc.txt
+          getconf _NPROCESSORS_ONLN > results/cpu-count.txt
+      - name: Benchmark complete trace imitation and modest RLVR fine-tuning
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.rlvr_verified_traces_v6 \
+            --out results --updates "$UPDATES" --seeds "$SEEDS"
+      - name: Record training end
+        if: always()
+        shell: bash
+        run: date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-utc.txt
+      - name: Save research-only weights, metrics and optimizer states
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-rlvr-complete-traces-v6-research
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
