@@ -27,7 +27,8 @@ These signing credentials are not stored in GitHub repository files.
 
 - `.github/workflows/android.yml` still compiles a debug APK on pull requests,
   pushes affecting Android, and workflow dispatch.
-- On non-PR runs, if all four secrets exist, the same workflow additionally
+- Only on trusted `main` runs (never feature branches or pull requests), if
+  all four secrets exist, the same workflow additionally
   decodes the keystore into the runner's temporary directory, compiles
   `:app:assembleRelease`, verifies the APK signature with `apksigner`,
   removes the temporary keystore, then uploads
@@ -36,7 +37,7 @@ These signing credentials are not stored in GitHub repository files.
   APK only** and gives an explicit status. If partially configured, the
   signing-check step fails rather than silently producing a misleading release.
 - Secrets are never available to untrusted PR code in the workflow;
-  the signed release step is skipped on pull requests.
+  the signed release step is skipped on pull requests and non-main branches.
 - When all four secrets have been created, run **Actions → Forge Core Android
   APK → Run workflow → main** to trigger a signed release artifact.
 - Only a successful run with the `forge-core-signed-release-apk` artifact
