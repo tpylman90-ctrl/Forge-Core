@@ -1,0 +1,91 @@
+name: Forge Seed — original-model character copying v3
+
+on:
+  workflow_dispatch:
+    inputs:
+      updates_per_level:
+        type: number
+        required: true
+        default: 120
+        description: "Bounded updates per four stages (4–200)"
+      seeds:
+        type: choice
+        required: true
+        default: "2"
+        options: ["1", "2"]
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-char-copy-v3-001.md"
+
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  teach-unseen-letter-sequences:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      UPDATES: ${{ inputs.updates_per_level || '120' }}
+      SEEDS: ${{ inputs.seeds || '2' }}
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only scratch learning dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Verify formal character copying and hard compute caps
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPDATES" =~ ^[0-9]+$ ]]
+          [[ "$SEEDS" =~ ^[12]$ ]]
+          (( UPDATES >= 4 && UPDATES <= 200 ))
+          python -m unittest discover -s tests -p test_english_char_copy_v3.py -v
+          python -m unittest discover -s tests -p test_english_production_v2.py -v
+      - name: Restore approved original scratch Seed language checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          test -f original/checkpoint.pt
+          test -f original/tokenizer.json
+          test -f original/source-manifest.json
+          test -f original/train.txt
+          test -f original/valid.txt
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-utc.txt
+      - name: Learn writing unfamiliar letters and compare matched teacher controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_char_copy_v3 \
+            --checkpoint-dir original --out results \
+            --updates-per-level "$UPDATES" --seeds "$SEEDS"
+      - name: Preserve end timestamp and research CPU artifacts
+        if: always()
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-utc.txt
+          du -sh results || true
+      - name: Archive development curves, per-character metrics and research weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-char-copy-v3-research
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
