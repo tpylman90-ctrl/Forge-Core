@@ -58,6 +58,16 @@ release should use the **same keystore, alias, and passwords** and increment
 versionCode. Private on-device memory may then persist across normal in-place
 upgrades, provided the app's key material and storage remain intact.
 
+## Signing certificate fingerprint
+
+The release job checks the public SHA-256 fingerprint of the generated
+certificate before publishing an artifact:
+
+`D2:E3:27:BC:C3:10:7E:50:60:7B:0B:B2:54:FD:A8:8F:8E:F2:81:01:FC:75:72:D8:E0:31:99:2D:EF:FB:50:62`
+
+If the stored GitHub secrets decode to another keystore, the workflow must
+**fail** rather than shipping a release with a different update identity.
+
 ## Security checks
 
 - The public repository must never include `.jks`, `.keystore`, encoded
