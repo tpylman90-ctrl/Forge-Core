@@ -441,3 +441,52 @@ competent three-step reasoning.
 exercises to test **production**, not just A/B answer preferences.
 The synthetic curriculum is a teaching scaffold, not evidence of
 preschool language competence or independent reasoning.
+
+## Nov 4 — Grounded alphabet copying and counterfactual reading
+
+- [x] Run original-model v2 generative English instruction:
+      **0/112** held-out full generated words/sentences for
+      every adapted condition. Archived real training outputs show
+      memorized practice words rather than unfamiliar source copying.
+      [Results](ENGLISH-PRODUCTION-V2-RESULTS.md)
+- [x] Teach exact one-letter, spaced letter and joined-letter answers
+      with v3. Correct teaching yields **19/192** staged and
+      **21/192** mixed exact unfamiliar exam responses; shuffled
+      and public-text-only controls **0/192**. Almost all correct
+      responses involve a **single character**.
+      [Results](ENGLISH-CHAR-COPY-V3-RESULTS.md)
+- [x] Test position-indexed letter retrieval with v4:
+      **214/498** verified-mixed individual letters versus
+      **67/498** shuffled; only **3/96** externally assembled
+      complete strings. Identify synthetic position/vowel parity
+      shortcut: **84/96** position-2 letters correct, only
+      **89/306** at positions 3–7.
+      [Verified results](ENGLISH-POSITION-COPY-V4-RESULTS.md)
+- [x] Implement v5 independent uniformly random a–z 4–8-letter
+      source strings, exact one-character-changed counterfactual
+      twins and held-out hash-partitioned source families.
+      [Protocol](ENGLISH-UNBIASED-COPY-V5.md)
+- [x] Implement four equal-update controls: verified twin pairing,
+      identical examples unpaired, position-shuffled answers,
+      and source-masked questions.
+- [x] Pass v5 CI, merge to main and launch one bounded 900-update
+      two-seed original language experiment
+      [Workflow](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41886375209).
+- [ ] Report v5 **both-twin-correct**, indices 3–8, newline and
+      externally assembled exactness per seed/arm and upstream
+      TinyStories validation loss. Do not select based on exam.
+- [ ] If unbiased copying fails, run a separate controlled
+      pointer/positional encoding architecture test **from scratch**,
+      not more unexamined copies of the same flawed curriculum.
+- [ ] After actual multi-position source copying improves,
+      test unaided novel word spelling and source-variable copying
+      into sentences with a genuinely independent exam.
+- [ ] Only advance to complex English instruction after demonstrating
+      both retained real-text language modeling and new lexical
+      source-binding skills.
+
+**No capability promotion:** Explicit position-indexed character
+selection is not English reading, phonics, understanding, spontaneous
+word writing or human preschool readiness. The original language
+checkpoint and the independently developed Android companion remain
+isolated.
