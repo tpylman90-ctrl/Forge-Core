@@ -58,16 +58,51 @@ validation loss over **32** fixed windows and the trained branches
 over **48**. Therefore the original reported retention ratios
 (0.9998, 1.0119, 1.0051) **are NOT directly comparable**.
 
-A separate PR #18 fixed the source code to use 48 windows for both,
-and a follow-up *read-only* study, PR #19, audits all three archived
-models without spending time on duplicate training. **Until the
-read-only audit is verified, do not infer language was retained or
-regressed from the old ratios.**
+PR #18 corrected the implementation and PR #19 implemented an
+independent read-only audit without expensive retraining.
+**This audit completed successfully and verified the original checkpoint
+and tokenizer SHA256 lineage and all saved model predictions.**
 
-The point of the audit is to establish a reproducible common
-validation geometry, verify checkpoint/tokenizer lineage and show
-per-skill English Class results. No exam is being relabeled as
-previously untouched.
+- [Successful retention audit run 41775982211](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41775982211)
+- [Audited lightweight result artifact 13297475570](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41775982211/artifacts/13297475570)
+- Same 48 fixed validation windows and 64-token contexts for frozen
+  and each development-selected adapted model
+- Source frozen loss **2.607221**; corrected relative losses:
+
+| Method | Adapted loss / frozen loss | Within 5% preliminary retention limit |
+| --- | ---: | --- |
+| Ordered English Class | **0.99973** | Yes |
+| Equal-exposure mixed lessons | **1.01182** | Yes |
+| Corrupted label control | **1.00508** | Yes |
+
+These are **matched small-window public-text loss measurements**, not
+proof of fluency or memory retention of personal conversations.
+Mixed-order lessons increased held-out loss by about **1.18%**
+despite their slight multiple-choice exam advantage.
+
+### Subject-by-subject exam counts, independently rescored
+
+Each subject has 16 A/B test questions; **8/16 equals 50%**.
+The original frozen model scored exactly 8/16 on every category.
+
+| Subject | Frozen | Ordered course | Mixed course | Corrupted control |
+| --- | ---: | ---: | ---: | ---: |
+| Capital letter forms | 8 | 8 | 7 | 7 |
+| Vowel versus consonant | 8 | 8 | **10** | 8 |
+| Joining word parts | 8 | 8 | **4** | 8 |
+| Noun versus verb | 8 | 8 | **12** | 8 |
+| Sentence subject | 8 | 8 | 8 | 8 |
+| Subject–verb–object ordering | 8 | 8 | **12** | 8 |
+| **Total** | **48/96** | **48/96** | **53/96** | **47/96** |
+
+The mixed model shows some skill-specific progress, but word-building
+**deteriorated** markedly. The ordered model shows no detectable
+improvement over frozen baseline on this exam. With only 16 items
+per subject, none of these should be overinterpreted.
+
+The exam has already been inspected and rescored as a model-integrity
+check, **not** as a second independent test. Future experiments must
+use new, separately authored tests rather than tuning to this exam.
 
 ## Decision and next course
 
