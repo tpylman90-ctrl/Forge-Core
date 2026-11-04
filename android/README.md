@@ -24,7 +24,7 @@ No fake AI answers or hidden third-party teacher are included.
 - Diagnostics identifies missing inference, app and permission state.
   No INTERNET permission or screen-reading accessibility service.
 - Native integration handoff: [Model Adapter Contract](docs/MODEL-ADAPTER.md).
-- Application ID remains ai.forgecore.mobile. Version 0.3.0 (code 3).
+- Application ID remains ai.forgecore.mobile. Version 0.3.1 (code 4).
   Build command and existing free GitHub Actions workflow are unchanged.
 
 **Install caveat:** GitHub-hosted debug builds may use different temporary
