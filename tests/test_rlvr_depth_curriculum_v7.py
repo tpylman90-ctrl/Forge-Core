@@ -10,9 +10,8 @@ from forge_core.neural.rlvr_proof_generator_v5 import (
 )
 from forge_core.neural.rlvr_depth_curriculum_v7 import (
     ARMS, SEEDS, evaluate_depth, experiment, problem_at_depth,
-    proof_depth, staged_task, train_arm,
+    proof_depth, staged_task, train_arm, shortest_prefixes,
 )
-from forge_core.neural.rlvr_verified_traces_v6 import proof_lessons
 
 
 class TestExactDifficulty(unittest.TestCase):
@@ -30,12 +29,13 @@ class TestExactDifficulty(unittest.TestCase):
                             p, oracle_trace(p))["sound_refusal"])
                     else:
                         self.assertEqual(proof_depth(p), required)
-                        script = oracle_trace(p)
+                        script = tuple(
+                            allowed[0] for _, _, allowed in shortest_prefixes(p))
                         self.assertEqual(len(script), required)
                         self.assertTrue(verify_trace(p, script)["proved"])
                         self.assertTrue(all(
                             STOP not in choice
-                            for _, _, choice in proof_lessons(p)))
+                            for _, _, choice in shortest_prefixes(p)))
 
     def test_phase_one_two_three_retain_old_short_goals(self):
         seed = 531
