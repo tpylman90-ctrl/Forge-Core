@@ -472,12 +472,30 @@ preschool language competence or independent reasoning.
 - [x] Pass v5 CI, merge to main and launch one bounded 900-update
       two-seed original language experiment
       [Workflow](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41886375209).
-- [ ] Report v5 **both-twin-correct**, indices 3–8, newline and
-      externally assembled exactness per seed/arm and upstream
-      TinyStories validation loss. Do not select based on exam.
-- [ ] If unbiased copying fails, run a separate controlled
-      pointer/positional encoding architecture test **from scratch**,
-      not more unexamined copies of the same flawed curriculum.
+- [x] Report v5's unbiased test: **173/1,016** correct
+      individual letters on paired true-label models, versus
+      **51/1,016** shuffled labels; **3/80** changed-letter
+      pairs both correct and **zero full-string assemblies**.
+      Retained original story loss under the exploratory 5% bound.
+      [Verified v5 results](ENGLISH-UNBIASED-COPY-V5-RESULTS.md)
+- [x] Implement a separate original **trainable character-aligned
+      whole-string decoder**, with token-only, attention-alignment,
+      pooled-source, source-hidden and wrong-target controls.
+      Both training and decoder are scratch-started; the original
+      language weights are unchanged.
+      [Architecture v6](ENGLISH-LEARNED-POINTER-V6.md)
+- [x] CI validation and merged PR #26 for v6; launch bounded
+      2-seed 5-arm CPU study
+      [v6 run](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41894948008).
+- [ ] Verify v6's complete generated strings and EOS on new 3–8
+      letters, 9–12-letter extrapolation and previously unseen
+      assistant-curated English-word near matches. Separately
+      measure counterfactual sensitivity, not merely total character
+      score.
+- [ ] Do not confuse the v6 auxiliary module with learned skills of
+      the original Forge Seed language Transformer. An explicit
+      end-to-end integration and language retention gate must come
+      before any capability promotion.
 - [ ] After actual multi-position source copying improves,
       test unaided novel word spelling and source-variable copying
       into sentences with a genuinely independent exam.
