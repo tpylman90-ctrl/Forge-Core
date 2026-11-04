@@ -88,6 +88,16 @@ jobs:
           APK="android/app/build/outputs/apk/release/app-release.apk"
           test -s "$APK"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+          # Pin Forge's signing identity. A different key must not silently
+          # become the permanent update signature for this application.
+          ACTUAL_SHA256=$("$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --print-certs "$APK" \
+            | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1 \
+            | tr -d ':[:space:]' | tr '[:upper:]' '[:lower:]')
+          EXPECTED_SHA256="d2e327bcc3107e50607b0bb254fda88f8ef28101fc7572d8e031992deffb5062"
+          if [[ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]]; then
+            echo "::error::Unexpected Android signing certificate; refusing to publish release."
+            exit 1
+          fi
 
       - name: Publish signed release APK
         if: steps.signing.outputs.ready == 'true'
