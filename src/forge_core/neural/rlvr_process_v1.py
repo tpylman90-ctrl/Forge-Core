@@ -157,23 +157,38 @@ class VerifiablePolicy(nn.Module):
 
 
 def rollout(policy: VerifiablePolicy, task: Task, rng: random.Random,
-            *, greedy: bool = False) -> dict:
+            *, greedy: bool = False, use_self_check: bool = False) -> dict:
     state = task.initial
     trace: list[int] = []
     log_probs = []
     verifier_terms = []
     labels: list[bool] = []
+    process_agreements = 0
+    actor_imitation_terms = []
+    if use_self_check and not greedy:
+        raise ValueError("Self-check mode is evaluation-only")
     for step in range(2):
         choices = options(task, step, state, rng)
         values = torch.stack([encode(task, step, state, c) for c in choices])
         logits, validity_logits = policy(values)
         distribution = torch.distributions.Categorical(logits=logits)
-        action = logits.argmax() if greedy else distribution.sample()
+        decision_logits = validity_logits if use_self_check else logits
+        action = decision_logits.argmax() if greedy else distribution.sample()
         picked = choices[int(action)]
         trace.append(picked)
         log_probs.append(distribution.log_prob(action))
         oracle = [verify_step(task, step, state, c) for c in choices]
         labels.extend(oracle)
+        process_agreements += sum(
+            int((float(logit) > 0) == label)
+            for logit, label in zip(validity_logits.detach(), oracle)
+        )
+        # Formal step oracle supervises the actor directly as well as
+        # the separate learned process validity head. Gold never enters
+        # policy.forward() or evaluation-time action features.
+        correct_index = oracle.index(True)
+        actor_imitation_terms.append(F.cross_entropy(
+            logits[None, :], torch.tensor([correct_index], dtype=torch.long)))
         verifier_terms.append(F.binary_cross_entropy_with_logits(
             validity_logits, torch.tensor(oracle, dtype=torch.float32)))
         state = picked
@@ -182,6 +197,8 @@ def rollout(policy: VerifiablePolicy, task: Task, rng: random.Random,
         "trace": tuple(trace), "verdict": verdict,
         "logp": torch.stack(log_probs).sum(),
         "process_loss": torch.stack(verifier_terms).mean(),
+        "actor_step_loss": torch.stack(actor_imitation_terms).mean(),
+        "process_head_correct_labels": process_agreements,
         "reward_outcome": float(verdict["final"]),
         "reward_process": float(verdict["final"]) +
                           0.25 * sum(verdict["process"]),
@@ -191,7 +208,8 @@ def rollout(policy: VerifiablePolicy, task: Task, rng: random.Random,
 
 @torch.no_grad()
 def evaluate(policy: VerifiablePolicy, *, seed: int = 8113,
-             n: int = 200, split: str = "exam") -> dict:
+             n: int = 200, split: str = "exam",
+             use_self_check: bool = False) -> dict:
     """Fixed held-out problem index and RNG, independent of training RNG."""
     if not 2 <= n <= 1000:
         raise ValueError("Invalid evaluation size")
@@ -199,10 +217,13 @@ def evaluate(policy: VerifiablePolicy, *, seed: int = 8113,
     counts = {"all_steps_and_final": 0, "outcome_correct": 0,
               "locally_valid_steps": 0, "math_verified": 0, "logic_verified": 0}
     kinds = {"math": 0, "logic": 0}
+    process_label_correct = 0
     for i in range(n):
         task = generate_task(seed, i, split)
         rng = random.Random(seed + i * 37)
-        example = rollout(policy, task, rng, greedy=True)
+        example = rollout(policy, task, rng, greedy=True,
+                          use_self_check=use_self_check)
+        process_label_correct += example["process_head_correct_labels"]
         verdict = example["verdict"]
         counts["all_steps_and_final"] += verdict["complete_verified_proof"]
         counts["outcome_correct"] += verdict["final"]
@@ -212,6 +233,9 @@ def evaluate(policy: VerifiablePolicy, *, seed: int = 8113,
     return {
         "total": n, **counts, "total_local_steps": n * 2,
         "kind_totals": kinds,
+        "decision_method": "learned_process_head" if use_self_check else "actor",
+        "process_head_correct_labels": process_label_correct,
+        "process_head_total_labels": 4 * n,
         "verified_rate": round(counts["all_steps_and_final"] / n, 4),
     }
 
@@ -246,8 +270,13 @@ def train(*, arm: str, steps: int, seed: int, examples_per_update: int = 12,
                 for result, reward in zip(results, rewards)
             ]).mean()
             if arm == "process_supervised":
-                pg = pg + 0.25 * torch.stack(
-                    [r["process_loss"] for r in results]).mean()
+                # Dense, independently verified PROCESS supervision trains
+                # both the actor's actual choice and its self-check head.
+                pg = (pg
+                      + 0.65 * torch.stack(
+                          [r["actor_step_loss"] for r in results]).mean()
+                      + 0.25 * torch.stack(
+                          [r["process_loss"] for r in results]).mean())
             losses.append(pg)
             successes += sum(int(r["verdict"]["complete_verified_proof"])
                              for r in results)
@@ -279,6 +308,8 @@ def experiment(out: Path, *, seed: int = 104, steps: int = 100) -> dict:
         policy, curve = train(arm=arm, steps=steps, seed=seed)
         results[arm] = {
             "exam": evaluate(policy, seed=10007, n=200),
+            "process_head_driven_exam": evaluate(
+                policy, seed=10007, n=200, use_self_check=True),
             "curve": curve, "parameter_count": sum(p.numel() for p in policy.parameters()),
         }
     report = {
@@ -286,7 +317,7 @@ def experiment(out: Path, *, seed: int = 104, steps: int = 100) -> dict:
         "original_seed_model_updated": False,
         "environment": "bounded-two-step-additive-and-implication-proofs",
         "verifier": "deterministic exact state transition and final state",
-        "learning": "on-policy REINFORCE grouped baseline; optional process-level BCE",
+        "learning": "on-policy REINFORCE grouped baseline; optional verifier-labelled actor CE + process-head BCE",
         "dataset": "original deterministic synthetic problems, no private data",
         "seed": seed, "steps": steps,
         "initial": initial_eval, "arms": results,
@@ -297,6 +328,7 @@ def experiment(out: Path, *, seed: int = 104, steps: int = 100) -> dict:
             "No unsafe arbitrary code execution, no external code interpreter",
             "Small binary-action synthetic tasks, not mathematical theorem proving",
             "One seed, same exam during curve reporting; results are diagnostics only",
+            "Process-supervised arm consumes more oracle labels than outcome-only; equal updates are NOT equal information",
         ],
     }
     out.mkdir(parents=True, exist_ok=True)

@@ -59,7 +59,7 @@ Three equal-budget, from-scratch policy arms:
 |---|---|---|
 | `outcome_only` | Final-answer reward | Sparse RLVR baseline |
 | `process_reward` | Final reward + 0.25 per valid step | Dense verifier-grounded reinforcement |
-| `process_supervised` | Same dense rewards + oracle-labeled candidate-step BCE | Step validity as an auxiliary learned process model |
+| `process_supervised` | Same dense rewards + oracle-labeled actor choice CE and candidate-step BCE | Both the choice policy and its process-validity head receive exact step supervision |
 
 All arms use a stochastic, **on-policy REINFORCE** update with a
 within-task group-mean reward baseline. The model policy and the learned
@@ -67,6 +67,17 @@ process-validation head share a small encoder. The process classifier is
 trained to recognize validity for both proposed choices; this is a
 *process-supervised* loss, not a pretrained critic. The oracle remains
 independent and authoritative.
+
+**Process distillation v2 amendment (after first failed improvement):** The
+first pilot's process-only BCE did not improve held-out proof accuracy.
+We therefore added an independently verified actor-choice CE term
+(weight 0.65) alongside process-head validity BCE (weight 0.25),
+and retain RLVR policy-gradient reward. The gold index is computed by
+the verifier *after candidate proposals* and is used only in the loss.
+The process head can now be evaluated as a separate self-checking
+decision policy. Outcome-only and dense-reward-only controls receive no
+candidate gold labels, so they are equal-update but **not equal-label**
+controls; do not attribute gains solely to RL.
 
 A final answer may accidentally match even with wrong steps; it receives
 the sparse outcome signal but fails the **complete verified proof** metric.
@@ -86,6 +97,9 @@ reward hacking.
 - Evaluate at identical fixed test seeds for every arm.
 - Same randomly initialized policy weights, optimizer and number of
   candidate decisions for all training conditions.
+- Evaluate process-validity **candidate classification accuracy** and
+  proof accuracy when choices are made directly by the learned process
+  head, without accessing the true verifier during inference.
 - Versioned, repeatable unit tests include *correct final answer but
   invalid intermediate steps* and a *locally valid second step after
   a corrupted first state*.
