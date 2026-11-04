@@ -132,8 +132,14 @@ def audit(*, source: Path, trained: Path, out: Path) -> dict:
         json.dumps(output, indent=2) + "\n", encoding="utf-8")
     print(json.dumps({
         "base_story_loss": baseline,
+        "original_exam_by_skill": {
+            skill: values["correct"]
+            for skill, values in baseline_exam["by_skill"].items()},
         "corrected": {arm: {
             "exam": row["reconfirmed_exam"]["accuracy"],
+            "exam_by_skill": {
+                skill: values["correct"]
+                for skill, values in row["reconfirmed_exam"]["by_skill"].items()},
             "language_loss_ratio": row["ratio_to_original"],
             "retained_within_five_percent": row["within_five_percent"],
         } for arm, row in verified.items()},
