@@ -152,11 +152,15 @@ class TestLearnedAbstention(unittest.TestCase):
 
     def test_short_actual_training_and_proof_metrics(self):
         for arm in ARMS:
-            policy, curve, best = fit_arm(
+            policy, curve, best, recovery = fit_arm(
                 arm, SEEDS[0], updates=2, tasks_per_update=2,
                 rollouts_per_task=2, development_every=1)
             self.assertEqual(len(curve), 2)
             self.assertIn(best, (1, 2))
+            self.assertEqual(recovery["completed_updates"], 2)
+            self.assertIn("last_optimizer_state", recovery)
+            self.assertIn("best_model_state", recovery)
+            self.assertNotEqual(recovery["last_model_state"], {})
             result = evaluate(policy, seed=12911, split="shifted", n=16)
             self.assertEqual(result["total_tasks"], 16)
             self.assertEqual(result["feasible"], 4)
