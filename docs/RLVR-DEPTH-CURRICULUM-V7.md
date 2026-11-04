@@ -32,6 +32,12 @@ find targets that require **exactly 1, 2 or 3 primitive operations**.
 For logical proofs this is the shortest implication depth; for
 arithmetic it is the shortest valid operation chain.
 
+The curriculum's teacher trace uses **strict shortest-path labels**:
+an action is a valid lesson choice only if it preserves the minimum
+number of remaining proof steps. This avoids teaching three-step
+detours as though they were one-step examples. Independent formal
+execution verifies every selected shortest trace.
+
 Every training phase remains exactly half solvable, half impossible,
 and balanced across arithmetic and logic. Impossible cases retain
 the ABSTAIN label. All positive process labels are independently
