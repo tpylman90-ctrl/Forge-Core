@@ -392,3 +392,52 @@ infrastructure is validated; genuine neural proof reasoning is not.
 Android companion can develop independently. These experiments
 show an early improvement in single formal operations, **not**
 competent three-step reasoning.
+
+## Nov 3 — English Class curriculum for original Forge Seed (measured)
+
+- [x] Build six original school-style teaching levels:
+      uppercase alphabet, vowels/consonants, word-part joining,
+      noun/verb, sentence subject, and subject–verb–object order
+- [x] Generate **independently verified A/B labels** and balance
+      correct-answer positions for every skill
+- [x] Separate synthetic training, development and final question
+      wording and lexical pools; test semantic role facts from
+      source syntax rather than trusting a generated label
+- [x] Compare ordered lessons against **exactly matched example
+      exposure in mixed order**, plus a corrupted-label null
+- [x] Source-verify and adapt only the original scratch-trained
+      Forge Seed v0.7 checkpoint, with matched public-text rehearsal
+      and no changes to Android or user memory
+- [x] First successful full CPU run **41775152111**:
+      original **48/96**, ordered **48/96**, mixed **53/96**,
+      corrupted **47/96** on synthetic final A/B exercises
+- [x] CI-verified source/model SHA256 read-only audit
+      **41775982211**, artifacts **13297475570**, rescored all
+      frozen/adapted models on the same **48 validation windows**
+- [x] Confirm mixed model's story-language validation loss ratio
+      **1.01182**, within preliminary 5% retention bound, but
+      grammar categories mixed: 12/16 noun/verb and word order,
+      only **4/16** word joining. **No checkpoint promotion**
+- [ ] Introduce generative **short-answer** spelling and word
+      composition rather than only two-choice recognition
+- [ ] Add proper noun pluralization, subject–verb agreement,
+      past/present tense, negation and pronouns as explicit
+      independently verifiable classroom lessons
+- [ ] Build **human-authored, unseen** sentence and spelling
+      evaluation tasks. Do not reuse the now-inspected v1 exam
+- [ ] Test reading comprehension and multi-sentence reference
+      resolution, including who acted and who received
+- [ ] Replicate across independent initialization/data seeds and
+      compare to a matched public-text-only adaptation control
+- [ ] Monitor held-out public-story loss and free-text generation
+      before proposing any language checkpoint promotion
+- [ ] Avoid interpreting text-only vowel/capital exercises as
+      sound-to-letter instruction: auditory phonics needs separate
+      licensed pronunciation/audio evidence and a new model modality
+
+[Verified English Class research and corrected retention metrics](ENGLISH-CLASS-V1-RESULTS.md).
+
+**Decision:** Continue structured English instruction, but redesign
+exercises to test **production**, not just A/B answer preferences.
+The synthetic curriculum is a teaching scaffold, not evidence of
+preschool language competence or independent reasoning.
