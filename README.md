@@ -14,7 +14,41 @@ ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
 
-## Latest RLVR result — safe refusal is not proof construction
+## Latest research: formally verified proof generation (v5–v7)
+
+Forge's neural research branch now trains an **original,
+randomly initialized action proposal policy** that chooses actual
+arithmetic operations or Horn-logic rule applications. Independent
+symbolic code executes and verifies each proposed operation. The
+neural network no longer selects between conveniently supplied
+next-state answers.
+
+Three controlled GitHub CPU studies established an important
+learning limit:
+
+- **v5:** Outcome-only RLVR, dense process rewards and additional
+  on-policy process supervision all collapsed to **abstain on every
+  feasible problem**. [Verified results](docs/RLVR-PROOF-GENERATOR-V5-RESULTS.md).
+- **v6:** Complete oracle-verified teacher action sequences enabled
+  roughly **22–29%** correct non-abstention choices on formal
+  teacher prefixes, but only **1/240** complete feasible proofs
+  across two seeds. [Verified results](docs/RLVR-VERIFIED-TRACES-V6-RESULTS.md).
+- **v7:** A shortest-proof **1→2→3-step curriculum** improved
+  shifted one-step proof completion to **93/240**, compared with
+  **24/240** for equal-update flat long-proof training. However,
+  three-step proof completion fell to **2/240** versus **10/240**
+  for the flat control. Additional RLVR did not improve that
+  depth-transfer result. [Verified results](docs/RLVR-DEPTH-CURRICULUM-V7-RESULTS.md).
+
+**Decision:** preserve these useful synthetic learning signals, but
+**do not promote** any reasoning policy or claim broad comprehension.
+A better curriculum must retain long-proof exposure while
+rehearsing learned short actions. The exact formal solver remains
+authoritative. Forge Seed's original scratch-trained language model,
+the parallel Android companion and user-encrypted memories remain
+separate and unchanged.
+
+## Earlier RLVR result — safe refusal is not proof construction
 
 Two additional bounded RLVR-related studies (v3 and v4) tested whether
 Forge could **reject both offered reasoning steps** when neither was
