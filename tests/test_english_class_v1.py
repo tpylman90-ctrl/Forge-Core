@@ -3,6 +3,7 @@ from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import torch
 
@@ -10,6 +11,7 @@ from forge_core.neural.english_class_v1 import (
     ARMS, EXAM_QUESTIONS, SKILLS, TRAIN_QUESTIONS,
     answer_loss, check_lexical_firewall, encode_exercises,
     experiment, independent_gold, make_exercises, null_labels,
+    comparable_story_loss,
     schedules, score, validate,
 )
 from forge_core.neural.model import ByteTransformer, ModelConfig
@@ -135,6 +137,18 @@ class TestNeuralEnglishTeaching(unittest.TestCase):
             ModelConfig(vocab_size=128, max_seq_len=512,
                         n_layer=1, n_head=2, n_embd=16))
         cls.codec = TinyAsciiCodec()
+
+    def test_retention_uses_exact_same_eval_geometry(self):
+        tokens = torch.arange(1000, dtype=torch.long)
+        with patch("forge_core.neural.english_class_v1.heldout",
+                   return_value=1.2345674) as mock_metric:
+            baseline = comparable_story_loss(self.model, tokens)
+            after = comparable_story_loss(self.model, tokens)
+        self.assertEqual((baseline, after), (1.234567, 1.234567))
+        self.assertEqual(mock_metric.call_count, 2)
+        for call in mock_metric.call_args_list:
+            self.assertEqual(call.kwargs,
+                             {"windows": 48, "seq_len": 64})
 
     def test_prompt_only_inputs_and_classification_gradient(self):
         data = make_exercises("train", per_skill=8, seed=8)
