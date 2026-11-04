@@ -43,3 +43,57 @@ jobs:
           path: android/app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 14
+
+      # Keep signing material unavailable to pull requests.
+      - name: Check release signing configuration
+        id: signing
+        if: github.event_name != 'pull_request'
+        env:
+          FORGE_ANDROID_KEYSTORE_B64: ${{ secrets.FORGE_ANDROID_KEYSTORE_B64 }}
+          FORGE_ANDROID_STORE_PASSWORD: ${{ secrets.FORGE_ANDROID_STORE_PASSWORD }}
+          FORGE_ANDROID_KEY_ALIAS: ${{ secrets.FORGE_ANDROID_KEY_ALIAS }}
+          FORGE_ANDROID_KEY_PASSWORD: ${{ secrets.FORGE_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$FORGE_ANDROID_KEYSTORE_B64" && -z "$FORGE_ANDROID_STORE_PASSWORD" &&
+                -z "$FORGE_ANDROID_KEY_ALIAS" && -z "$FORGE_ANDROID_KEY_PASSWORD" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Signing secrets not yet configured; debug build only."
+          elif [[ -z "$FORGE_ANDROID_KEYSTORE_B64" || -z "$FORGE_ANDROID_STORE_PASSWORD" ||
+                  -z "$FORGE_ANDROID_KEY_ALIAS" || -z "$FORGE_ANDROID_KEY_PASSWORD" ]]; then
+            echo "::error::Release signing needs all four FORGE_ANDROID_* GitHub Actions secrets."
+            exit 1
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Assemble and verify permanently signed release APK
+        if: steps.signing.outputs.ready == 'true'
+        env:
+          FORGE_ANDROID_KEYSTORE_B64: ${{ secrets.FORGE_ANDROID_KEYSTORE_B64 }}
+          FORGE_ANDROID_STORE_PASSWORD: ${{ secrets.FORGE_ANDROID_STORE_PASSWORD }}
+          FORGE_ANDROID_KEY_ALIAS: ${{ secrets.FORGE_ANDROID_KEY_ALIAS }}
+          FORGE_ANDROID_KEY_PASSWORD: ${{ secrets.FORGE_ANDROID_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          KEYSTORE="$RUNNER_TEMP/forge-core-release.jks"
+          trap 'rm -f "$KEYSTORE"' EXIT
+          printf '%s' "$FORGE_ANDROID_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
+          test -s "$KEYSTORE"
+          export FORGE_ANDROID_SIGNING_KEYSTORE="$KEYSTORE"
+          gradle -p android :app:assembleRelease --no-daemon --stacktrace
+          APK="android/app/build/outputs/apk/release/app-release.apk"
+          test -s "$APK"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$APK"
+
+      - name: Publish signed release APK
+        if: steps.signing.outputs.ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-core-signed-release-apk
+          path: android/app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
