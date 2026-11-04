@@ -21,12 +21,14 @@
         android:label="Forge Core"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:icon="@android:drawable/ic_dialog_info">
-        <activity android:name=".MainActivity" android:exported="true">
+        <activity android:name=".ForgeHomeActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Existing teaching screen remains an internal activity for app and notifications. -->
+        <activity android:name=".MainActivity" android:exported="false"/>
         <service
             android:name=".ObserveService"
             android:exported="false"
