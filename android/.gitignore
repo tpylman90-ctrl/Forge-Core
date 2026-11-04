@@ -1,0 +1,9 @@
+# Never commit private Android release signing materials.
+*.jks
+*.keystore
+*.p12
+*.pfx
+*.pem
+*.key
+*signing-secrets*
+*Signing_Secrets*
