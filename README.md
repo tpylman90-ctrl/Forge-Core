@@ -14,7 +14,26 @@ ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
 
-## Latest: verified two-stage language research — November 3
+## New experimental track: verifiable reasoning (RLVR)
+
+Forge now has a **standalone, scratch-started RLVR research policy**
+for small two-step arithmetic and propositional proofs. It generates
+explicit intermediate states checked by pure, deterministic verifiers;
+three training conditions compare final-answer rewards, dense process
+rewards, and additional step-supervised learning.
+
+Both CPU pilot workflows passed, but the process-learning methods
+**did not improve** held-out full-proof accuracy. The second pilot's
+supervised actor scored **45/200 (22.5%)** complete proofs, versus
+**51/200 (25.5%)** for final-answer-only RLVR. Its learned process
+checker achieved **443/800 (55.4%)** candidate-validity judgments,
+without reliable proof-building gains. No weights were promoted.
+Forge Seed's original language network remains unchanged.
+
+[RLVR mechanism](docs/RLVR-PROCESS-V1.md) ·
+[Verified experiment results](docs/RLVR-PROCESS-RESULTS.md)
+
+## Earlier: verified two-stage language research — November 3
 
 The **36-minute** role-contrast experiment completed three seeds and
 84,221 optimizer rounds per arm. It reached **95/540 (17.6%)**
