@@ -1,0 +1,96 @@
+name: Forge Seed — unbiased counterfactual letters v5
+
+on:
+  workflow_dispatch:
+    inputs:
+      updates:
+        description: "Optimizer updates per arm/seed; 20–1300"
+        type: number
+        required: true
+        default: 900
+      seeds:
+        description: "Independent training and data seeds"
+        type: choice
+        options: ["1", "2"]
+        required: true
+        default: "2"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/english-unbiased-copy-v5-001.md"
+
+# Never overlap another English training run. Android is independent.
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  unbiased-letter-transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      UPDATES: ${{ inputs.updates || '900' }}
+      SEEDS: ${{ inputs.seeds || '2' }}
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install audited-source original CPU dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Independent gold, twin-pair, no-vowel-bias and budget tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPDATES" =~ ^[0-9]+$ ]]
+          [[ "$SEEDS" =~ ^[12]$ ]]
+          (( UPDATES >= 20 && UPDATES <= 1300 ))
+          python -m unittest discover -s tests -p test_english_unbiased_v5.py -v
+          python -m unittest discover -s tests -p test_english_position_copy_v4.py -v
+      - name: Recover and verify original scratch-trained public-language source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir source
+          test -f source/checkpoint.pt
+          test -f source/tokenizer.json
+          test -f source/source-manifest.json
+          test -f source/train.txt
+          test -f source/valid.txt
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/start-utc.txt
+      - name: Learn random-character copy behavior across exact counterfactual twins
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_unbiased_v5 \
+            --checkpoint-dir source --out results \
+            --updates "$UPDATES" --seeds "$SEEDS"
+      - name: Record research job end
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p results
+          date -u '+%Y-%m-%dT%H:%M:%SZ' > results/end-utc.txt
+          du -sh results || true
+      - name: Archive temporary research-only checkpoints and all metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-english-unbiased-counterfactual-v5-research
+          path: results/
+          if-no-files-found: warn
+          retention-days: 30
