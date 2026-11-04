@@ -253,7 +253,13 @@ public final class MainActivity extends android.app.Activity {
     }
 
     private void handleQuestion(Intent intent) {
-        if (intent == null || !intent.hasExtra("forge_question_app")) return;
+        if (intent == null) return;
+        if (intent.getBooleanExtra("forge_manual_teach", false)) {
+            intent.removeExtra("forge_manual_teach");
+            showQuestion("Your own example");
+            return;
+        }
+        if (!intent.hasExtra("forge_question_app")) return;
         String pkg = intent.getStringExtra("forge_question_app");
         intent.removeExtra("forge_question_app");
         if (pkg == null || pkg.trim().isEmpty()) return;
