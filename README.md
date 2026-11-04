@@ -14,6 +14,36 @@ ideas independently but must obtain explicit authorization before external
 actions. No current prototype meets that long-term vision.
 
 
+## Latest language study: English Class foundations v1
+
+We added a six-level original English-teaching experiment to the
+scratch-trained Forge Seed v0.7 language network: capital letters,
+vowels/consonants, joining word parts, nouns and verbs, sentence
+subjects, and subject–verb–object order.
+
+One bounded CPU study compared ordered lessons, exactly matched
+mixed-order lessons, and within-skill corrupted-answer labels.
+On 96 newly generated A/B exercises, the frozen model scored
+**48/96**, ordered instruction **48/96**, mixed instruction
+**53/96**, and corrupted labels **47/96**. These small scores
+do not demonstrate reliable English understanding.
+
+A separate read-only audit confirmed checkpoint lineage, exam
+results, and strictly comparable TinyStories validation losses.
+The mixed model's loss was **1.182% higher** than the frozen
+source, inside the preliminary 5% retention gate. Its exam performance
+was uneven: **12/16** on noun/verb and sentence-order questions
+but only **4/16** on word joining.
+
+**No experimental weights were promoted.** Future lessons should
+include genuine short-answer spelling, sentence completion, verb
+agreement and negation, with independently authored challenge
+questions—not just A/B choices.
+
+[Curriculum design](docs/ENGLISH-CLASS-V1.md) ·
+[Verified results and audit](docs/ENGLISH-CLASS-V1-RESULTS.md) ·
+[Read-only audit run](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41775982211)
+
 ## Latest research: formally verified proof generation (v5–v7)
 
 Forge's neural research branch now trains an **original,
