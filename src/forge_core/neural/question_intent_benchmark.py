@@ -124,6 +124,7 @@ def expand(split: str, families: dict[str, tuple[str, ...]],
                     "split": split,
                     "family_id": f"{split}:{label}:{family_index}",
                     "question": question,
+                    "object": item,
                     "label": label,
                 })
     return rows
@@ -166,8 +167,8 @@ def validate(splits: dict[str, list[dict[str, str]]]) -> None:
         raise ValueError("Wording family leaked across splits")
     for a, b in (("train", "development"), ("train", "final"),
                  ("development", "final")):
-        a_items = {row["question"].split()[-1].rstrip("?") for row in splits[a]}
-        b_items = {row["question"].split()[-1].rstrip("?") for row in splits[b]}
+        a_items = {row["object"] for row in splits[a]}
+        b_items = {row["object"] for row in splits[b]}
         if a_items & b_items:
             raise ValueError(f"Object vocabulary leaked across {a}/{b}")
 
