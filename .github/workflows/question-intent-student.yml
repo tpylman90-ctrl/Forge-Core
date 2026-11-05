@@ -1,0 +1,58 @@
+name: Forge question-intent student study v1
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_run_id:
+        type: string
+        description: "Successful public-only v0.7 run containing checkpoint.pt and tokenizer.json"
+        required: true
+        default: "42085634121"
+  push:
+    branches: [main]
+    paths: ["experiments/requests/question-intent-train-v1.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  study:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      BASE_RUN_ID: ${{ github.event_name == 'push' && '42085634121' || inputs.base_run_id || '42085634121' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install tokenizer implementation
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Validate and restore frozen language checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$BASE_RUN_ID" =~ ^[0-9]+$ ]]
+          mkdir -p base artifacts/question-intent-study
+          gh run download "$BASE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir base
+          test -f base/checkpoint.pt
+          test -f base/tokenizer.json
+          test -f base/source-manifest.json
+      - name: Train matched research-only intent heads
+        run: |
+          python -m forge_core.neural.question_intent_student \
+            --checkpoint-dir base --out artifacts/question-intent-study --updates 600
+      - name: Archive frozen-backbone study
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-question-intent-study-v1
+          path: artifacts/question-intent-study/
+          retention-days: 90
+          if-no-files-found: error
