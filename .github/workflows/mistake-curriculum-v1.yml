@@ -1,0 +1,70 @@
+name: Forge Core — model-guided mistake curriculum
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["experiments/requests/mistake-curriculum-v1-20261105.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: forge-mistake-curriculum-v1
+  cancel-in-progress: true
+
+jobs:
+  matched-curriculum:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_RUN: "42123730003"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore the 76k parent checkpoint and exact source
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          for f in checkpoint.pt tokenizer.json source-manifest.json train.txt valid.txt; do
+            test -s "source/$f"
+          done
+      - name: Run matched three-arm curriculum study
+        run: |
+          python -m forge_core.neural.mistake_curriculum_v1 \
+            --source source --out artifacts/mistake-curriculum --updates 3000
+      - name: Evaluate every candidate with the same capability check
+        run: |
+          set -euo pipefail
+          while IFS= read -r ckpt; do
+            d="$(dirname "$ckpt")"
+            python -m forge_core.neural.preschool_eval \
+              --checkpoint-dir "$d" --out "$d/capabilities.json"
+          done < <(find artifacts/mistake-curriculum -type f -name checkpoint.pt | sort)
+      - name: Upload all matched outputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-mistake-curriculum-v1
+          path: artifacts/mistake-curriculum/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Archive research-only candidates durably
+        run: |
+          set -euo pipefail
+          tar -czf forge-mistake-curriculum-v1.tar.gz -C artifacts mistake-curriculum
+          gh release create forge-mistake-curriculum-v1-20261105 \
+            forge-mistake-curriculum-v1.tar.gz \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge mistake-curriculum matched study (research only)" \
+            --notes "Nine 3,000-update candidates from the exact 76,000-step Forge Seed parent. Includes uniform replay, model-surprisal replay, and source-verified correction-trace arms across three seeds each; common fixed-window text evaluation and capability checks. No candidate is promoted. The correction trace is source-grounded token evidence, not an external-AI semantic explanation."
