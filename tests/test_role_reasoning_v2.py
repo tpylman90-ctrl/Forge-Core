@@ -14,11 +14,8 @@ class TestRoleReasoningV2(unittest.TestCase):
         other = make_train(202, 400)
         self.assertEqual(first, same)
         self.assertNotEqual(first, other)
-        overlap = ({row.prompt("name") for row in first} &
-                   {row.prompt("name") for row in other})
-        # Seed independence means independent sampling/order and optimizer
-        # initialization, not a forced disjoint partition of a shared curriculum.
-        self.assertLess(len(overlap), len(first) // 4)
+        self.assertFalse({row.prompt("name") for row in first} &
+                         {row.prompt("name") for row in other})
 
     def test_episode_pairs_reverse_roles_and_all_rows_have_gold_evidence(self):
         cases = make_train(101, 160)
