@@ -473,7 +473,6 @@ public final class ForgeHomeActivity extends Activity {
         if (!model.status().available) {
             voiceTurn = false;
             showTab(0);
-            if (avatarView != null) avatarView.pulse();
             return;
         }
 
@@ -481,7 +480,6 @@ public final class ForgeHomeActivity extends Activity {
         responseStarted = false;
         streaming = new StringBuilder();
         showTab(0);
-        if (avatarView != null) avatarView.pulse();
         try {
             model.generate(prompt, new ForgeModelAdapter.Listener() {
                 @Override public void onToken(String token) {
@@ -517,7 +515,6 @@ public final class ForgeHomeActivity extends Activity {
                             }
                         } else notice = "Local model finished without a reply.";
                         if (selectedTab == 0) showTab(0);
-                        if (avatarView != null) avatarView.pulse();
                         if (speakAnswer && !answer.trim().isEmpty()) speakReplyOffline(answer);
                     });
                 }
@@ -530,7 +527,6 @@ public final class ForgeHomeActivity extends Activity {
                         streaming.setLength(0);
                         notice = "Local inference unavailable: " + (reason == null ? "unknown error" : reason);
                         if (selectedTab == 0) showTab(0);
-                        if (avatarView != null) avatarView.pulse();
                     });
                 }
             });
@@ -1006,7 +1002,8 @@ public final class ForgeHomeActivity extends Activity {
         platform.addView(text("APP & DEVICE", 11, ACCENT, true));
         space(platform, 7);
         platform.addView(text("Package: " + getPackageName(), 13, WHITE, false));
-        platform.addView(text("Android API: " + android.os.Build.VERSION.SDK_INT, 13, WHITE, false));        platform.addView(text("Version: " + appVersion(), 13, WHITE, false));
+        platform.addView(text("Android API: " + android.os.Build.VERSION.SDK_INT, 13, WHITE, false));
+        platform.addView(text("Version: " + appVersion(), 13, WHITE, false));
         platform.addView(text("Network permission: " +
                 (getPackageManager().checkPermission("android.permission.INTERNET", getPackageName())
                         == PackageManager.PERMISSION_GRANTED ? "granted" : "not requested"), 13, WHITE, false));
