@@ -568,9 +568,8 @@ isolated.
   (60k)**; separate 256-window final diagnostic also improved to **2.205533**.
 - [x] Comprehension diagnostic remains **20/40** forced choice with **0/20**
   both-mirror pairs correct: no demonstrated comprehension gain.
-- [x] Create an unpublished draft archive for the full 52k checkpoint and
-  set up automatic draft archiving for future core continuations; archive
-  the 60k checkpoint with the verified lineage before relying on it as a
-  long-term continuation point.
+- [x] Create unpublished draft archives for the 52k and 60k checkpoints,
+  each with verified lineage; configure future core continuations to
+  archive automatically. Android weights remain unchanged.
 - [ ] Continue the next bounded core language run only after 60k parent
   hashes and data lineage verify.
