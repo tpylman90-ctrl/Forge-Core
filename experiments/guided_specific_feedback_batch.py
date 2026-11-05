@@ -1,0 +1,542 @@
+"""Five paired 320-update studies of answer-only vs specific mistake-and-repair feedback."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import random
+import re
+import statistics
+from pathlib import Path
+
+import torch
+from torch import nn
+
+from forge_core.neural.model import ByteTransformer, ModelConfig
+from forge_core.neural.preschool_qa import verify_source
+from forge_core.neural.train import make_batch
+
+ERRORS = ("missing", "extra", "order", "spacing", "wrong_letter")
+TASKS = ("join", "spaced")
+CONSONANTS = "bcdfghjklmnpqrstvwxyz"
+VOWELS = "aeiou"
+RUNS = 5
+TRAIN_SEQUENCES_PER_RUN = 60
+EXAM_SEQUENCES = 10
+UPDATES = 320
+
+
+def digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def save_json(path: Path, obj: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(obj, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def sequence_pool() -> list[str]:
+    return [a + b + c for a in CONSONANTS for b in VOWELS
+            for c in CONSONANTS if c != a]
+
+
+def corrupt(source: str, task: str, error: str, rng: random.Random) -> tuple[str, str]:
+    gold = source if task == "join" else " ".join(source)
+    extra = next(letter for letter in "abcdefghijklmnopqrstuvwxyz" if letter not in source)
+    if error == "missing":
+        pos = rng.randrange(3)
+        compact = source[:pos] + source[pos + 1:]
+        attempt = compact if task == "join" else " ".join(compact)
+    elif error == "extra":
+        compact = source + extra
+        attempt = compact if task == "join" else " ".join(compact)
+    elif error == "order":
+        compact = source[::-1]
+        attempt = compact if task == "join" else " ".join(compact)
+    elif error == "spacing":
+        attempt = " ".join(source) if task == "join" else source
+    elif error == "wrong_letter":
+        pos = rng.randrange(3)
+        substitute = next(letter for letter in "abcdefghijklmnopqrstuvwxyz"
+                          if letter not in source)
+        compact = source[:pos] + substitute + source[pos + 1:]
+        attempt = compact if task == "join" else " ".join(compact)
+    else:
+        raise ValueError("Unknown error category")
+    compact_attempt = "".join(attempt.split())
+    valid = {
+        "missing": len(compact_attempt) == 2,
+        "extra": len(compact_attempt) == 4,
+        "order": sorted(compact_attempt) == sorted(source) and compact_attempt != source,
+        "spacing": compact_attempt == source and attempt != gold,
+        "wrong_letter": (len(compact_attempt) == 3 and
+                         sorted(compact_attempt) != sorted(source) and
+                         sum(x != y for x, y in zip(compact_attempt, source)) == 1),
+    }[error]
+    if not valid:
+        raise AssertionError(f"Generated attempt does not verify as {error}: {source} / {attempt}")
+    return attempt, gold
+
+
+def build_examples(sequences: list[str], seed: int) -> list[dict]:
+    rng = random.Random(seed)
+    out = []
+    for source in sequences:
+        for task in TASKS:
+            for error in ERRORS:
+                attempt, gold = corrupt(source, task, error, rng)
+                out.append({"source": source, "task": task, "error": error,
+                            "attempt": attempt, "gold": gold})
+    return out
+
+
+def instruction(task: str) -> str:
+    return ("join all letters in order without spaces" if task == "join"
+            else "copy all letters in order with one space between letters")
+
+
+def specific_explanation(row: dict) -> tuple[str, str]:
+    source, attempt = row["source"], row["attempt"]
+    compact = "".join(attempt.split())
+    error, task = row["error"], row["task"]
+    if error == "missing":
+        index = next(i for i, ch in enumerate(source) if ch not in compact)
+        letter = source[index]
+        diagnosis = f"Your attempt '{attempt}' leaves out the source letter '{letter}'."
+        if index == 0:
+            repair = f"insert '{letter}' at the start"
+        elif index == len(source) - 1:
+            repair = f"insert '{letter}' at the end"
+        else:
+            repair = f"insert '{letter}' between '{source[index - 1]}' and '{source[index + 1]}'"
+    elif error == "extra":
+        letter = next(ch for ch in compact if compact.count(ch) > source.count(ch))
+        diagnosis = f"Your attempt '{attempt}' includes extra letter '{letter}', which is not in the source."
+        repair = f"remove the extra '{letter}'"
+    elif error == "order":
+        diagnosis = f"Your attempt '{attempt}' has the source letters in the wrong order; the source order is '{source}'."
+        repair = f"put the letters back in source order '{source}'"
+    elif error == "spacing" and task == "join":
+        diagnosis = f"Your attempt '{attempt}' has spaces, but this task requires one joined string."
+        repair = "remove the spaces"
+    elif error == "spacing":
+        diagnosis = f"Your attempt '{attempt}' has no spaces, but this task requires one space between letters."
+        repair = "add one space between each letter"
+    else:
+        index = next(i for i, (got, want) in enumerate(zip(compact, source)) if got != want)
+        diagnosis = (f"At position {index + 1}, your attempt has '{compact[index]}' but "
+                     f"the source has '{source[index]}'.")
+        repair = f"replace '{compact[index]}' with '{source[index]}' at position {index + 1}"
+    return diagnosis, repair
+
+
+def target(row: dict, method: str) -> str:
+    if method == "answer_only":
+        return f"Correct answer: {row['gold']}.\n"
+    diagnosis, repair = specific_explanation(row)
+    return (f"Mistake: {diagnosis} Fix: {repair}. "
+            f"Correct answer: {row['gold']}.\n")
+
+
+def prompt(row: dict, train: bool) -> str:
+    if train:
+        lead = "Feedback lesson"
+        source_label, task_label, attempt_label = "Source letters", "Task", "Proposed answer"
+        request = "This response is incorrect. Give helpful feedback and a correction."
+    else:
+        lead = "Review this attempt"
+        source_label, task_label, attempt_label = "Letters given", "Required format", "Attempt"
+        request = "The attempt is wrong. Give helpful feedback and a correction."
+    return (f"{lead}\n{source_label}: {' '.join(row['source'])}\n"
+            f"{task_label}: {instruction(row['task'])}.\n"
+            f"{attempt_label}: {row['attempt']}\n{request}\nResponse:")
+
+
+def verify_example(row: dict) -> None:
+    expected = row["source"] if row["task"] == "join" else " ".join(row["source"])
+    _, independently_derived = corrupt(row["source"], row["task"], row["error"],
+                                         random.Random(19))
+    if expected != row["gold"] or independently_derived != row["gold"]:
+        raise AssertionError("Training label disagrees with deterministic verifier")
+    compact = "".join(row["attempt"].split())
+    checks = {
+        "missing": len(compact) < len(row["source"]),
+        "extra": len(compact) > len(row["source"]),
+        "order": sorted(compact) == sorted(row["source"]) and compact != row["source"],
+        "spacing": compact == row["source"] and row["attempt"] != row["gold"],
+        "wrong_letter": len(compact) == len(row["source"]) and
+                        sorted(compact) != sorted(row["source"]),
+    }
+    if not checks[row["error"]]:
+        raise AssertionError("Attempt does not satisfy its claimed error class")
+
+
+def prepare(source_dir: Path, out: Path) -> dict:
+    torch.set_num_threads(min(2, torch.get_num_threads()))
+    ckpt, manifest, codec = verify_source(source_dir)
+    pool = sequence_pool()
+    if len(pool) < RUNS * TRAIN_SEQUENCES_PER_RUN + EXAM_SEQUENCES:
+        raise AssertionError("Insufficient unique source sequences")
+    random.Random(90817).shuffle(pool)
+    group_sets = [pool[i * TRAIN_SEQUENCES_PER_RUN:(i + 1) * TRAIN_SEQUENCES_PER_RUN]
+                  for i in range(RUNS)]
+    exam_sequences = pool[RUNS * TRAIN_SEQUENCES_PER_RUN:
+                          RUNS * TRAIN_SEQUENCES_PER_RUN + EXAM_SEQUENCES]
+    if len(set(exam_sequences).intersection(*[set(x) for x in group_sets])):
+        raise AssertionError("Exam overlaps training")
+    exam = build_examples(exam_sequences, 90819)
+    datasets = [build_examples(group, 90821 + i) for i, group in enumerate(group_sets)]
+    for group in datasets + [exam]:
+        for row in group:
+            verify_example(row)
+    # Distinct groups and the exam are pairwise disjoint at source-sequence level.
+    all_groups = group_sets + [exam_sequences]
+    for i, left in enumerate(all_groups):
+        for right in all_groups[i + 1:]:
+            if set(left) & set(right):
+                raise AssertionError("Dataset partitions overlap")
+
+    model = ByteTransformer(ModelConfig(**ckpt["configuration"]))
+    model.load_state_dict(ckpt["model"], strict=True)
+    exam_metrics = score(model, codec, exam)
+    train_ids = torch.tensor(codec.encode((source_dir / "train.txt").read_text()).ids,
+                             dtype=torch.long)
+    valid_ids = torch.tensor(codec.encode((source_dir / "valid.txt").read_text()).ids,
+                             dtype=torch.long)
+    before_loss = story_loss(model, valid_ids)
+
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "checkpoint.pt").write_bytes((source_dir / "checkpoint.pt").read_bytes())
+    for name in ("source-manifest.json", "tokenizer.json", "train.txt", "valid.txt"):
+        (out / name).write_bytes((source_dir / name).read_bytes())
+    for i, rows in enumerate(datasets, 1):
+        save_json(out / f"train-{i:02d}.json", {"examples": rows})
+    save_json(out / "exam.json", {"examples": exam})
+    result = {
+        "schema": 1, "run_count": RUNS, "updates_per_run": UPDATES,
+        "methods": ["answer_only", "guided_specific"],
+        "datasets_per_method": RUNS,
+        "training_examples_per_dataset": len(datasets[0]),
+        "heldout_examples": len(exam),
+        "training_sequence_count_each": TRAIN_SEQUENCES_PER_RUN,
+        "heldout_sequence_count": EXAM_SEQUENCES,
+        "dataset_pairs_disjoint": True,
+        "shared_exam_sequence_sha256": digest("\n".join(exam_sequences).encode()),
+        "train_sequence_sha256": {
+            str(i + 1): digest("\n".join(group).encode()) for i, group in enumerate(group_sets)},
+        "base_checkpoint_sha256": digest((source_dir / "checkpoint.pt").read_bytes()),
+        "source_train_sha256": manifest["train_sha256"],
+        "source_valid_sha256": manifest["valid_sha256"],
+        "source_tokenizer_sha256": ckpt["tokenizer_sha256"],
+        "starting_checkpoint_step": ckpt["step"],
+        "parameter_count": model.num_parameters,
+        "baseline": {"exam": exam_metrics, "story_loss": before_loss},
+        "research_only": True,
+        "limitations": [
+            "Synthetic three-letter copying tasks; this is not a general-reasoning benchmark.",
+            "Ten held-out source strings create 100 correlated task/error cases.",
+            "Reason score requires an exact attempt-specific diagnosis and repair sentence.",
+            "Fresh lineage from the public Forge Seed checkpoint; not a continuation of lost Session 4 weights.",
+        ],
+    }
+    save_json(out / "manifest.json", result)
+    return result
+
+
+def encode_rows(rows: list[dict], method: str, codec, cfg):
+    batches = []
+    for row in rows:
+        p = codec.encode(prompt(row, True)).ids
+        y = codec.encode(" " + target(row, method)).ids
+        if not p or not y or len(p) + len(y) - 1 > cfg.max_seq_len:
+            raise ValueError("Training example exceeds model context")
+        batches.append((p + y[:-1], [-100] * (len(p) - 1) + y))
+    return batches
+
+
+def task_loss(model, batch) -> torch.Tensor:
+    length = max(len(x) for x, _ in batch)
+    x = torch.zeros((len(batch), length), dtype=torch.long)
+    y = torch.full((len(batch), length), -100, dtype=torch.long)
+    for i, (tokens, labels) in enumerate(batch):
+        x[i, :len(tokens)] = torch.tensor(tokens, dtype=torch.long)
+        y[i, :len(labels)] = torch.tensor(labels, dtype=torch.long)
+    logits, _ = model(x)
+    return nn.functional.cross_entropy(logits.reshape(-1, model.cfg.vocab_size),
+                                       y.reshape(-1), ignore_index=-100)
+
+
+@torch.no_grad()
+def generate(model, codec, text: str, max_tokens: int = 112) -> str:
+    state = codec.encode(text).ids
+    generated = []
+    for _ in range(max_tokens):
+        x = torch.tensor([state[-model.cfg.max_seq_len:]], dtype=torch.long)
+        logits, _ = model(x)
+        token = int(logits[0, -1].argmax())
+        state.append(token)
+        generated.append(token)
+        decoded = codec.decode(generated)
+        if "\n" in decoded:
+            return decoded.split("\n", 1)[0]
+    return codec.decode(generated)
+
+
+def score(model, codec, rows: list[dict]) -> dict:
+    totals = {"answer": 0, "reason": 0, "both": 0}
+    by_error = {e: {"answer": 0, "reason": 0, "both": 0, "total": 0} for e in ERRORS}
+    by_task = {t: {"answer": 0, "reason": 0, "both": 0, "total": 0} for t in TASKS}
+    examples = []
+    model.eval()
+    for row in rows:
+        generated = generate(model, codec, prompt(row, False))
+        answer_match = re.search(r"Correct answer:\s*([a-z ]+?)(?:\.|$)", generated, re.I)
+        answer = " ".join(answer_match.group(1).casefold().split()) if answer_match else ""
+        answer_ok = answer == row["gold"]
+        diagnosis, repair = specific_explanation(row)
+        expected_explanation = f"Mistake: {diagnosis} Fix: {repair}.".casefold()
+        answer_prefix = generated.casefold().split("correct answer:", 1)[0]
+        reason_ok = expected_explanation in answer_prefix
+        both_ok = answer_ok and reason_ok
+        values = {"answer": answer_ok, "reason": reason_ok, "both": both_ok}
+        for key, value in values.items():
+            totals[key] += int(value)
+            by_error[row["error"]][key] += int(value)
+            by_task[row["task"]][key] += int(value)
+        by_error[row["error"]]["total"] += 1
+        by_task[row["task"]]["total"] += 1
+        if len(examples) < 10:
+            examples.append({"source": row["source"], "task": row["task"],
+                             "error": row["error"], "generated": generated,
+                             "answer_ok": answer_ok, "reason_ok": reason_ok,
+                             "both_ok": both_ok})
+    n = len(rows)
+    return {"total": n, **{k: {"correct": v, "rate": round(v / n, 4)}
+                            for k, v in totals.items()},
+            "by_error": by_error, "by_task": by_task, "examples": examples,
+            "reason_scoring": "exact attempt-specific diagnosis plus repair instruction before Correct answer field"}
+
+
+@torch.no_grad()
+def story_loss(model, tokens: torch.Tensor, windows: int = 32, seq_len: int = 128) -> float:
+    gen = torch.Generator().manual_seed(61129)
+    starts = torch.randint(0, tokens.numel() - seq_len - 1, (windows,), generator=gen)
+    x = torch.stack([tokens[i:i + seq_len] for i in starts])
+    y = torch.stack([tokens[i + 1:i + seq_len + 1] for i in starts])
+    _, loss = model(x, y)
+    return round(float(loss), 6)
+
+
+def train_one(source_dir: Path, prepared_dir: Path, out: Path,
+              dataset_id: int, method: str) -> dict:
+    if dataset_id not in range(1, RUNS + 1) or method not in ("answer_only", "guided_specific"):
+        raise ValueError("Invalid matrix parameters")
+    torch.set_num_threads(min(2, torch.get_num_threads()))
+    ckpt, _, codec = verify_source(source_dir)
+    manifest = json.loads((prepared_dir / "manifest.json").read_text(encoding="utf-8"))
+    rows = json.loads((prepared_dir / f"train-{dataset_id:02d}.json").read_text())['examples']
+    exam = json.loads((prepared_dir / "exam.json").read_text())['examples']
+    for row in rows + exam:
+        verify_example(row)
+    cfg = ModelConfig(**ckpt["configuration"])
+    seed = 10000 + dataset_id
+    torch.manual_seed(seed)
+    model = ByteTransformer(cfg)
+    model.load_state_dict(ckpt["model"], strict=True)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=0.00012)
+    encoded = encode_rows(rows, method, codec, cfg)
+    py_rng = random.Random(202600 + dataset_id)
+    text_rng = torch.Generator().manual_seed(207700 + dataset_id)
+    train_tokens = torch.tensor(codec.encode((source_dir / "train.txt").read_text()).ids,
+                                dtype=torch.long)
+    valid_tokens = torch.tensor(codec.encode((source_dir / "valid.txt").read_text()).ids,
+                                dtype=torch.long)
+    curve = []
+    model.train()
+    for step in range(1, UPDATES + 1):
+        batch = [encoded[py_rng.randrange(len(encoded))] for _ in range(4)]
+        x, y = make_batch(train_tokens, 2, 64, text_rng)
+        _, language = model(x, y)
+        supervised = task_loss(model, batch)
+        loss = 0.8 * supervised + 0.2 * language
+        optimizer.zero_grad(set_to_none=True)
+        loss.backward()
+        nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        optimizer.step()
+        if step in (160, 320):
+            model.eval()
+            point = {"step": step, "heldout": score(model, codec, exam),
+                     "story_loss": story_loss(model, valid_tokens)}
+            curve.append(point)
+            print(json.dumps({"data": dataset_id, "method": method, "step": step,
+                              "answer": point["heldout"]["answer"]["correct"],
+                              "reason": point["heldout"]["reason"]["correct"],
+                              "both": point["heldout"]["both"]["correct"],
+                              "story_loss": point["story_loss"]}), flush=True)
+            model.train()
+    final = curve[-1]
+    out.mkdir(parents=True, exist_ok=True)
+    result = {"data_id": dataset_id, "method": method, "updates": UPDATES,
+              "training_examples": len(rows), "heldout_examples": len(exam),
+              "training_source_hash": manifest["train_sequence_sha256"][str(dataset_id)],
+              "shared_exam_hash": manifest["shared_exam_sequence_sha256"],
+              "base_checkpoint_hash": manifest["base_checkpoint_sha256"],
+              "curve": curve, "final": final, "promoted": False,
+              "research_only": True}
+    save_json(out / f"run-{dataset_id:02d}-{method}.json", result)
+    torch.save({"schema": 1, "research_only": True, "promoted": False,
+                "data_id": dataset_id, "method": method, "updates": UPDATES,
+                "base_checkpoint_sha256": manifest["base_checkpoint_sha256"],
+                "training_source_sha256": result["training_source_hash"],
+                "configuration": {k: getattr(cfg, k) for k in
+                                  ("vocab_size", "max_seq_len", "n_layer", "n_head", "n_embd", "dropout")},
+                "model": model.state_dict()},
+               out / f"run-{dataset_id:02d}-{method}-step320.pt")
+    return result
+
+
+def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
+    files = sorted(results_dir.glob("run-*.json"))
+    results = [json.loads(p.read_text()) for p in files]
+    expected = {(i, method) for i in range(1, RUNS + 1)
+                for method in ("answer_only", "guided_specific")}
+    got = {(r["data_id"], r["method"]) for r in results}
+    if got != expected:
+        raise ValueError(f"Expected all 10 run results; missing={sorted(expected-got)} extra={sorted(got-expected)}")
+    metrics = ("answer", "reason", "both")
+    summary = {}
+    for method in ("answer_only", "guided_specific"):
+        subset = [r for r in results if r["method"] == method]
+        summary[method] = {}
+        for step in (160, 320):
+            arm = [next(x for x in r["curve"] if x["step"] == step) for r in subset]
+            summary[method][str(step)] = {
+                m: {"mean_correct": round(statistics.mean(x["heldout"][m]["correct"] for x in arm), 3),
+                    "sd_correct": round(statistics.stdev(x["heldout"][m]["correct"] for x in arm), 3),
+                    "mean_rate": round(statistics.mean(x["heldout"][m]["rate"] for x in arm), 4)}
+                for m in metrics}
+            summary[method][str(step)]["story_loss_mean"] = round(
+                statistics.mean(x["story_loss"] for x in arm), 6)
+            summary[method][str(step)]["story_loss_sd"] = round(
+                statistics.stdev(x["story_loss"] for x in arm), 6)
+    pairs = []
+    for data_id in range(1, RUNS + 1):
+        pair = {r["method"]: r for r in results if r["data_id"] == data_id}
+        a, e = pair["answer_only"]["final"]["heldout"], pair["guided_specific"]["final"]["heldout"]
+        pairs.append({"data_id": data_id,
+                      **{m: {"answer_only": a[m]["correct"], "guided_specific": e[m]["correct"],
+                             "delta_guided_minus_answer": e[m]["correct"] - a[m]["correct"]}
+                         for m in metrics},
+                      "story_loss": {"answer_only": pair["answer_only"]["final"]["story_loss"],
+                                     "guided_specific": pair["guided_specific"]["final"]["story_loss"]}})
+    paired = {}
+    for metric in metrics:
+        deltas = [r[metric]["delta_guided_minus_answer"] for r in pairs]
+        paired[metric] = {"mean_delta": round(statistics.mean(deltas), 3),
+                          "sd_delta": round(statistics.stdev(deltas), 3),
+                          "guided_specific_wins": sum(d > 0 for d in deltas),
+                          "ties": sum(d == 0 for d in deltas),
+                          "answer_only_wins": sum(d < 0 for d in deltas),
+                          "per_dataset_delta": deltas}
+    subgroup_comparison = {}
+    for group_key, labels in (("by_error", ERRORS), ("by_task", TASKS)):
+        subgroup_comparison[group_key] = {}
+        for label in labels:
+            comparison = {}
+            for metric in metrics:
+                answer_values = [next(r for r in results if r["data_id"] == i and
+                                      r["method"] == "answer_only")["final"]["heldout"][group_key][label][metric]
+                                 for i in range(1, RUNS + 1)]
+                guided_values = [next(r for r in results if r["data_id"] == i and
+                                      r["method"] == "guided_specific")["final"]["heldout"][group_key][label][metric]
+                                 for i in range(1, RUNS + 1)]
+                deltas = [g - a for a, g in zip(answer_values, guided_values)]
+                comparison[metric] = {
+                    "answer_only_mean": round(statistics.mean(answer_values), 3),
+                    "guided_specific_mean": round(statistics.mean(guided_values), 3),
+                    "mean_delta": round(statistics.mean(deltas), 3),
+                    "guided_specific_wins": sum(d > 0 for d in deltas),
+                    "ties": sum(d == 0 for d in deltas),
+                    "answer_only_wins": sum(d < 0 for d in deltas),
+                    "per_dataset_delta": deltas,
+                }
+            subgroup_comparison[group_key][label] = comparison
+    prep = json.loads((prepared_dir / "manifest.json").read_text())
+    report = {"status": "research_only_no_promotion", "runs_completed": len(results),
+              "paired_datasets": RUNS, "updates_per_run": UPDATES,
+              "methods": ["answer_only", "guided_specific"], "summary": summary,
+              "paired_320_update_comparison": paired, "subgroup_comparison": subgroup_comparison,
+              "per_dataset": pairs,
+              "shared_exam_baseline": prep["baseline"],
+              "dataset_design": {k: prep[k] for k in (
+                  "training_examples_per_dataset", "heldout_examples",
+                  "training_sequence_count_each", "heldout_sequence_count",
+                  "dataset_pairs_disjoint", "shared_exam_sequence_sha256",
+                  "train_sequence_sha256", "base_checkpoint_sha256")},
+              "limitations": prep["limitations"] + [
+                  "Five paired datasets provide a small robustness check, not a definitive population estimate."]}
+    save_json(results_dir / "cross-examination.json", report)
+    lines = ["# Forge Core — five paired 320-update guided feedback runs", "",
+             "Research only; no checkpoint was promoted.", "",
+             "## Mean held-out scores", "",
+             "| Method | Updates | Exact correction / 100 | Correct reason / 100 | Both / 100 | Story loss |",
+             "|---|---:|---:|---:|---:|---:|"]
+    for method in ("answer_only", "guided_specific"):
+        for step in (160, 320):
+            s = summary[method][str(step)]
+            lines.append(f"| {method} | {step} | {s['answer']['mean_correct']:.1f} ± {s['answer']['sd_correct']:.1f} | "
+                         f"{s['reason']['mean_correct']:.1f} ± {s['reason']['sd_correct']:.1f} | "
+                         f"{s['both']['mean_correct']:.1f} ± {s['both']['sd_correct']:.1f} | "
+                         f"{s['story_loss_mean']:.6f} ± {s['story_loss_sd']:.6f} |")
+    lines += ["", "## Paired 320-update comparison", "",
+              "| Measure | Mean guided-minus-answer-only delta | Guided wins | Ties | Answer-only wins |",
+              "|---|---:|---:|---:|---:|"]
+    for metric in metrics:
+        x = paired[metric]
+        lines.append(f"| {metric} | {x['mean_delta']:+.2f}/100 | {x['guided_specific_wins']} | {x['ties']} | {x['answer_only_wins']} |")
+    lines += ["", "## By mistake type (mean correct cases per 20)", "",
+              "| Error | Answer-only correction | Guided correction | Answer-only explanation | Guided explanation | Guided both |",
+              "|---|---:|---:|---:|---:|---:|"]
+    for label in ERRORS:
+        x = subgroup_comparison["by_error"][label]
+        lines.append(f"| {label} | {x['answer']['answer_only_mean']:.1f} | {x['answer']['guided_specific_mean']:.1f} | "
+                     f"{x['reason']['answer_only_mean']:.1f} | {x['reason']['guided_specific_mean']:.1f} | "
+                     f"{x['both']['guided_specific_mean']:.1f} |")
+    lines += ["", "## By task format (mean correct cases per 50)", "",
+              "| Task | Answer-only correction | Guided correction | Guided explanation | Guided both |",
+              "|---|---:|---:|---:|---:|"]
+    for label in TASKS:
+        x = subgroup_comparison["by_task"][label]
+        lines.append(f"| {label} | {x['answer']['answer_only_mean']:.1f} | {x['answer']['guided_specific_mean']:.1f} | "
+                     f"{x['reason']['guided_specific_mean']:.1f} | {x['both']['guided_specific_mean']:.1f} |")
+    lines += ["", "Training sets are pairwise disjoint and similarly sized; every run used the same untouched exam. "
+              "The five run pairs share one original public Forge Seed checkpoint, not the lost Session 4 local checkpoint.", ""]
+    (results_dir / "cross-examination.md").write_text("\n".join(lines), encoding="utf-8")
+    return report
+
+
+def main():
+    p = argparse.ArgumentParser()
+    p.add_argument("mode", choices=("prepare", "train", "aggregate"))
+    p.add_argument("--source-dir", type=Path, default=Path("original"))
+    p.add_argument("--prepared-dir", type=Path, default=Path("prepared"))
+    p.add_argument("--out", type=Path, default=Path("results"))
+    p.add_argument("--data-id", type=int)
+    p.add_argument("--method", choices=("answer_only", "guided_specific"))
+    a = p.parse_args()
+    if a.mode == "prepare":
+        result = prepare(a.source_dir, a.prepared_dir)
+        print(json.dumps({"prepared": True, "base_hash": result["base_checkpoint_sha256"],
+                          "exam": result["baseline"]["exam"]}, indent=2), flush=True)
+    elif a.mode == "train":
+        if a.data_id is None or a.method is None:
+            p.error("train mode requires --data-id and --method")
+        train_one(a.source_dir, a.prepared_dir, a.out, a.data_id, a.method)
+    else:
+        result = aggregate(a.out, a.prepared_dir)
+        print(json.dumps({"completed": result["runs_completed"],
+                          "comparison": result["paired_320_update_comparison"]}, indent=2), flush=True)
+
+
+if __name__ == "__main__":
+    main()
