@@ -23,7 +23,7 @@ import javax.crypto.spec.GCMParameterSpec;
 /**
  * Independent, encrypted on-device conversation journal (schema 1).
  * Never shares a file or key alias with the v0.2 confirmed-principles vault.
- * Journal entries are not promoted to learned principles automatically.
+ * User and teacher entries are not promoted to learned principles automatically.
  */
 public final class EncryptedJournal {
     private static final String KEY_ALIAS = "forge_core_journal_v1";
@@ -115,7 +115,7 @@ public final class EncryptedJournal {
     }
 
     public synchronized void append(String role, String message) throws Exception {
-        if (!"user".equals(role) && !"forge".equals(role)) {
+        if (!"user".equals(role) && !"forge".equals(role) && !"teacher".equals(role)) {
             throw new IllegalArgumentException("Unknown conversation role");
         }
         if (message == null || message.trim().isEmpty()

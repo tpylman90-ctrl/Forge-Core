@@ -6,6 +6,7 @@ import android.app.AppOpsManager;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -30,11 +31,12 @@ import java.text.DateFormat;
 import java.util.Date;
 
 /**
- * Offline-first Forge communication shell.
- * The initial adapter is explicitly unavailable: no generated replies or fake AI.
+ * Offline-first Forge communication shell with an optional, clearly labeled
+ * pretrained local language bridge. The helper is not Forge Seed.
  * Existing v0.2 teaching, observation and memory vault remain in MainActivity.
  */
 public final class ForgeHomeActivity extends Activity {
+    private static final int REQUEST_GGUF = 4107;
     private static final int BG = Color.rgb(12, 18, 29);
     private static final int SURFACE = Color.rgb(22, 33, 48);
     private static final int SURFACE_RAISED = Color.rgb(29, 45, 62);
@@ -43,7 +45,7 @@ public final class ForgeHomeActivity extends Activity {
     private static final int MUTED = Color.rgb(161, 182, 199);
     private static final String[] TABS = {"Chat", "History", "Memory", "Settings", "Diagnostics"};
 
-    private final ForgeModelAdapter model = new ForgeModelAdapter.Unavailable();
+    private LocalLanguageBridge model;
     private EncryptedJournal journal;
     private FrameLayout content;
     private TextView[] navigation;
@@ -54,6 +56,7 @@ public final class ForgeHomeActivity extends Activity {
 
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
+        model = new LocalLanguageBridge(this);
         journal = new EncryptedJournal(this);
         getWindow().setStatusBarColor(BG);
         getWindow().setNavigationBarColor(BG);
@@ -108,6 +111,14 @@ public final class ForgeHomeActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (content != null) showTab(selectedTab);
+    }
+
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REQUEST_GGUF && resultCode == RESULT_OK && data != null) {
+            Uri uri = data.getData();
+            if (uri != null) model.importModel(uri, operationListener("Model import"));
+        }
     }
 
     @Override public void onBackPressed() {
@@ -237,12 +248,20 @@ public final class ForgeHomeActivity extends Activity {
         messages.setPadding(dp(18), dp(18), dp(18), dp(8));
         scrolling.addView(messages);
 
+        ForgeModelAdapter.ModelStatus modelStatus = model.status();
         LinearLayout status = panel(messages, false);
-        status.addView(text("●  MODEL NOT CONNECTED", 12, ACCENT, true));
+        status.addView(text(modelStatus.available
+                ? "●  LOCAL LANGUAGE BRIDGE READY"
+                : "●  FORGE SEED NOT CONNECTED", 12, ACCENT, true));
         space(status, 9);
-        status.addView(text("The real Forge language model is still being trained.", 16, WHITE, true));
+        status.addView(text(modelStatus.available
+                ? "Replies are from the optional local helper model."
+                : "Forge Seed is still being developed.", 16, WHITE, true));
         space(status, 6);
-        status.addView(text("Use this space as an encrypted local conversation journal. Notes are not sent to an AI or promoted into learned memories.", 13, MUTED, false));
+        status.addView(text(modelStatus.available
+                ? "This pretrained helper runs on this device. It is not Forge Seed, and your messages do not train Forge."
+                : "You can write encrypted notes here, or import a local GGUF in Settings to chat with a clearly labeled helper. Notes are not sent to an AI until the helper is loaded.",
+                13, MUTED, false));
 
         if (!notice.isEmpty()) {
             LinearLayout info = panel(messages, true);
@@ -252,9 +271,9 @@ public final class ForgeHomeActivity extends Activity {
         JSONArray entries = readEntriesOrWarn(messages);
         if (entries != null && entries.length() == 0) {
             LinearLayout welcome = panel(messages, true);
-            welcome.addView(text("A place for your conversations with Forge", 18, WHITE, true));
+            welcome.addView(text("A private space for Forge Core conversations", 18, WHITE, true));
             space(welcome, 9);
-            welcome.addView(text("Write a thought, question, or idea. Your words stay encrypted on this device until the native Forge model is ready.", 14, MUTED, false));
+            welcome.addView(text("Write a note, or load the optional local language bridge in Settings to get an on-device reply. Its replies are labeled separately from Forge Seed.", 14, MUTED, false));
         } else if (entries != null) {
             for (int i = 0; i < entries.length(); i++) {
                 JSONObject entry = entries.optJSONObject(i);
@@ -264,7 +283,7 @@ public final class ForgeHomeActivity extends Activity {
 
         if (generating) {
             LinearLayout live = panel(messages, true);
-            live.addView(text("Forge is generating locally…", 13, ACCENT, true));
+            live.addView(text("Local language bridge is generating…", 13, ACCENT, true));
             if (streaming.length() > 0) {
                 space(live, 8);
                 live.addView(text(streaming.toString(), 14, WHITE, false));
@@ -284,7 +303,7 @@ public final class ForgeHomeActivity extends Activity {
         composer.setPadding(dp(16), dp(12), dp(16), dp(14));
         composer.setBackgroundColor(SURFACE);
         EditText input = new EditText(this);
-        input.setHint("Write to your private journal…");
+        input.setHint(modelStatus.available ? "Message the local language bridge…" : "Write to your private journal…");
         input.setHintTextColor(MUTED);
         input.setTextColor(WHITE);
         input.setTextSize(15);
@@ -297,7 +316,8 @@ public final class ForgeHomeActivity extends Activity {
         input.setPadding(dp(14), dp(8), dp(14), dp(8));
         composer.addView(input, new LinearLayout.LayoutParams(-1, -2));
         space(composer, 9);
-        TextView send = action(generating ? "Generating…" : "Save private note", () -> {
+        TextView send = action(generating ? "Generating…" : modelStatus.available
+                ? "Send to local helper" : "Save private note", () -> {
             String prompt = input.getText().toString().trim();
             if (prompt.isEmpty()) {
                 Toast.makeText(this, "Write a note first", Toast.LENGTH_SHORT).show();
@@ -313,9 +333,12 @@ public final class ForgeHomeActivity extends Activity {
 
     private void addMessage(LinearLayout parent, JSONObject item) {
         boolean fromForge = "forge".equals(item.optString("role"));
-        LinearLayout bubble = panel(parent, fromForge);
-        bubble.addView(text(fromForge ? "FORGE · VERIFIED LOCAL MODEL" : "YOU · PRIVATE NOTE",
-                10, fromForge ? ACCENT : MUTED, true));
+        boolean fromTeacher = "teacher".equals(item.optString("role"));
+        LinearLayout bubble = panel(parent, fromForge || fromTeacher);
+        String label = fromForge ? "FORGE SEED · NATIVE MODEL"
+                : fromTeacher ? "LOCAL LANGUAGE BRIDGE · NOT FORGE SEED"
+                : "YOU · PRIVATE MESSAGE";
+        bubble.addView(text(label, 10, fromForge || fromTeacher ? ACCENT : MUTED, true));
         space(bubble, 8);
         TextView body = text(item.optString("text"), 15, WHITE, false);
         body.setTextIsSelectable(true);
@@ -336,7 +359,7 @@ public final class ForgeHomeActivity extends Activity {
         try {
             journal.append("user", prompt);
             notice = model.status().available
-                    ? "Sent to locally installed Forge model."
+                    ? "Sent to the local language bridge. This helper is separate from Forge Seed."
                     : "Saved on this device. No model reply was generated.";
         } catch (Exception error) {
             notice = "Could not encrypt and save this message. No data was sent.";
@@ -369,8 +392,8 @@ public final class ForgeHomeActivity extends Activity {
                         streaming.setLength(0);
                         if (!answer.trim().isEmpty()) {
                             try {
-                                journal.append("forge", answer);
-                                notice = "Local model response saved.";
+                                journal.append("teacher", answer);
+                                notice = "Local language bridge response saved on this device.";
                             } catch (Exception error) {
                                 notice = "Model replied, but secure storage failed; response was not saved.";
                             }
@@ -404,19 +427,34 @@ public final class ForgeHomeActivity extends Activity {
         LinearLayout count = panel(body, true);
         count.addView(text(items.length() + " local entries", 19, WHITE, true));
         space(count, 5);
-        count.addView(text("This is a journal, not a record of AI-generated dialogue.", 13, MUTED, false));
+        count.addView(text("Your messages and local helper replies are labeled and stored in the encrypted journal.", 13, MUTED, false));
         if (items.length() > 0) {
             addAction(body, "Clear conversation history", () -> new AlertDialog.Builder(this)
                     .setTitle("Clear local conversation history?")
-                    .setMessage("This will delete all journal entries from the encrypted store. Confirmed principles in Memory will remain untouched.")
+                    .setMessage(model.status().available
+                            ? "This deletes all encrypted journal entries and unloads the model to clear its current conversation context. The imported model file and confirmed principles remain."
+                            : "This deletes all journal entries from the encrypted store. Confirmed principles in Memory will remain untouched.")
                     .setNegativeButton("Keep history", null)
                     .setPositiveButton("Delete history", (d, w) -> {
-                        try {
-                            journal.clear();
-                            notice = "Conversation history cleared.";
-                            showTab(1);
-                        } catch (Exception error) {
-                            Toast.makeText(this, "Could not clear encrypted history", Toast.LENGTH_LONG).show();
+                        if (generating) {
+                            Toast.makeText(this, "Cancel the current reply before clearing history.", Toast.LENGTH_LONG).show();
+                            return;
+                        }
+                        if (model.status().available) {
+                            model.unloadModel(new ForgeModelAdapter.OperationListener() {
+                                @Override public void onComplete(String message) {
+                                    runOnUiThread(() -> clearConversationHistory());
+                                }
+                                @Override public void onError(String reason) {
+                                    runOnUiThread(() -> {
+                                        notice = "History was kept because the model session could not be cleared: " + reason;
+                                        showTab(1);
+                                        Toast.makeText(ForgeHomeActivity.this, notice, Toast.LENGTH_LONG).show();
+                                    });
+                                }
+                            });
+                        } else {
+                            clearConversationHistory();
                         }
                     }).show(), false);
         }
@@ -428,6 +466,16 @@ public final class ForgeHomeActivity extends Activity {
                 JSONObject entry = items.optJSONObject(i);
                 if (entry != null) addMessage(body, entry);
             }
+        }
+    }
+
+    private void clearConversationHistory() {
+        try {
+            journal.clear();
+            notice = "Conversation history cleared. The local model is unloaded.";
+            showTab(1);
+        } catch (Exception error) {
+            Toast.makeText(this, "Could not clear encrypted history", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -484,7 +532,9 @@ public final class ForgeHomeActivity extends Activity {
 
     private void renderSettings() {
         LinearLayout body = scrollPage();
-        heading(body, "Settings", "Privacy controls and intentional learning");
+        heading(body, "Settings", "Local chat model and privacy controls");
+        renderLanguageBridgeControls(body);
+        space(body, 5);
         LinearLayout privacy = panel(body, true);
         privacy.addView(text("OFFLINE BY DESIGN", 11, ACCENT, true));
         space(privacy, 8);
@@ -505,6 +555,71 @@ public final class ForgeHomeActivity extends Activity {
             intent.putExtra("forge_manual_teach", true);
             startActivity(intent);
         }, false);
+    }
+
+    private void renderLanguageBridgeControls(LinearLayout body) {
+        ForgeModelAdapter.ModelStatus status = model.status();
+        LinearLayout bridge = panel(body, true);
+        bridge.addView(text("LOCAL LANGUAGE BRIDGE", 11, ACCENT, true));
+        space(bridge, 8);
+        bridge.addView(text("Optional pretrained helper · separate from Forge Seed", 16, WHITE, true));
+        space(bridge, 6);
+        bridge.addView(text(status.name + "\n" + status.provenance + "\n" + status.detail,
+                13, MUTED, false));
+        if (model.isBusy()) {
+            // Progress is shown above; model and file actions stay disabled until it finishes.
+        } else if (!status.available) {
+            space(bridge, 8);
+            bridge.addView(text("Choose a GGUF model you have permission to use. The app copies it into private storage. Forge Core does not download or upload the model.",
+                    13, WHITE, false));
+            space(bridge, 10);
+            addAction(bridge, "Choose local GGUF model", () -> {
+                Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                picker.addCategory(Intent.CATEGORY_OPENABLE);
+                picker.setType("*/*");
+                startActivityForResult(picker, REQUEST_GGUF);
+            }, true);
+            addAction(bridge, "Load local model", () ->
+                    model.loadModel(operationListener("Model load")), false);
+            if (model.hasImportedModelFile()) {
+                addAction(bridge, "Remove imported model file", () -> new AlertDialog.Builder(this)
+                        .setTitle("Remove local model file?")
+                        .setMessage("This removes the imported GGUF from Forge Core private storage. The encrypted conversation history and confirmed principles remain.")
+                        .setNegativeButton("Keep model", null)
+                        .setPositiveButton("Remove model", (dialog, which) ->
+                                model.removeModelFile(operationListener("Model removal")))
+                        .show(), false);
+            }
+        } else {
+            space(bridge, 10);
+            addAction(bridge, "Unload model from memory", () ->
+                    model.unloadModel(operationListener("Model unload")), false);
+        }
+    }
+
+    private ForgeModelAdapter.OperationListener operationListener(String label) {
+        return new ForgeModelAdapter.OperationListener() {
+            @Override public void onComplete(String message) {
+                runOnUiThread(() -> {
+                    notice = message;
+                    if (content != null) showTab(selectedTab);
+                    Toast.makeText(ForgeHomeActivity.this, label + " complete", Toast.LENGTH_SHORT).show();
+                });
+            }
+            @Override public void onError(String reason) {
+                runOnUiThread(() -> {
+                    notice = reason;
+                    if (content != null) showTab(selectedTab);
+                    Toast.makeText(ForgeHomeActivity.this, reason, Toast.LENGTH_LONG).show();
+                });
+            }
+            @Override public void onProgress(String message) {
+                runOnUiThread(() -> {
+                    notice = message;
+                    if (content != null) showTab(selectedTab);
+                });
+            }
+        };
     }
 
     private void renderDiagnostics() {
@@ -560,7 +675,7 @@ public final class ForgeHomeActivity extends Activity {
         LinearLayout limitations = panel(body, false);
         limitations.addView(text("NOT YET AVAILABLE", 11, ACCENT, true));
         space(limitations, 8);
-        limitations.addView(text("Forge-native model inference, voice conversation, reasoning, autonomous actions, screen reading and independent on-device learning.", 13, WHITE, false));
+        limitations.addView(text("Forge Seed chat inference, voice conversation, autonomous actions, screen reading and independent on-device learning.", 13, WHITE, false));
     }
 
     private String appVersion() {

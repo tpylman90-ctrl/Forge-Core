@@ -1,5 +1,6 @@
 plugins {
     id "com.android.application"
+    id "org.jetbrains.kotlin.android"
 }
 
 // GitHub Actions supplies these only while building an explicitly signed
@@ -18,8 +19,9 @@ android {
         applicationId "ai.forgecore.mobile"
         minSdk 26
         targetSdk 35
-        versionCode 4
-        versionName "0.3.1"
+        ndk { abiFilters 'arm64-v8a' }
+        versionCode 5
+        versionName "0.4.0-local-bridge"
     }
 
     signingConfigs {
@@ -46,4 +48,10 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+    kotlinOptions { jvmTarget = "17" }
+}
+
+dependencies {
+    implementation project(":llamaAndroid")
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2'
 }
