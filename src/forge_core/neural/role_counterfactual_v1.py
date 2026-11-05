@@ -97,10 +97,22 @@ def make_train(count: int, seed: int = 1811) -> list[RoleExample]:
     rows: list[RoleExample] = []
     seen: set[str] = set()
     episodes = count // 4
-    for i in range(episodes):
-        left, right = rng.sample(TRAIN_PEOPLE, 2)
-        item = rng.choice(TRAIN_OBJECTS)
-        template = TRAIN_STORY_TEMPLATES[i % len(TRAIN_STORY_TEMPLATES)]
+    # Sample without replacement so the large training set cannot silently
+    # contain repeated event templates.
+    import itertools
+    configurations = [
+        (left, right, item, template_index)
+        for left, right in itertools.combinations(TRAIN_PEOPLE, 2)
+        for item in TRAIN_OBJECTS
+        for template_index in range(len(TRAIN_STORY_TEMPLATES))
+    ]
+    if episodes > len(configurations):
+        raise ValueError("Too many episodes for unique counterfactual events")
+    rng.shuffle(configurations)
+    for i, (left, right, item, template_index) in enumerate(configurations[:episodes]):
+        if rng.randrange(2):
+            left, right = right, left
+        template = TRAIN_STORY_TEMPLATES[template_index]
         for direction, (giver, recipient) in enumerate(((left, right), (right, left))):
             story = _story(template, giver, recipient, item)
             for skill in SKILLS:
