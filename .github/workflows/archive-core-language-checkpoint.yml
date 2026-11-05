@@ -56,7 +56,7 @@ jobs:
         run: |
           set -euo pipefail
           cat > release-notes.md <<'EOF'
-          Unpublished, research-only Forge Seed v0.7 checkpoint at 52,000 total
+          Unpublished, research-only Forge Seed v0.7 checkpoint at 60,000 total
           optimizer updates. Includes the parent checkpoint, model, optimizer
           state, source manifest, exact public train/validation split, metrics,
           samples, capability diagnostic and lineage hashes.
@@ -64,8 +64,7 @@ jobs:
           This draft is a durable continuation point. It is not an Android
           release and has not passed capability promotion gates.
           EOF
-          gh release create forge-seed-v07-step-60000 \
-            forge-seed-v07-step-60000-research.tar.gz \
-            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
-            --title "Forge Seed v0.7 — 52,000-step research checkpoint" \
+          gh release edit forge-seed-v07-step-60000 \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Forge Seed v0.7 — 60,000-step research checkpoint" \
             --notes-file release-notes.md
