@@ -27,3 +27,15 @@ This benchmark does not test whether a model understood a story or can identify 
 ## Limitations
 
 This is an internal, synthetic, English-only benchmark authored for the project. Disjoint phrasing and object sets reduce template leakage but do not make it an externally standardized test. Public final labels remain visible and must not be reused as an untouched future exam. A successful question-only score would still not demonstrate reading comprehension.
+
+
+## Integrity run
+
+The dataset-generation and split checks passed in Actions run
+[42086273314](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/42086273314).
+The archived benchmark is
+[forge-question-intent-v1](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/42086273314/artifacts/13443151662),
+with three split SHA256 values in `manifest.json`. An earlier attempt
+failed before generation because the workflow had not installed the package;
+the setup step was corrected and the successful run regenerated the same
+deterministic data.
