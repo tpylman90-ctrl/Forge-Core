@@ -45,4 +45,21 @@ replace_once(
 target.write_text(source, encoding="utf-8")
 assert source.count('chat_add_and_format(ROLE_ASSISTANT, assistant_ss.str());') == 2
 assert 'stop_generation_position = current_position + std::max(1, (int) n_predict);' in source
+
+# __android_log_is_loggable is only available from Android 11 / API 30.
+# Forge Core keeps its existing API 26 minimum, so use the configured priority
+# threshold on older Android targets.
+logging_target = Path("vendor/llama.cpp/examples/llama.android/lib/src/main/cpp/logging.h")
+logging_source = logging_target.read_text(encoding="utf-8")
+old_logging = "    return __android_log_is_loggable(prio, LOG_TAG, LOG_MIN_LEVEL);"
+new_logging = """#if __ANDROID_API__ >= 30
+    return __android_log_is_loggable(prio, LOG_TAG, LOG_MIN_LEVEL);
+#else
+    return prio >= LOG_MIN_LEVEL;
+#endif"""
+if logging_source.count(old_logging) != 1:
+    raise RuntimeError("Android API 26 logging fallback: expected one source match")
+logging_source = logging_source.replace(old_logging, new_logging, 1)
+logging_target.write_text(logging_source, encoding="utf-8")
+assert "#if __ANDROID_API__ >= 30" in logging_source
 print("Forge Core Android llama.cpp patch applied.")
