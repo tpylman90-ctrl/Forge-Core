@@ -155,3 +155,25 @@ or instruction following. The separate copy/role apprenticeship remained
 weak on held-out skills (20/120 overall; 0/20 selection, recipient and giver)
 and is not merged. See [28,000-step results](PRESCHOOL-28000-RESULTS.md)
 for lineage, full metrics and the next experiment design.
+
+
+## November 5 — wider public-corpus experiment
+
+A separate scratch-initialized model trained 28,000 steps on a bounded
+50 MiB TinyStories training prefix with a separate 5 MiB validation prefix
+(58,028 train and 6,246 validation stories after duplicate screening).
+Held-out token loss fell **7.617847 → 2.363302** within this run. Its
+fresh mirrored QA probe reached **21/40**, with **2/20** mirror pairs
+both correct; color 6/10, count 5/10, location 6/10 and recipient 4/10.
+The earlier narrow model scored 19/40, so the two-answer difference is
+small and both remain below the 32/40 gate. Six fixed-seed samples show
+more recognizable clauses but still include malformed words, repeated
+entities and story drift. Human sentence/story and instruction gates remain
+unscored.
+
+**No readiness pass or model promotion.** See
+[50 MiB / 28,000-step results](PRESCHOOL-50M-28000-RESULTS.md).
+The new question-only benchmark passed split integrity (192 train, 60
+development, 90 final, balanced giver/recipient/other); its controlled
+three-seed student-head comparison is in progress. No task head is merged
+into the language checkpoint.
