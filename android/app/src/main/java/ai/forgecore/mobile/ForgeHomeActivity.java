@@ -297,56 +297,41 @@ public final class ForgeHomeActivity extends Activity {
         LinearLayout screen = column();
         content.addView(screen, new FrameLayout.LayoutParams(-1, -1));
 
-        ScrollView scrolling = new ScrollView(this);
-        scrolling.setFillViewport(true);
-        LinearLayout.LayoutParams scrollingParams = new LinearLayout.LayoutParams(-1, 0, 1f);
-        screen.addView(scrolling, scrollingParams);
-        LinearLayout messages = column();
-        messages.setPadding(dp(20), dp(4), dp(20), dp(14));
-        scrolling.addView(messages);
-
         ForgeModelAdapter.ModelStatus modelStatus = model.status();
+
+        // Keep Forge's presence visible while the conversation itself scrolls.
+        LinearLayout presence = column();
+        presence.setPadding(dp(20), dp(2), dp(20), 0);
+        screen.addView(presence, new LinearLayout.LayoutParams(-1, -2));
         ForgeEmberView avatar = new ForgeEmberView(this);
         avatarView = avatar;
         updateAvatarMode();
-        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(-1, dp(282));
-        avatarParams.topMargin = dp(2);
-        avatarParams.bottomMargin = dp(8);
-        messages.addView(avatar, avatarParams);
+        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(-1, dp(238));
+        avatarParams.bottomMargin = dp(3);
+        presence.addView(avatar, avatarParams);
 
         TextView state = text("", 10, MUTED, true);
         state.setGravity(Gravity.CENTER);
         state.setLetterSpacing(0.13f);
         stateLabel = state;
         updateAvatarMode();
-        messages.addView(state);
-        space(messages, 15);
+        presence.addView(state);
+
+        ScrollView scrolling = new ScrollView(this);
+        scrolling.setFillViewport(true);
+        scrolling.setClipToPadding(false);
+        LinearLayout.LayoutParams scrollingParams = new LinearLayout.LayoutParams(-1, 0, 1f);
+        screen.addView(scrolling, scrollingParams);
+        LinearLayout messages = column();
+        messages.setPadding(dp(20), dp(8), dp(20), dp(14));
+        scrolling.addView(messages);
 
         if (!notice.isEmpty()) {
             LinearLayout info = panel(messages, true);
             info.addView(text(notice, 13, ACCENT, false));
         }
 
-        JSONArray entries = readEntriesOrWarn(messages);
-        if (entries != null && entries.length() == 0) {
-            TextView welcome = text("I’m here. What are you thinking about?", 19, WHITE, false);
-            welcome.setGravity(Gravity.CENTER);
-            welcome.setPadding(dp(12), dp(3), dp(12), dp(13));
-            messages.addView(welcome);
-            TextView explain = text(modelStatus.available
-                    ? "Your reply will come from the optional local helper."
-                    : "Type a private note, or set up the local language bridge in Settings to chat.",
-                    12, MUTED, false);
-            explain.setGravity(Gravity.CENTER);
-            explain.setPadding(dp(18), 0, dp(18), dp(12));
-            messages.addView(explain);
-        } else if (entries != null) {
-            for (int i = 0; i < entries.length(); i++) {
-                JSONObject entry = entries.optJSONObject(i);
-                if (entry != null) addMessage(messages, entry);
-            }
-        }
-
+        // A live response is newer than the submitted prompt, so put it first.
         if (generating) {
             LinearLayout live = panel(messages, true);
             live.addView(text(responseStarted ? "Local language bridge is responding…"
@@ -365,8 +350,28 @@ public final class ForgeHomeActivity extends Activity {
             }, false);
         }
 
-        scrolling.post(() -> scrolling.fullScroll(View.FOCUS_DOWN));
+        JSONArray entries = readEntriesOrWarn(messages);
+        if (entries != null && entries.length() == 0) {
+            TextView welcome = text("I’m here. What are you thinking about?", 19, WHITE, false);
+            welcome.setGravity(Gravity.CENTER);
+            welcome.setPadding(dp(12), dp(3), dp(12), dp(13));
+            messages.addView(welcome);
+            TextView explain = text(modelStatus.available
+                    ? "Your reply will come from the optional local helper."
+                    : "Type a private note, or set up the local language bridge in Settings to chat.",
+                    12, MUTED, false);
+            explain.setGravity(Gravity.CENTER);
+            explain.setPadding(dp(18), 0, dp(18), dp(12));
+            messages.addView(explain);
+        } else if (entries != null) {
+            // Journal stays chronological on disk; the chat view presents newest first.
+            for (int i = entries.length() - 1; i >= 0; i--) {
+                JSONObject entry = entries.optJSONObject(i);
+                if (entry != null) addMessage(messages, entry);
+            }
+        }
 
+        // The newest exchange is at the top; preserve the default top scroll position.
         LinearLayout composer = new LinearLayout(this);
         composer.setGravity(Gravity.CENTER);
         composer.setPadding(dp(24), dp(7), dp(24), dp(8));
