@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: forge-mistake-curriculum-v1
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   matched-curriculum:
