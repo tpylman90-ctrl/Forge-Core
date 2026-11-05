@@ -47,10 +47,11 @@ jobs:
       - name: Evaluate every candidate with the same capability check
         run: |
           set -euo pipefail
-          while IFS= read -r -d '' d; do
+          while IFS= read -r ckpt; do
+            d="$(dirname "$ckpt")"
             python -m forge_core.neural.preschool_eval \
               --checkpoint-dir "$d" --out "$d/capabilities.json"
-          done < <(find artifacts/mistake-curriculum -type f -name checkpoint.pt -print0 | xargs -0 -n1 dirname | sort -zu)
+          done < <(find artifacts/mistake-curriculum -type f -name checkpoint.pt | sort)
       - name: Upload all matched outputs
         uses: actions/upload-artifact@v4
         with:
