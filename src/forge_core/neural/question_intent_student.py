@@ -154,8 +154,12 @@ def run(checkpoint_dir: Path, out: Path, *, updates: int = 600) -> dict:
     ckpt = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
     if ckpt.get("schema") != 3 or ckpt.get("step", 0) < 1:
         raise ValueError("Expected an audited Forge v0.7 research checkpoint")
-    if ckpt.get("source", {}).get("license") not in (None, "cdla-sharing-1.0"):
-        raise ValueError("Unexpected checkpoint source license")
+    source_manifest = json.loads((checkpoint_dir / "source-manifest.json").read_text())
+    if source_manifest.get("license") != "cdla-sharing-1.0":
+        raise ValueError("Checkpoint source license is not the reviewed public license")
+    for key in ("revision", "train_sha256", "valid_sha256"):
+        if ckpt.get(key) != source_manifest.get(key):
+            raise ValueError(f"Checkpoint/source manifest mismatch: {key}")
     cfg = ModelConfig(**ckpt["configuration"])
     encoder = ByteTransformer(cfg)
     encoder.load_state_dict(ckpt["model"])
