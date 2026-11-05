@@ -14,7 +14,7 @@ on:
         required: false
   push:
     branches: [main]
-    paths: ["experiments/requests/preschool-v07-resume-001.md"]
+    paths: ["experiments/requests/preschool-v07-002.md"]
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
     timeout-minutes: 90
     env:
       STEPS: ${{ github.event_name == 'push' && '14000' || inputs.steps || '14000' }}
-      RESUME_ID: ${{ inputs.resume_run_id || (github.event_name == 'push' && '41572257363') || '' }}
+      RESUME_ID: ${{ inputs.resume_run_id || '' }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
