@@ -21,3 +21,5 @@ Authorized one-time staged experiment:
   and any pretrained neural weights remain excluded.
 - This is a research hypothesis about curriculum scaffolding, not a claim
   that model reasoning, preschool fluency or instruction following exists.
+
+Run execution note (November 5, 2026): launch the preregistered staged QA experiment once against the frozen original checkpoint above. Preserve all stages, controls, and evaluation splits exactly as specified; this note does not change the protocol.
