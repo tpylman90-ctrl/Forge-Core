@@ -50,7 +50,7 @@ jobs:
       # Keep signing material unavailable to pull requests.
       - name: Check release signing configuration
         id: signing
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/android-local-language-bridge')
         env:
           FORGE_ANDROID_KEYSTORE_B64: ${{ secrets.FORGE_ANDROID_KEYSTORE_B64 }}
           FORGE_ANDROID_STORE_PASSWORD: ${{ secrets.FORGE_ANDROID_STORE_PASSWORD }}
