@@ -1,4 +1,4 @@
-÷v¹çv¶ï¾½Õİ4wŞm·]åÎô{×ßÓÍ6}·4package ai.forgecore.mobile;
+package ai.forgecore.mobile;
 
 import android.content.Context;
 import android.graphics.Canvas;
