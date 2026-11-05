@@ -609,7 +609,6 @@ public final class ForgeHomeActivity extends Activity {
                     updateAvatarMode();
                 }
                 @Override public void onBeginningOfSpeech() {
-                    if (avatarView != null) avatarView.pulse();
                 }
                 @Override public void onRmsChanged(float rmsdB) {
                     if (avatarView != null) avatarView.setAudioLevel(rmsdB);

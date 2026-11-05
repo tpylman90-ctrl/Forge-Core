@@ -1,4 +1,4 @@
-package ai.forgecore.mobile;
+÷v¹çv¶ï¾½ÕÝ4wÞm·]åÎô{×ßÓÍ6}·4package ai.forgecore.mobile;
 
 import android.content.Context;
 import android.graphics.Canvas;
@@ -23,14 +23,13 @@ final class ForgeEmberView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final float density;
     private final long startTime = System.currentTimeMillis();
-    private final Shader smokeSoft = radial(Color.argb(100, 132, 125, 139));
-    private final Shader smokeDense = radial(Color.argb(145, 144, 135, 151));
-    private final Shader warmGlow = radial(Color.argb(82, 255, 108, 36));
-    private final Shader warmSoft = radial(Color.argb(62, 255, 144, 66));
+    private final Shader smokeSoft = radial(Color.argb(120, 132, 125, 139));
+    private final Shader smokeDense = radial(Color.argb(170, 144, 135, 151));
+    private final Shader warmGlow = radial(Color.argb(105, 255, 108, 36));
+    private final Shader warmSoft = radial(Color.argb(88, 255, 144, 66));
     private volatile Mode mode = Mode.IDLE;
     private volatile float audioLevel = 0f;
     private volatile float audioTargetLevel = 0f;
-    private volatile long pulseAt = 0L;
     private volatile long modeChangedAt = System.currentTimeMillis();
 
     ForgeEmberView(Context context) {
@@ -43,12 +42,6 @@ final class ForgeEmberView extends View {
         if (next == null || mode == next) return;
         mode = next;
         modeChangedAt = System.currentTimeMillis();
-        pulseAt = modeChangedAt;
-        postInvalidateOnAnimation();
-    }
-
-    void pulse() {
-        pulseAt = System.currentTimeMillis();
         postInvalidateOnAnimation();
     }
 
@@ -83,52 +76,52 @@ final class ForgeEmberView extends View {
         boolean responding = currentMode == Mode.RESPONDING;
         boolean speaking = currentMode == Mode.SPEAKING;
         float voicePulse = listening ? audioLevel : 0f;
-        float pulseProgress = Math.max(0f, 1f - (System.currentTimeMillis() - pulseAt) / 1150f);
-        float pulse = pulseProgress * pulseProgress * (3f - 2f * pulseProgress);
         float transitionProgress = Math.max(0f, 1f - (System.currentTimeMillis() - modeChangedAt) / 900f);
         float transition = transitionProgress * transitionProgress * (3f - 2f * transitionProgress);
         float breath = .5f + .5f * (float) Math.sin(time * (thinking ? 1.45f : .72f));
+        // Response energy follows Forge's full response state, never token arrival timing.
+        float responseBreath = .5f + .5f * (float) Math.sin(time * 1.25f - .8f);
         float speechBeat = .5f + .5f * (float) Math.sin(time * 5.1f);
         float energy = listening ? .12f + .54f * voicePulse
-                : speaking ? .18f + .24f * speechBeat
-                : responding ? .12f + .56f * pulse
-                : thinking ? .17f + .13f * breath + .15f * transition
-                : .04f + .05f * breath;
-        float ringMotion = listening ? .016f + .032f * voicePulse
-                : speaking ? .010f + .018f * speechBeat
-                : responding ? .006f + .024f * pulse
-                : thinking ? .005f + .012f * breath
-                : .004f + .006f * breath;
+                : speaking ? .24f + .24f * speechBeat
+                : responding ? .30f + .18f * responseBreath
+                : thinking ? .27f + .12f * breath + .10f * transition
+                : .06f + .07f * breath;
+        float ringMotion = listening ? .020f + .040f * voicePulse
+                : speaking ? .016f + .022f * speechBeat
+                : responding ? .014f + .020f * responseBreath
+                : thinking ? .010f + .014f * breath
+                : .005f + .008f * breath;
         float ring = Math.min(w * .405f, h * .405f) * (1f + ringMotion);
 
         paint.setShader(null);
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth((1.25f + energy * .8f) * density);
-        paint.setColor(Color.argb((int) (105 + energy * 95), 164, 82, 255));
+        paint.setStrokeWidth((1.75f + energy * 1.7f) * density);
+        paint.setColor(Color.argb((int) (140 + energy * 100), 164, 82, 255));
         canvas.drawCircle(cx, cy, ring, paint);
-        paint.setStrokeWidth(2f * density);
-        paint.setColor(Color.argb((int) (160 + energy * 85), 186, 107, 255));
+        paint.setStrokeWidth(2.5f * density);
+        paint.setColor(Color.argb((int) (190 + energy * 60), 186, 107, 255));
         canvas.drawArc(cx - ring, cy - ring, cx + ring, cy + ring,
-                -99 + (float) Math.sin(time * (listening ? .44f : speaking ? .52f : active ? .32f : .14f))
-                        * (listening ? 8f : speaking ? 6f : 4f),
-                54 + energy * 15f, false, paint);
-        paint.setColor(Color.argb((int) (180 + energy * 75), 196, 130, 255));
+                -99 + (float) Math.sin(time * (listening ? .44f : speaking ? .52f : active ? .48f : .14f))
+                        * (listening ? 8f : speaking ? 7f : active ? 8f : 4f),
+                60 + energy * 18f, false, paint);
+        paint.setColor(Color.argb((int) (205 + energy * 50), 196, 130, 255));
         canvas.drawArc(cx - ring, cy - ring, cx + ring, cy + ring,
-                53 + (float) Math.sin(time * (listening ? .48f : speaking ? .55f : active ? .32f : .15f)) * 5,
-                32 + energy * 8f, false, paint);
+                53 + (float) Math.sin(time * (listening ? .48f : speaking ? .55f : active ? .46f : .15f)) * 7,
+                38 + energy * 10f, false, paint);
 
         paint.setStyle(Paint.Style.FILL);
         // Mode changes alter smoke density, spread and turbulence without a rigid avatar silhouette.
-        float spread = listening ? 1.10f : thinking ? .88f
-                : responding ? 1.12f : speaking ? 1.045f : 1f;
-        float turbulence = listening ? .018f + .020f * voicePulse
-                : responding ? .024f + .012f * pulse
-                : speaking ? .020f + .008f * speechBeat
-                : thinking ? .018f : .010f;
+        float spread = listening ? 1.10f : thinking ? .94f
+                : responding ? 1.13f + .018f * responseBreath : speaking ? 1.06f : 1f;
+        float turbulence = listening ? .022f + .027f * voicePulse
+                : responding ? .028f + .016f * responseBreath
+                : speaking ? .024f + .012f * speechBeat
+                : thinking ? .024f : .010f;
         float driftSpeed = listening ? .44f + .12f * voicePulse
-                : responding ? .48f + .18f * pulse
-                : speaking ? .43f + .08f * speechBeat
-                : thinking ? .26f : .18f;
+                : responding ? .52f + .14f * responseBreath
+                : speaking ? .46f + .10f * speechBeat
+                : thinking ? .32f : .18f;
         for (int i = 0; i < PUFFS.length; i++) {
             float phase = time * driftSpeed + i * 1.37f;
             float px = cx + PUFFS[i][0] * w * spread + (float) Math.sin(phase) * w * turbulence;
@@ -137,25 +130,25 @@ final class ForgeEmberView extends View {
             float ry = PUFFS[i][3] * h * spread * (.94f + .06f * (float) Math.cos(phase));
             drawSoftEllipse(canvas, px, py, rx, ry, i % 3 == 0 ? smokeDense : smokeSoft,
                     listening ? 220 + (int) (voicePulse * 35)
-                            : responding ? 215 + (int) (pulse * 40)
-                            : thinking ? 232 : speaking ? 226 + (int) (speechBeat * 22) : 215);
+                            : responding ? 224 + (int) (responseBreath * 25)
+                            : thinking ? 240 : speaking ? 232 + (int) (speechBeat * 18) : 220);
         }
 
         // Warm inner glow and drifting embers give the cloud its recognizable signature.
         int coreGlow = listening ? 188 + (int) (voicePulse * 34)
-                : responding ? 184 + (int) (pulse * 38)
-                : thinking ? 178 + (int) (breath * 18)
-                : speaking ? 186 + (int) (speechBeat * 26) : 170;
+                : responding ? 206 + (int) (responseBreath * 35)
+                : thinking ? 198 + (int) (breath * 18)
+                : speaking ? 198 + (int) (speechBeat * 24) : 178;
         drawSoftEllipse(canvas, cx + w * .16f, cy - h * .005f,
-                w * (.19f + energy * .045f), h * (.18f + energy * .045f), warmGlow, coreGlow);
+                w * (.20f + energy * .06f), h * (.19f + energy * .06f), warmGlow, coreGlow);
         drawSoftEllipse(canvas, cx - w * .10f, cy + h * .11f,
-                w * (.16f + pulse * .025f), h * (.14f + pulse * .025f), warmSoft,
-                responding ? 180 + (int) (pulse * 70) : 205);
+                w * (.17f + responseBreath * .018f), h * (.15f + responseBreath * .018f), warmSoft,
+                responding ? 195 + (int) (responseBreath * 45) : 210);
 
         float emberSpeed = listening ? .42f + .20f * voicePulse
-                : responding ? .52f + .28f * pulse
+                : responding ? .52f + .14f * responseBreath
                 : thinking ? .32f : speaking ? .44f + .10f * speechBeat : .22f;
-        for (int i = 0; i < 12; i++) {
+        for (int i = 0; i < 16; i++) {
             float phase = time * emberSpeed * (.75f + (i % 5) * .09f) + i * 2.09f;
             float orbitX = w * (.13f + (i % 4) * .047f) * spread;
             float orbitY = h * (.12f + (i % 3) * .041f) * spread;
@@ -163,25 +156,25 @@ final class ForgeEmberView extends View {
             float ey = cy + (float) Math.cos(phase * .81f + i) * orbitY;
             float flickerSpeed = listening ? 1.65f : responding ? 1.95f : speaking ? 2.1f : thinking ? 1.35f : 1.05f;
             float emberPulse = .68f + .25f * (float) Math.sin(time * flickerSpeed + i * 1.7f)
-                    + energy * .20f;
-            float radius = density * (1.15f + (i % 3) * .55f);
-            int alpha = Math.max(0, Math.min(255, Math.round(130 + 105 * emberPulse)));
+                    + energy * .28f;
+            float radius = density * (1.5f + (i % 3) * .65f);
+            int alpha = Math.max(0, Math.min(255, Math.round(145 + 100 * emberPulse)));
             paint.setColor(Color.argb(alpha, 255, 145 + (i % 2) * 40, 62));
-            canvas.drawCircle(ex, ey, radius * 2.6f, paint);
+            canvas.drawCircle(ex, ey, radius * 3.2f, paint);
             paint.setColor(Color.argb(alpha, 255, 208, 143));
             canvas.drawCircle(ex, ey, radius * .85f, paint);
         }
 
         // A few sparks drift outside the cloud, accelerating as Forge becomes active.
         float sparkSpeed = listening ? .18f + .08f * voicePulse
-                : responding ? .20f + .11f * pulse
-                : speaking ? .20f : thinking ? .14f : .10f;
-        for (int i = 0; i < 4; i++) {
+                : responding ? .28f + .12f * responseBreath
+                : speaking ? .24f : thinking ? .18f : .10f;
+        for (int i = 0; i < 6; i++) {
             float phase = time * sparkSpeed + i * 1.9f;
             float ex = cx + (float) Math.sin(phase + i) * w * (.33f + (i % 2) * .045f);
             float ey = cy + (float) Math.cos(phase * .9f + i) * h * .31f;
-            paint.setColor(Color.argb(125, 255, 135, 57));
-            canvas.drawCircle(ex, ey, density * (1.1f + (i % 2)), paint);
+            paint.setColor(Color.argb(responding ? 165 : 135, 255, 135, 57));
+            canvas.drawCircle(ex, ey, density * (1.35f + (i % 2) * .55f), paint);
         }
 
         postInvalidateOnAnimation();
