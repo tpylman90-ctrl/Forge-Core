@@ -12,10 +12,10 @@ on:
         type: string
         description: "Successful core-continuation run containing the checkpoint to resume"
         required: false
-        default: "42116842094"
+        default: "42118418883"
   push:
     branches: [main]
-    paths: ["experiments/requests/core-language-continuation-003.md"]
+    paths: ["experiments/requests/core-language-continuation-004.md"]
 
 permissions:
   contents: read
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      SOURCE_RUN: ${{ inputs.parent_run_id || '42116842094' }}
+      SOURCE_RUN: ${{ inputs.parent_run_id || '42118418883' }}
       STEPS: ${{ github.event_name == 'push' && '8000' || inputs.steps || '8000' }}
       GH_TOKEN: ${{ github.token }}
     steps:
