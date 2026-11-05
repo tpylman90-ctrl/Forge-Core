@@ -573,3 +573,17 @@ isolated.
   archive automatically. Android weights remain unchanged.
 - [ ] Continue the next bounded core language run only after 60k parent
   hashes and data lineage verify.
+
+### Continued language learning through 68,000 steps
+
+- [x] Continue the exact checkpoint/data chain through **68,000** updates;
+  see [the 68k report](CORE-LANGUAGE-CONTINUATION-68000.md).
+- [x] Matched 64-window progress loss: **2.184636 (60k) → 2.147870
+  (68k)**. The same 256-window final diagnostic improved from **2.205533
+  (60k) to 2.177065 (68k)**.
+- [x] Preserve the 68k parent and candidate in an unpublished durable draft
+  release with exact dataset split and hashes.
+- [x] Start the next approved 8,000-update core continuation from 68k; stop
+  making incremental runs if held-out language metrics regress.
+- [ ] Capability check remains at chance. Continue separate held-out task and
+  human-reviewed quality work before any app weight update.
