@@ -37,5 +37,5 @@ The archived benchmark is
 [forge-question-intent-v1](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/42086273314/artifacts/13443151662),
 with three split SHA256 values in `manifest.json`. An earlier attempt
 failed before generation because the workflow had not installed the package;
-the setup step was corrected and the successful run regenerated the same
-deterministic data.
+the setup step was corrected; the successful run then generated and
+archived the deterministic splits.
