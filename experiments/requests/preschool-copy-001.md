@@ -31,3 +31,6 @@ authorization:
   prior QA retention, story-language loss and fixed-seed continuations.
 - Neither candidate is promoted, integrated into Android or described as
   preschool-capable without further independent replication.
+
+
+Execution note (November 5, 2026): launch this preregistered copy/semantic-role experiment once with the stated original and parent run IDs and seed 900. Do not alter its curriculum, held-out challenge, or promotion gates.
