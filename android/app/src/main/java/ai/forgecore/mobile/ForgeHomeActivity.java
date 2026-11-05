@@ -1,8 +1,12 @@
+Warning: truncated output (original token count: 12182)
+Total output lines: 1050
+
 package ai.forgecore.mobile;
 
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.AppOpsManager;
+import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -10,8 +14,15 @@ import android.net.Uri;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Process;
+import android.speech.RecognitionListener;
+import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.view.Gravity;
@@ -31,6 +42,8 @@ import org.json.JSONObject;
 
 import java.text.DateFormat;
 import java.util.Date;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * Offline-first Forge communication shell with an optional, clearly labeled
@@ -39,6 +52,7 @@ import java.util.Date;
  */
 public final class ForgeHomeActivity extends Activity {
     private static final int REQUEST_GGUF = 4107;
+    private static final int REQUEST_MICROPHONE = 4108;
     private static final int BG = Color.rgb(8, 8, 11);
     private static final int SURFACE = Color.rgb(17, 17, 22);
     private static final int SURFACE_RAISED = Color.rgb(25, 24, 31);
@@ -53,6 +67,18 @@ public final class ForgeHomeActivity extends Activity {
     private FrameLayout content;
     private int selectedTab = 0;
     private boolean generating = false;
+    private boolean responseStarted = false;
+    private boolean listening = false;
+    private boolean speaking = false;
+    private boolean voiceTurn = false;
+    private SpeechRecognizer speechRecognizer;
+    private TextToSpeech textToSpeech;
+    private boolean ttsReady = false;
+    private String pendingSpeech;
+    private ForgeEmberView avatarView;
+    private TextView stateLabel;
+    private TextView streamingView;
+    private FrameLayout microphoneButton;
     private StringBuilder streaming = new StringBuilder();
     private String notice = "";
 
@@ -107,6 +133,36 @@ public final class ForgeHomeActivity extends Activity {
     @Override protected void onResume() {
         super.onResume();
         if (content != null) showTab(selectedTab);
+    }
+
+    @Override protected void onPause() {
+        if (listening) {
+            stopVoiceRecognizer();
+            notice = "Voice input stopped when Forge went to the background.";
+        }
+        super.onPause();
+    }
+
+    @Override protected void onDestroy() {
+        stopVoiceRecognizer();
+        if (textToSpeech != null) {
+            textToSpeech.stop();
+            textToSpeech.shutdown();
+            textToSpeech = null;
+        }
+        super.onDestroy();
+    }
+
+    @Override public void onRequestPermissionsResult(int requestCode, String[] permissions,
+                                                       int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode != REQUEST_MICROPHONE) return;
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+            beginOnDeviceListening();
+        } else {
+            notice = "Microphone access was not granted. You can still use text chat.";
+            showTab(0);
+        }
     }
 
     @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -205,6 +261,10 @@ public final class ForgeHomeActivity extends Activity {
     private void showTab(int index) {
         selectedTab = Math.max(0, Math.min(index, TABS.length - 1));
         content.removeAllViews();
+        avatarView = null;
+        stateLabel = null;
+        streamingView = null;
+        microphoneButton = null;
         switch (selectedTab) {
             case 0: renderChat(); break;
             case 1: renderHistory(); break;
@@ -250,16 +310,18 @@ public final class ForgeHomeActivity extends Activity {
 
         ForgeModelAdapter.ModelStatus modelStatus = model.status();
         ForgeEmberView avatar = new ForgeEmberView(this);
+        avatarView = avatar;
+        updateAvatarMode();
         LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(-1, dp(282));
         avatarParams.topMargin = dp(2);
         avatarParams.bottomMargin = dp(8);
         messages.addView(avatar, avatarParams);
 
-        TextView state = text(generating ? "GATHERING A RESPONSE" : modelStatus.available
-                ? "LOCAL LANGUAGE BRIDGE · READY" : "HERE WITH YOU", 10,
-                generating ? EMBER : MUTED, true);
+        TextView state = text("", 10, MUTED, true);
         state.setGravity(Gravity.CENTER);
         state.setLetterSpacing(0.13f);
+        stateLabel = state;
+        updateAvatarMode();
         messages.addView(state);
         space(messages, 15);
 
@@ -290,10 +352,12 @@ public final class ForgeHomeActivity extends Activity {
 
         if (generating) {
             LinearLayout live = panel(messages, true);
-            live.addView(text("Local language bridge is generating…", 13, ACCENT, true));
+            live.addView(text(responseStarted ? "Local language bridge is responding…"
+                    : "Local language bridge is thinking…", 13, ACCENT, true));
             if (streaming.length() > 0) {
                 space(live, 8);
-                live.addView(text(streaming.toString(), 14, WHITE, false));
+                streamingView = text(streaming.toString(), 14, WHITE, false);
+                live.addView(streamingView);
             }
             addAction(live, "Cancel generation", () -> {
                 model.cancel();
@@ -310,7 +374,7 @@ public final class ForgeHomeActivity extends Activity {
         composer.setGravity(Gravity.CENTER);
         composer.setPadding(dp(24), dp(7), dp(24), dp(8));
         composer.setBackgroundColor(BG);
-        TextView keyboard = text("▦", 23, MUTED, false);
+        TextView keyboard = text("⌨", 23, MUTED, false);
         keyboard.setGravity(Gravity.CENTER);
         keyboard.setContentDescription("Write a text message");
         keyboard.setOnClickListener(view -> openTextComposer(modelStatus.available, generating));
@@ -319,13 +383,12 @@ public final class ForgeHomeActivity extends Activity {
         View spacerLeft = new View(this);
         composer.addView(spacerLeft, new LinearLayout.LayoutParams(0, 1, 1f));
         FrameLayout microphone = new FrameLayout(this);
-        microphone.setContentDescription("Voice conversation is not connected yet");
-        microphone.setBackground(shape(ACCENT, 40));
+        microphoneButton = microphone;
+        microphone.setContentDescription("Start on-device voice chat");
+        microphone.setBackground(shape(listening ? EMBER : ACCENT, 40));
         microphone.setElevation(dp(5));
         microphone.addView(new ForgeMicIconView(this), new FrameLayout.LayoutParams(-1, -1));
-        microphone.setOnClickListener(view -> Toast.makeText(this,
-                "Voice chat is not connected yet. Use the keyboard to message Forge.",
-                Toast.LENGTH_LONG).show());
+        microphone.setOnClickListener(view -> toggleOnDeviceListening());
         composer.addView(microphone, new LinearLayout.LayoutParams(dp(66), dp(66)));
 
         View spacerRight = new View(this);
@@ -388,7 +451,12 @@ public final class ForgeHomeActivity extends Activity {
     }
 
     private void submitPrompt(String prompt) {
+        submitPrompt(prompt, false);
+    }
+
+    private void submitPrompt(String prompt, boolean fromVoice) {
         if (generating) return;
+        voiceTurn = fromVoice;
         try {
             journal.append("user", prompt);
             notice = model.status().available
@@ -401,11 +469,13 @@ public final class ForgeHomeActivity extends Activity {
         }
 
         if (!model.status().available) {
+            voiceTurn = false;
             showTab(0);
             return;
         }
 
         generating = true;
+        responseStarted = false;
         streaming = new StringBuilder();
         showTab(0);
         try {
@@ -413,16 +483,27 @@ public final class ForgeHomeActivity extends Activity {
                 @Override public void onToken(String token) {
                     runOnUiThread(() -> {
                         if (!generating) return;
-                        if (token != null) streaming.append(token);
-                        if (selectedTab == 0) showTab(0);
+                        if (token != null && !token.isEmpty()) {
+                            streaming.append(token);
+                            if (!responseStarted) {
+                                responseStarted = true;
+                                updateAvatarMode();
+                                if (streamingView == null && selectedTab == 0) showTab(0);
+                            }
+                            if (streamingView != null) streamingView.setText(streaming.toString());
+                            if (avatarView != null) avatarView.pulse();
+                        }
                     });
                 }
                 @Override public void onComplete() {
                     runOnUiThread(() -> {
                         if (!generating) return;
                         generating = false;
+                        responseStarted = false;
                         String answer = streaming.toString();
                         streaming.setLength(0);
+                        boolean speakAnswer = voiceTurn;
+                        voiceTurn = false;
                         if (!answer.trim().isEmpty()) {
                             try {
                                 journal.append("teacher", answer);
@@ -432,12 +513,15 @@ public final class ForgeHomeActivity extends Activity {
                             }
                         } else notice = "Local model finished without a reply.";
                         if (selectedTab == 0) showTab(0);
+                        if (speakAnswer && !answer.trim().isEmpty()) speakReplyOffline(answer);
                     });
                 }
                 @Override public void onError(String reason) {
                     runOnUiThread(() -> {
                         if (!generating) return;
                         generating = false;
+                        responseStarted = false;
+                        voiceTurn = false;
                         streaming.setLength(0);
                         notice = "Local inference unavailable: " + (reason == null ? "unknown error" : reason);
                         if (selectedTab == 0) showTab(0);
@@ -446,9 +530,216 @@ public final class ForgeHomeActivity extends Activity {
             });
         } catch (Exception error) {
             generating = false;
+            responseStarted = false;
+            voiceTurn = false;
             streaming.setLength(0);
             notice = "Local inference failed. Your note remains saved.";
             showTab(0);
+        }
+    }
+
+    private void updateAvatarMode() {
+        if (avatarView == null) return;
+        ForgeEmberView.Mode mode = listening ? ForgeEmberView.Mode.LISTENING
+                : speaking ? ForgeEmberView.Mode.SPEAKING
+                : generating ? responseStarted ? ForgeEmberView.Mode.RESPONDING
+                : ForgeEmberView.Mode.THINKING : ForgeEmberView.Mode.IDLE;
+        avatarView.setMode(mode);
+        if (stateLabel != null) {
+            String label = listening ? "LISTENING ON DEVICE"
+                    : speaking ? "SPEAKING"
+                    : generating ? responseStarted ? "RESPONDING" : "THINKING"
+                    : model.status().available ? "LOCAL LANGUAGE BRIDGE · READY" : "HERE WITH YOU";
+            stateLabel.setText(label);
+            stateLabel.setTextColor(listening || speaking || generating ? EMBER : MUTED);
+        }
+        if (microphoneButton != null) {
+            microphoneButton.setBackground(shape(listening ? EMBER : ACCENT, 40));
+            microphoneButton.setContentDescription(listening
+                    ? "Stop listening" : "Start on-device voice chat");
+        }
+    }
+
+    private void toggleOnDeviceListening() {
+        if (listening) {
+            stopVoiceRecognizer();
+            notice = "Voice input stopped.";
+            updateAvatarMode();
+            return;
+        }
+        if (generating || speaking) {
+            if (speaking && textToSpeech != null) {
+                textToSpeech.stop();
+                speaking = false;
+                updateAvatarMode();
+            } else {
+                Toast.makeText(this, "Wait for th…182 tokens truncated…CORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_MICROPHONE);
+            return;
+        }
+        beginOnDeviceListening();
+    }
+
+    private void beginOnDeviceListening() {
+        if (Build.VERSION.SDK_INT < 31 ||
+                !SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) return;
+        stopVoiceRecognizer();
+        try {
+            speechRecognizer = SpeechRecognizer.createOnDeviceSpeechRecognizer(this);
+            speechRecognizer.setRecognitionListener(new RecognitionListener() {
+                @Override public void onReadyForSpeech(Bundle params) {
+                    listening = true;
+                    updateAvatarMode();
+                }
+                @Override public void onBeginningOfSpeech() {
+                    if (avatarView != null) avatarView.pulse();
+                }
+                @Override public void onRmsChanged(float rmsdB) {
+                    if (avatarView != null) avatarView.setAudioLevel(rmsdB);
+                }
+                @Override public void onBufferReceived(byte[] buffer) {}
+                @Override public void onEndOfSpeech() {
+                    if (stateLabel != null) stateLabel.setText("PROCESSING ON DEVICE");
+                }
+                @Override public void onError(int error) {
+                    releaseVoiceRecognizer();
+                    if (error != SpeechRecognizer.ERROR_CLIENT) {
+                        notice = error == SpeechRecognizer.ERROR_NO_MATCH ||
+                                error == SpeechRecognizer.ERROR_SPEECH_TIMEOUT
+                                ? "I didn’t catch that. Tap the mic and try again."
+                                : "On-device voice input stopped. You can retry or use text chat.";
+                        showTab(0);
+                    }
+                }
+                @Override public void onResults(Bundle results) {
+                    String phrase = firstRecognition(results);
+                    releaseVoiceRecognizer();
+                    if (phrase.isEmpty()) {
+                        notice = "I didn’t catch that. Tap the mic and try again.";
+                        showTab(0);
+                    } else {
+                        notice = "Voice message recognized on this device.";
+                        submitPrompt(phrase, true);
+                    }
+                }
+                @Override public void onPartialResults(Bundle partialResults) {
+                    String phrase = firstRecognition(partialResults);
+                    if (!phrase.isEmpty() && stateLabel != null) stateLabel.setText("HEARING · " + phrase);
+                }
+                @Override public void onEvent(int eventType, Bundle params) {}
+            });
+            Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+            intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault().toLanguageTag());
+            intent.putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true);
+            intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1);
+            listening = true;
+            notice = "Listening with Android’s on-device speech recognizer. Audio is not saved.";
+            updateAvatarMode();
+            speechRecognizer.startListening(intent);
+        } catch (Exception error) {
+            releaseVoiceRecognizer();
+            notice = "Could not start on-device voice input. Text chat is still available.";
+            showTab(0);
+        }
+    }
+
+    private String firstRecognition(Bundle results) {
+        if (results == null) return "";
+        java.util.ArrayList<String> matches =
+                results.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+        return matches == null || matches.isEmpty() || matches.get(0) == null
+                ? "" : matches.get(0).trim();
+    }
+
+    private void stopVoiceRecognizer() {
+        if (speechRecognizer != null) {
+            try { speechRecognizer.cancel(); } catch (Exception ignored) {}
+            try { speechRecognizer.destroy(); } catch (Exception ignored) {}
+            speechRecognizer = null;
+        }
+        listening = false;
+    }
+
+    private void releaseVoiceRecognizer() {
+        if (speechRecognizer != null) {
+            try { speechRecognizer.destroy(); } catch (Exception ignored) {}
+            speechRecognizer = null;
+        }
+        listening = false;
+        updateAvatarMode();
+    }
+
+    private void speakReplyOffline(String reply) {
+        pendingSpeech = reply;
+        if (textToSpeech != null) {
+            if (ttsReady) startOfflineSpeech();
+            return;
+        }
+        textToSpeech = new TextToSpeech(this, status -> runOnUiThread(() -> {
+            if (status != TextToSpeech.SUCCESS || textToSpeech == null) {
+                ttsReady = false;
+                pendingSpeech = null;
+                notice = "Reply saved. This phone has no available offline speech voice.";
+                if (selectedTab == 0) showTab(0);
+                return;
+            }
+            int language = textToSpeech.setLanguage(Locale.US);
+            Set<Voice> voices = textToSpeech.getVoices();
+            Voice offlineEnglish = null;
+            if (voices != null) {
+                for (Voice voice : voices) {
+                    if (voice.getLocale() != null && "en".equals(voice.getLocale().getLanguage())
+                            && !voice.isNetworkConnectionRequired()) {
+                        offlineEnglish = voice;
+                        break;
+                    }
+                }
+            }
+            ttsReady = language != TextToSpeech.LANG_MISSING_DATA &&
+                    language != TextToSpeech.LANG_NOT_SUPPORTED && offlineEnglish != null;
+            if (ttsReady) {
+                textToSpeech.setVoice(offlineEnglish);
+                textToSpeech.setSpeechRate(.96f);
+                textToSpeech.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                    @Override public void onStart(String utteranceId) {
+                        runOnUiThread(() -> {
+                            speaking = true;
+                            updateAvatarMode();
+                        });
+                    }
+                    @Override public void onDone(String utteranceId) {
+                        runOnUiThread(() -> {
+                            speaking = false;
+                            updateAvatarMode();
+                        });
+                    }
+                    @Override public void onError(String utteranceId) {
+                        runOnUiThread(() -> {
+                            speaking = false;
+                            updateAvatarMode();
+                        });
+                    }
+                });
+                startOfflineSpeech();
+            } else {
+                pendingSpeech = null;
+                notice = "Reply saved. Install an offline English voice in Android Text-to-Speech settings to hear replies.";
+                if (selectedTab == 0) showTab(0);
+            }
+        }));
+    }
+
+    private void startOfflineSpeech() {
+        if (textToSpeech == null || !ttsReady || pendingSpeech == null) return;
+        String reply = pendingSpeech;
+        pendingSpeech = null;
+        int result = textToSpeech.speak(reply, TextToSpeech.QUEUE_FLUSH, null, "forge-local-reply");
+        if (result == TextToSpeech.ERROR) {
+            speaking = false;
+            notice = "Reply saved, but offline speech could not start.";
+            updateAvatarMode();
         }
     }
 
@@ -571,7 +862,7 @@ public final class ForgeHomeActivity extends Activity {
         LinearLayout privacy = panel(body, true);
         privacy.addView(text("OFFLINE BY DESIGN", 11, ACCENT, true));
         space(privacy, 8);
-        privacy.addView(text("This build has no Internet permission, screen capture or content-reading accessibility service. Chat notes and confirmed principles remain in separate encrypted device stores.", 14, WHITE, false));
+        privacy.addView(text("This build has no Internet permission, screen capture or content-reading accessibility service. Voice uses Android’s on-device recognizer only when the phone provides one, plus an installed offline speech voice. Audio is not saved; recognized text enters the encrypted journal only after you speak a message.", 14, WHITE, false));
         space(body, 7);
         addAction(body, "Observation & permission controls", () ->
                 startActivity(new Intent(this, MainActivity.class)), true);
@@ -606,6 +897,10 @@ public final class ForgeHomeActivity extends Activity {
             bridge.addView(text("Choose a GGUF model you have permission to use. The app copies it into private storage. Forge Core does not download or upload the model.",
                     13, WHITE, false));
             space(bridge, 10);
+            if (!model.hasImportedModelFile()) {
+                addAction(bridge, "Download test teacher · Qwen 0.5B · about 400 MB",
+                        this::confirmTeacherDownload, false);
+            }
             addAction(bridge, "Choose local GGUF model", () -> {
                 Intent picker = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 picker.addCategory(Intent.CATEGORY_OPENABLE);
@@ -628,6 +923,21 @@ public final class ForgeHomeActivity extends Activity {
             addAction(bridge, "Unload model from memory", () ->
                     model.unloadModel(operationListener("Model unload")), false);
         }
+    }
+
+    private void confirmTeacherDownload() {
+        new AlertDialog.Builder(this)
+                .setTitle("Download the temporary test teacher?")
+                .setMessage("This optional Qwen 0.5B GGUF is about 400 MB and uses an Apache 2.0 license. Android will open the download in your browser. The app itself has no Internet permission. It is a separate pretrained helper; it will not become Forge Seed or enter Forge training.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Open browser", (dialog, which) -> {
+                    Uri modelUri = Uri.parse("https://huggingface.co/Qwen/Qwen2.5-0.5B-Instruct-GGUF/resolve/main/qwen2.5-0.5b-instruct-q4_k_m.gguf?download=true");
+                    try {
+                        startActivity(new Intent(Intent.ACTION_VIEW, modelUri));
+                    } catch (Exception error) {
+                        Toast.makeText(this, "Could not open the model download in a browser.", Toast.LENGTH_LONG).show();
+                    }
+                }).show();
     }
 
     private ForgeModelAdapter.OperationListener operationListener(String label) {
@@ -708,7 +1018,7 @@ public final class ForgeHomeActivity extends Activity {
         LinearLayout limitations = panel(body, false);
         limitations.addView(text("NOT YET AVAILABLE", 11, ACCENT, true));
         space(limitations, 8);
-        limitations.addView(text("Forge Seed chat inference, voice conversation, autonomous actions, screen reading and independent on-device learning.", 13, WHITE, false));
+        limitations.addView(text("Forge Seed chat inference, autonomous actions, screen reading and independent on-device learning.", 13, WHITE, false));
     }
 
     private String appVersion() {

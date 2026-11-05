@@ -175,7 +175,7 @@ class LocalLanguageBridge(context: Context) : ForgeModelAdapter {
                 if (priorState is InferenceEngine.State.Error) engine.cleanUp()
                 engine.loadModel(modelFile.absolutePath)
                 engine.setSystemPrompt(
-                    "You are an optional local language bridge in the Forge Core app. " +
+                    "You are the temporary local test teacher in the Forge Core app. " +
                     "You are a separate pretrained model, not Forge Seed, and you do not train Forge. " +
                     "Never claim to be the scratch-trained Forge model. Be candid about uncertainty. " +
                     "Help the user think through ideas and ask useful, respectful follow-up questions. " +
