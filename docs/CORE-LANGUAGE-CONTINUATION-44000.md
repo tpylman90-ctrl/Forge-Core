@@ -16,10 +16,9 @@ seed 43, batch size 4, context 128 and learning rate 0.0003 were retained.
 - Total optimizer steps: **44,000**
 - Additional updates: **8,000**
 - Runtime: **455.91 seconds**
-- Held-out token loss at this continuation's start: **2.308715**
-- Held-out token loss after it: **2.262222**
-- Relative reduction during this batch: **2.01%**
-- Cumulative reduction from step 28,000 (2.369578): **4.53%**
+- Same-protocol 64-window progress loss: **2.308715 at step 36,000 → 2.238001 at step 44,000** (3.06% reduction).
+- Cumulative 64-window curve change: **2.369578 at step 28,000 → 2.238001 at step 44,000** (5.55% reduction).
+- Separate final 256-window diagnostic: **2.262222**; it uses more windows and should not be directly compared to the 64-window curve.
 - Sampled estimated bits per byte: **0.896367**; estimated from 256 token
   windows, not an exact full-validation BPE/byte measurement.
 
