@@ -213,8 +213,11 @@ public final class ForgeHomeActivity extends Activity {
     private LinearLayout panel(LinearLayout parent, boolean raised) {
         LinearLayout card = column();
         card.setPadding(dp(16), dp(15), dp(16), dp(15));
-        GradientDrawable background = shape(raised ? SURFACE_RAISED : SURFACE, 17);
-        background.setStroke(dp(1), raised ? 0x403F3156 : 0x28282A39);
+        GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                raised ? new int[]{0xFF211C2B, SURFACE_RAISED, 0xFF19171F}
+                        : new int[]{0xFF181A20, SURFACE, 0xFF101116});
+        background.setCornerRadius(dp(17));
+        background.setStroke(dp(1), raised ? 0x604B3569 : 0x38383B48);
         card.setBackground(background);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(12);
@@ -443,8 +446,10 @@ public final class ForgeHomeActivity extends Activity {
         boolean fromTeacher = "teacher".equals(item.optString("role"));
         LinearLayout bubble = panel(parent, fromForge || fromTeacher);
         if (!fromForge && !fromTeacher) {
-            GradientDrawable userSurface = shape(SURFACE, 17);
-            userSurface.setStroke(dp(1), 0x3835A4B6);
+            GradientDrawable userSurface = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
+                    new int[]{0xFF142126, SURFACE, 0xFF101116});
+            userSurface.setCornerRadius(dp(17));
+            userSurface.setStroke(dp(1), 0x5843AEBE);
             bubble.setBackground(userSurface);
         }
         String label = fromForge ? "FORGE SEED · NATIVE MODEL"
