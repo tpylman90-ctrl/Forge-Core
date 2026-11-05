@@ -8,9 +8,14 @@ on:
         description: "Bounded additional updates, 1–10000"
         required: true
         default: 8000
+      parent_run_id:
+        type: string
+        description: "Successful core-continuation run containing the checkpoint to resume"
+        required: false
+        default: "42115007553"
   push:
     branches: [main]
-    paths: ["experiments/requests/core-language-continuation-001.md"]
+    paths: ["experiments/requests/core-language-continuation-002.md"]
 
 permissions:
   contents: read
@@ -21,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     env:
-      SOURCE_RUN: "42085634121"
+      SOURCE_RUN: ${{ inputs.parent_run_id || '42115007553' }}
       STEPS: ${{ github.event_name == 'push' && '8000' || inputs.steps || '8000' }}
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -47,7 +52,7 @@ jobs:
           set -euo pipefail
           mkdir -p source
           gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
-            --name forge-seed-v07-research --dir source
+            --name forge-seed-v07-continuation --dir source
           for file in checkpoint.pt tokenizer.json source-manifest.json train.txt valid.txt; do
             test -f "source/$file"
           done
@@ -62,13 +67,13 @@ jobs:
           ckpt = torch.load(root / "checkpoint.pt", map_location="cpu", weights_only=True)
           assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
           assert manifest["license"] == "cdla-sharing-1.0"
-          assert ckpt["step"] == 28000 and ckpt["seed"] == 43
+          assert ckpt["step"] >= 28000 and ckpt["seed"] == 43
           assert ckpt["lr"] == 0.0003 and ckpt["batch"] == 4 and ckpt["seq_len"] == 128
           for split in ("train", "valid"):
               digest = hashlib.sha256((root / f"{split}.txt").read_bytes()).hexdigest()
               assert digest == manifest[f"{split}_sha256"] == ckpt[f"{split}_sha256"]
           print(json.dumps({
-              "parent_run": 42085634121, "parent_step": ckpt["step"],
+              "parent_run": int(__import__("os").environ["SOURCE_RUN"]), "parent_step": ckpt["step"],
               "seed": ckpt["seed"], "train_sha256": ckpt["train_sha256"],
               "valid_sha256": ckpt["valid_sha256"],
               "tokenizer_sha256": ckpt["tokenizer_sha256"],
@@ -102,17 +107,17 @@ jobs:
           info = {
               "kind": "continued_core_language_checkpoint",
               "status": "research_candidate_not_promoted",
-              "parent_run": 42085634121,
-              "parent_step": 28000,
+              "parent_run": int(__import__("os").environ["SOURCE_RUN"]),
+              "parent_step": torch.load("source/checkpoint.pt", map_location="cpu", weights_only=True)["step"],
               "candidate_sha256": hashlib.sha256(candidate).hexdigest(),
               "parent_sha256": hashlib.sha256(source).hexdigest(),
               "additional_steps": int(__import__("os").environ["STEPS"]),
-              "total_steps": 28000 + int(__import__("os").environ["STEPS"]),
+              "total_steps": torch.load("source/checkpoint.pt", map_location="cpu", weights_only=True)["step"] + int(__import__("os").environ["STEPS"]),
               "source_data_reused_exactly": True,
               "optimizer_state_resumed": True,
               "android_integrated": False
           }
-          Path("artifacts/preschool/lineage.json").write_text(json.dumps(info, indent=2) + "\\n")
+          Path("artifacts/preschool/lineage.json").write_text(json.dumps(info, indent=2) + "\n")
           PY
       - name: Preserve continued checkpoint and reproducibility materials
         uses: actions/upload-artifact@v4
