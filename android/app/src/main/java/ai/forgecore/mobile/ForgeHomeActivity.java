@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 12182)
-Total output lines: 1050
-
 package ai.forgecore.mobile;
 
 import android.app.Activity;
@@ -573,7 +570,23 @@ public final class ForgeHomeActivity extends Activity {
                 speaking = false;
                 updateAvatarMode();
             } else {
-                Toast.makeText(this, "Wait for th…182 tokens truncated…CORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Wait for the local reply to finish.", Toast.LENGTH_SHORT).show();
+                return;
+            }
+        }
+        if (Build.VERSION.SDK_INT < 31) {
+            Toast.makeText(this,
+                    "On-device voice input requires Android 12 or newer. Text chat is still available.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (!SpeechRecognizer.isOnDeviceRecognitionAvailable(this)) {
+            Toast.makeText(this,
+                    "This phone has no on-device speech recognizer available. Forge will not send audio to an online recognizer.",
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, REQUEST_MICROPHONE);
             return;
         }
