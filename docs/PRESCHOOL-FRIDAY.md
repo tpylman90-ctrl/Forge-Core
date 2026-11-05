@@ -173,7 +173,14 @@ unscored.
 
 **No readiness pass or model promotion.** See
 [50 MiB / 28,000-step results](PRESCHOOL-50M-28000-RESULTS.md).
-The new question-only benchmark passed split integrity (192 train, 60
-development, 90 final, balanced giver/recipient/other); its controlled
-three-seed student-head comparison is in progress. No task head is merged
-into the language checkpoint.
+The question-only benchmark passed split integrity (192 train, 60
+development, 90 final, balanced giver/recipient/other). On the untouched
+90-question final split across three seeds, plain cross-entropy scored
+166/270 (61.5%), CE plus supervised contrastive loss 170/270 (63.0%),
+and shuffled labels 76/270 (28.1%). Both supervised variants beat the
+shuffled control in every seed, but contrastive learning added only four
+correct answers overall. Giver recall remained weak (31/90 plain,
+33/90 contrastive), with most giver items mislabeled as recipient. No task
+head is merged into the language checkpoint. The result points to a
+counterfactual giver/recipient lesson followed by a newly authored final
+split; see [question-intent study results](QUESTION-INTENT-STUDENT-V1-RESULTS.md).
