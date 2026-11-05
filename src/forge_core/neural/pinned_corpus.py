@@ -28,8 +28,8 @@ def source_url(filename: str) -> str:
 
 def fetch_prefix(filename: str, byte_limit: int) -> bytes:
     """Bounded streaming read, including a small overread for a complete story."""
-    if not 100_000 <= byte_limit <= 14 * 1024 * 1024:
-        raise ValueError("Requested sample outside bounded range")
+    if not 100_000 <= byte_limit <= 64 * 1024 * 1024:
+        raise ValueError("Requested sample outside 64 MiB safety bound")
     cap = byte_limit + 16384
     request = Request(source_url(filename), headers={
         "User-Agent": "Forge-Core-research/0.7 (pinned, bounded public text)",
