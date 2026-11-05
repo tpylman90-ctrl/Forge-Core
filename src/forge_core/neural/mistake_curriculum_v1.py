@@ -61,11 +61,13 @@ def make_pools(model,tokens,codec,out):
         context=codec.decode(tokens[start:start+pos+1].tolist())[-240:]
         guess_text=codec.decode([guess])
         gold_text=codec.decode([gold])
-        record=(f"Context: {context}\n"
-                f"Forge's guess: {guess_text}\n"
-                f"Correct answer: {gold_text}\n"
+        if "\ufffd" in guess_text or "\ufffd" in gold_text:
+            continue
+        record=(f"Context: {context}\\n"
+                f"Correct answer: {gold_text}\\n"
                 f"Why: the verified source continues with {gold_text}; "
-                f"the guess {guess_text} conflicts with that observed continuation.\n")
+                f"the guess {guess_text} conflicts with that observed continuation.\\n"
+                f"Forge's retained guess: {guess_text}\\n")
         traces.extend(codec.encode(record).ids+[codec.token_to_id("[UNK]")])
     if len(traces)<SEQ+1:
         raise RuntimeError("Not enough source-verified correction traces")
