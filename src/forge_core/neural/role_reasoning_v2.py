@@ -27,8 +27,15 @@ from forge_core.neural.seed_v07 import generate_samples, heldout
 from forge_core.neural.train import make_batch
 
 
-TRAIN_PEOPLE = ("Ava", "Blake", "Celia", "Devin", "Esme", "Felix",
-                "Gia", "Holden", "Isla", "Joel", "Keira", "Luca")
+TRAIN_PEOPLE_BANKS = (
+    ("Ava", "Blake", "Celia", "Devin", "Esme", "Felix",
+     "Gia", "Holden", "Isla", "Joel", "Keira", "Luca"),
+    ("Aaron", "Bella", "Caleb", "Daria", "Ethan", "Fiona",
+     "Gavin", "Holly", "Ian", "Jade", "Kieran", "Lena"),
+    ("Amir", "Brielle", "Colin", "Daphne", "Eli", "Freya",
+     "Grant", "Heidi", "Ivan", "Jasper", "Kara", "Logan"),
+)
+TRAIN_PEOPLE = tuple(name for bank in TRAIN_PEOPLE_BANKS for name in bank)
 FINAL_PEOPLE = ("Margo", "Nico", "Oona", "Pascal", "Rhea", "Sol",
                 "Tessa", "Uriah", "Vance", "Willa", "Xavier", "Yvonne")
 TRAIN_OBJECTS = ("lantern", "trumpet", "thimble", "telescope",
@@ -125,9 +132,10 @@ def make_train(seed: int, rows: int = 3200) -> list[Case]:
         raise ValueError("Training rows must be 40..4000 and divisible by four")
     import itertools
     rng = random.Random(seed)
+    train_people = TRAIN_PEOPLE_BANKS[seed % len(TRAIN_PEOPLE_BANKS)]
     configs = [
         (left, right, item, template_index)
-        for left, right in itertools.combinations(TRAIN_PEOPLE, 2)
+        for left, right in itertools.combinations(train_people, 2)
         for item in TRAIN_OBJECTS
         for template_index in range(len(TRAIN_STORIES))
     ]
