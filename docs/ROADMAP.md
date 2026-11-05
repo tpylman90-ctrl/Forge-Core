@@ -515,10 +515,11 @@ isolated.
   (run 42085634121), then resume the exact checkpoint, optimizer state,
   tokenizer, RNG and data split for **36,000** and **44,000 total steps**
   (runs 42115007553 and 42116842094).
-- [x] Across the two continuations, held-out TinyStories token loss fell
-  from **2.369578** at step 28,000 to **2.262222** at step 44,000
-  (4.53% relative reduction); exact checkpoints, metrics and lineage are
-  preserved in 90-day Actions artifacts and durable reports:
+- [x] Across the two continuations, the same-protocol 64-window progress curve
+  fell from **2.369578** at step 28,000 to **2.238001** at step 44,000
+  (5.55% relative reduction). Separate 256-window final diagnostics are
+  reported separately; exact checkpoints, metrics and lineage are preserved
+  in 90-day Actions artifacts and durable reports:
   [36k](CORE-LANGUAGE-CONTINUATION-36000.md),
   [44k](CORE-LANGUAGE-CONTINUATION-44000.md).
 - [x] Finish the three-seed structured role-explanation comparison
