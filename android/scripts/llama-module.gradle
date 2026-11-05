@@ -13,10 +13,12 @@ android {
             cmake {
                 arguments '-DBUILD_SHARED_LIBS=ON', '-DLLAMA_BUILD_APP=OFF',
                     '-DLLAMA_BUILD_COMMON=ON', '-DLLAMA_OPENSSL=OFF',
-                    // Build portable ARM variants and let llama.cpp select the
-                    // best one supported by this phone at runtime.
-                    '-DGGML_NATIVE=OFF', '-DGGML_BACKEND_DL=ON',
-                    '-DGGML_CPU_ALL_VARIANTS=ON', '-DGGML_LLAMAFILE=OFF'
+                    // Keep CPU registration static for reliable Android loading.
+                    // Dimensity 6300 class ARM cores support these ARMv8.2 features.
+                    '-DGGML_NATIVE=OFF', '-DGGML_BACKEND_DL=OFF',
+                    '-DGGML_CPU_ALL_VARIANTS=OFF',
+                    '-DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16',
+                    '-DGGML_LLAMAFILE=OFF'
             }
         }
     }
