@@ -2,7 +2,7 @@ name: Forge Core — model-guided mistake curriculum
 
 on:
   push:
-    branches: ["research/mistake-curriculum-v1-20261105"]
+    branches: ["main"]
     paths: ["experiments/requests/mistake-curriculum-v1-20261105.md"]
 
 permissions:
