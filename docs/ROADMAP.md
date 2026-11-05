@@ -559,3 +559,18 @@ isolated.
   language curve improves without loss regression.
 - [ ] Preserve a durable checkpoint archive beyond the 90-day Actions
   retention window before it expires.
+
+### Continued language learning through 60,000 steps
+
+- [x] Continue the exact checkpoint chain through **60,000** updates; see
+  [step-60k report](CORE-LANGUAGE-CONTINUATION-60000.md).
+- [x] Matched 64-window progress loss at **2.201201 (52k) → 2.184636
+  (60k)**; separate 256-window final diagnostic also improved to **2.205533**.
+- [x] Comprehension diagnostic remains **20/40** forced choice with **0/20**
+  both-mirror pairs correct: no demonstrated comprehension gain.
+- [x] Create an unpublished draft archive for the full 52k checkpoint and
+  set up automatic draft archiving for future core continuations; archive
+  the 60k checkpoint with the verified lineage before relying on it as a
+  long-term continuation point.
+- [ ] Continue the next bounded core language run only after 60k parent
+  hashes and data lineage verify.
