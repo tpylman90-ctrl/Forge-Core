@@ -213,7 +213,9 @@ public final class ForgeHomeActivity extends Activity {
     private LinearLayout panel(LinearLayout parent, boolean raised) {
         LinearLayout card = column();
         card.setPadding(dp(16), dp(15), dp(16), dp(15));
-        card.setBackground(shape(raised ? SURFACE_RAISED : SURFACE, 17));
+        GradientDrawable background = shape(raised ? SURFACE_RAISED : SURFACE, 17);
+        background.setStroke(dp(1), raised ? 0x403F3156 : 0x28282A39);
+        card.setBackground(background);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(12);
         parent.addView(card, params);
@@ -387,11 +389,18 @@ public final class ForgeHomeActivity extends Activity {
         FrameLayout microphone = new FrameLayout(this);
         microphoneButton = microphone;
         microphone.setContentDescription("Start on-device voice chat");
-        microphone.setBackground(shape(listening ? EMBER : ACCENT, 40));
-        microphone.setElevation(dp(5));
-        microphone.addView(new ForgeMicIconView(this), new FrameLayout.LayoutParams(-1, -1));
+        microphone.setClipChildren(false);
+        microphone.setClipToPadding(false);
+        ForgeMicAuraView aura = new ForgeMicAuraView(this);
+        aura.setActive(listening || speaking || generating);
+        microphone.addView(aura, new FrameLayout.LayoutParams(-1, -1));
+        FrameLayout micCore = new FrameLayout(this);
+        micCore.setBackground(shape(listening ? EMBER : ACCENT, 40));
+        micCore.setElevation(dp(5));
+        micCore.addView(new ForgeMicIconView(this), new FrameLayout.LayoutParams(-1, -1));
+        microphone.addView(micCore, new FrameLayout.LayoutParams(dp(66), dp(66), Gravity.CENTER));
         microphone.setOnClickListener(view -> toggleOnDeviceListening());
-        composer.addView(microphone, new LinearLayout.LayoutParams(dp(66), dp(66)));
+        composer.addView(microphone, new LinearLayout.LayoutParams(dp(148), dp(76)));
 
         View spacerRight = new View(this);
         composer.addView(spacerRight, new LinearLayout.LayoutParams(0, 1, 1f));
@@ -433,6 +442,11 @@ public final class ForgeHomeActivity extends Activity {
         boolean fromForge = "forge".equals(item.optString("role"));
         boolean fromTeacher = "teacher".equals(item.optString("role"));
         LinearLayout bubble = panel(parent, fromForge || fromTeacher);
+        if (!fromForge && !fromTeacher) {
+            GradientDrawable userSurface = shape(SURFACE, 17);
+            userSurface.setStroke(dp(1), 0x3835A4B6);
+            bubble.setBackground(userSurface);
+        }
         String label = fromForge ? "FORGE SEED · NATIVE MODEL"
                 : fromTeacher ? "LOCAL LANGUAGE BRIDGE · NOT FORGE SEED"
                 : "YOU · PRIVATE MESSAGE";
@@ -555,7 +569,11 @@ public final class ForgeHomeActivity extends Activity {
             stateLabel.setTextColor(listening || speaking || generating ? EMBER : MUTED);
         }
         if (microphoneButton != null) {
-            microphoneButton.setBackground(shape(listening ? EMBER : ACCENT, 40));
+            View micCore = microphoneButton.getChildAt(1);
+            if (micCore != null) micCore.setBackground(shape(listening ? EMBER : ACCENT, 40));
+            if (microphoneButton.getChildAt(0) instanceof ForgeMicAuraView) {
+                ((ForgeMicAuraView) microphoneButton.getChildAt(0)).setActive(listening || speaking || generating);
+            }
             microphoneButton.setContentDescription(listening
                     ? "Stop listening" : "Start on-device voice chat");
         }

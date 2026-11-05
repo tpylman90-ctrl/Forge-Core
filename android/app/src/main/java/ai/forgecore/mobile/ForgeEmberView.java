@@ -124,6 +124,9 @@ final class ForgeEmberView extends View {
         int ringColor = blend(PALETTE[oldIndex][2], PALETTE[paletteIndex][2], transition);
         int hotColor = blend(PALETTE[oldIndex][3], PALETTE[paletteIndex][3], transition);
 
+        // Fine instrument-style guides give the orb a holographic frame without crowding it.
+        drawHudGuides(canvas, cx, cy, w, h, time, ringColor, energy);
+
         // Interpolate both the shape and the two colored smoke layers during state changes.
         float idleScale = .98f + breath * .035f;
         float auraScale = idleWeight * idleScale
@@ -291,6 +294,37 @@ final class ForgeEmberView extends View {
             }
         }
         paint.setStrokeCap(Paint.Cap.BUTT);
+        paint.setStyle(Paint.Style.FILL);
+    }
+
+    private void drawHudGuides(Canvas canvas, float cx, float cy, float w, float h,
+                               float time, int color, float energy) {
+        float radius = Math.min(w * .455f, h * .475f);
+        paint.setShader(null);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(.62f * density);
+        paint.setColor(withAlpha(color, 28));
+        canvas.drawCircle(cx, cy, radius, paint);
+        canvas.drawCircle(cx, cy, radius * .91f, paint);
+        paint.setStrokeWidth(1f * density);
+        for (int i = 0; i < 72; i++) {
+            double angle = i * Math.PI * 2.0 / 72.0;
+            float ux = (float) Math.cos(angle), uy = (float) Math.sin(angle);
+            float length = i % 6 == 0 ? 7f : i % 3 == 0 ? 4f : 2f;
+            int alpha = i % 6 == 0 ? 72 + (int) (energy * 24) : 35;
+            paint.setColor(withAlpha(color, alpha));
+            canvas.drawLine(cx + ux * (radius - length * density), cy + uy * (radius - length * density),
+                    cx + ux * radius, cy + uy * radius, paint);
+        }
+        // Sparse moving telemetry pips hint at instrument activity, not another particle cloud.
+        paint.setStyle(Paint.Style.FILL);
+        for (int i = 0; i < 4; i++) {
+            float angle = time * .10f + i * (float) Math.PI * .5f;
+            float x = cx + (float) Math.cos(angle) * radius * .955f;
+            float y = cy + (float) Math.sin(angle) * radius * .955f;
+            paint.setColor(withAlpha(Color.WHITE, 95));
+            canvas.drawCircle(x, y, 1.05f * density, paint);
+        }
         paint.setStyle(Paint.Style.FILL);
     }
 
