@@ -18,7 +18,7 @@ on:
     paths: ["experiments/requests/core-language-continuation-004.md"]
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -126,3 +126,32 @@ jobs:
           path: artifacts/preschool/
           retention-days: 90
           if-no-files-found: error
+      - name: Build a durable checkpoint bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          TOTAL_STEPS="$(python -c 'import json; print(json.load(open("artifacts/preschool/metrics.json"))["steps_total"])')"
+          mkdir -p release
+          tar -czf "release/forge-seed-v07-step-${TOTAL_STEPS}.tar.gz" \
+            -C artifacts/preschool checkpoint.pt parent-checkpoint.pt \
+            tokenizer.json source-manifest.json train.txt valid.txt \
+            metrics.json capabilities.json lineage.json
+          echo "TOTAL_STEPS=$TOTAL_STEPS" >> "$GITHUB_ENV"
+      - name: Preserve the candidate as an unpublished draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<EOF
+          Unpublished, research-only Forge Seed v0.7 checkpoint at ${TOTAL_STEPS}
+          total optimizer updates. Includes the parent checkpoint, candidate,
+          optimizer state, exact public train/validation split, source manifest,
+          metrics, capability check and checkpoint lineage.
+
+          This is a durable continuation point, not an Android release or a
+          capability certification.
+          EOF
+          gh release create "forge-seed-v07-step-${TOTAL_STEPS}" \
+            "release/forge-seed-v07-step-${TOTAL_STEPS}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Seed v0.7 — ${TOTAL_STEPS}-step research checkpoint" \
+            --notes-file release-notes.md
