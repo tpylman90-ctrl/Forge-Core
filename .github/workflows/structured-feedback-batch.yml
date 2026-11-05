@@ -1,0 +1,138 @@
+name: Forge Core — structured mistake records
+
+on:
+  push:
+    branches: [research/forge-structured-feedback-20261105]
+    paths:
+      - "experiments/structured_feedback_batch.py"
+      - ".github/workflows/structured-feedback-batch.yml"
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: forge-core-structured-feedback
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Retrieve source-verified public Forge Seed checkpoint
+        run: |
+          mkdir -p original prepared
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir original
+          test -s original/checkpoint.pt
+          test -s original/source-manifest.json
+          test -s original/tokenizer.json
+      - name: Prepare five paired lesson sets and sealed exam
+        run: |
+          python experiments/structured_feedback_batch.py prepare \
+            --source-dir original --prepared-dir prepared
+      - name: Preserve common starting model and exam manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-structured-feedback-prepared
+          path: prepared/
+          retention-days: 30
+
+  train:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      max-parallel: 5
+      matrix:
+        dataset_id: [1, 2, 3, 4, 5]
+        method: [answer_only, structured_feedback]
+    env:
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Download common checkpoint and sealed data
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-structured-feedback-prepared
+          path: prepared
+      - name: Train matched 320-update branch
+        run: |
+          python experiments/structured_feedback_batch.py train \
+            --source-dir prepared --prepared-dir prepared --out results \
+            --data-id "${{ matrix.dataset_id }}" --method "${{ matrix.method }}"
+      - name: Preserve research-only result and checkpoint
+        uses: actions/upload-artifact@v4
+        with:
+          name: structured-feedback-${{ matrix.dataset_id }}-${{ matrix.method }}
+          path: results/
+          retention-days: 30
+          if-no-files-found: error
+
+  aggregate:
+    needs: [prepare, train]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install source model dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Collect all ten paired runs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: structured-feedback-*
+          merge-multiple: true
+          path: batch-artifacts
+      - name: Restore shared exam manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-structured-feedback-prepared
+          path: prepared
+      - name: Aggregate exact field scores and paired comparisons
+        run: |
+          mkdir -p results
+          cp batch-artifacts/run-*.json results/
+          python experiments/structured_feedback_batch.py aggregate \
+            --prepared-dir prepared --out results
+      - name: Preserve report and all ten checkpoints
+        uses: actions/upload-artifact@v4
+        with:
+          name: structured-feedback-10-run-cross-examination
+          path: |
+            results/cross-examination.json
+            results/cross-examination.md
+            batch-artifacts/run-*-step320.pt
+            batch-artifacts/run-*.json
+            prepared/manifest.json
+          retention-days: 90
+          if-no-files-found: error
