@@ -1,0 +1,71 @@
+name: Archive Forge Seed research checkpoint as draft
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/archive-core-language-step-52000.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOURCE_RUN: "42118418883"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify source run completed successfully
+        shell: bash
+        run: |
+          set -euo pipefail
+          RUN_JSON="$(gh run view "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --json status,conclusion,workflowName)"
+          jq -e '.status == "completed" and .conclusion == "success" and
+            .workflowName == "Forge Seed v0.7 — core language continuation"' \
+            <<< "$RUN_JSON" >/dev/null
+      - name: Download the exact 52,000-step research artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          for file in checkpoint.pt parent-checkpoint.pt tokenizer.json \
+            source-manifest.json train.txt valid.txt metrics.json \
+            capabilities.json lineage.json; do
+            test -f "source/$file"
+          done
+          jq -e '.status == "research_candidate_not_promoted" and
+            .total_steps == 52000 and .android_integrated == false' \
+            source/lineage.json >/dev/null
+          test "$(jq -r .steps_total source/metrics.json)" = "52000"
+      - name: Preserve checkpoint, optimizer, exact dataset split and evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          tar -czf forge-seed-v07-step-52000-research.tar.gz \
+            -C source checkpoint.pt parent-checkpoint.pt tokenizer.json \
+            source-manifest.json train.txt valid.txt metrics.json \
+            capabilities.json lineage.json
+      - name: Store the checkpoint as an unpublished research draft
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > release-notes.md <<'EOF'
+          Unpublished, research-only Forge Seed v0.7 checkpoint at 52,000 total
+          optimizer updates. Includes the parent checkpoint, model, optimizer
+          state, source manifest, exact public train/validation split, metrics,
+          samples, capability diagnostic and lineage hashes.
+          
+          This draft is a durable continuation point. It is not an Android
+          release and has not passed capability promotion gates.
+          EOF
+          gh release create forge-seed-v07-step-52000 \
+            forge-seed-v07-step-52000-research.tar.gz \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Seed v0.7 — 52,000-step research checkpoint" \
+            --notes-file release-notes.md
