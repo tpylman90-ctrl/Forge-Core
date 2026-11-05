@@ -100,6 +100,12 @@ def run(source:Path,out:Path,updates:int=3000):
     ckpt=torch.load(parent_path,map_location="cpu",weights_only=True)
     if ckpt["step"]!=76000 or manifest["revision"]!="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64":
         raise ValueError("Unexpected parent step or data revision")
+    if manifest.get("license")!="cdla-sharing-1.0":
+        raise ValueError("Unapproved source license")
+    for split in ("train","valid"):
+        digest=sha(source/f"{split}.txt")
+        if digest!=manifest.get(f"{split}_sha256") or digest!=ckpt.get(f"{split}_sha256"):
+            raise ValueError(f"{split} source hash mismatch")
     if sha(source/"tokenizer.json")!=ckpt["tokenizer_sha256"]:
         raise ValueError("Tokenizer/checkpoint hash mismatch")
     codec=Tokenizer.from_file(str(source/"tokenizer.json"))
