@@ -6,3 +6,5 @@ checkpoints, optimizer/RNG state, tokenizer, exact public source split,
 manifest, metrics, capability diagnostic and SHA256 lineage.
 
 Do not mark it capability-certified or install it in Android.
+
+The draft release title and notes must identify this as the 60,000-step checkpoint.
