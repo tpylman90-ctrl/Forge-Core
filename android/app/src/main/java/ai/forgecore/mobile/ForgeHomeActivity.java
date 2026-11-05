@@ -15,11 +15,13 @@ import android.os.Process;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.view.Gravity;
+import android.view.Menu;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
+import android.widget.PopupMenu;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -37,18 +39,18 @@ import java.util.Date;
  */
 public final class ForgeHomeActivity extends Activity {
     private static final int REQUEST_GGUF = 4107;
-    private static final int BG = Color.rgb(12, 18, 29);
-    private static final int SURFACE = Color.rgb(22, 33, 48);
-    private static final int SURFACE_RAISED = Color.rgb(29, 45, 62);
-    private static final int ACCENT = Color.rgb(94, 214, 236);
-    private static final int WHITE = Color.rgb(236, 245, 251);
-    private static final int MUTED = Color.rgb(161, 182, 199);
+    private static final int BG = Color.rgb(8, 8, 11);
+    private static final int SURFACE = Color.rgb(17, 17, 22);
+    private static final int SURFACE_RAISED = Color.rgb(25, 24, 31);
+    private static final int ACCENT = Color.rgb(178, 105, 255);
+    private static final int EMBER = Color.rgb(255, 139, 51);
+    private static final int WHITE = Color.rgb(244, 241, 247);
+    private static final int MUTED = Color.rgb(157, 151, 167);
     private static final String[] TABS = {"Chat", "History", "Memory", "Settings", "Diagnostics"};
 
     private LocalLanguageBridge model;
     private EncryptedJournal journal;
     private FrameLayout content;
-    private TextView[] navigation;
     private int selectedTab = 0;
     private boolean generating = false;
     private StringBuilder streaming = new StringBuilder();
@@ -66,39 +68,33 @@ public final class ForgeHomeActivity extends Activity {
         root.setBackgroundColor(BG);
         root.setFitsSystemWindows(true);
 
-        LinearLayout header = column();
-        header.setPadding(dp(20), dp(18), dp(20), dp(12));
-        header.setBackgroundColor(SURFACE);
-        TextView wordmark = text("◈   FORGE CORE", 22, WHITE, true);
-        wordmark.setLetterSpacing(0.07f);
-        header.addView(wordmark);
-        TextView strap = text("PRIVATE  /  OFFLINE  /  YOUR CONTROL", 10, ACCENT, true);
-        strap.setLetterSpacing(0.12f);
-        strap.setPadding(0, dp(5), 0, 0);
-        header.addView(strap);
+        LinearLayout header = new LinearLayout(this);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(15), dp(8), dp(15), dp(8));
+        header.setBackgroundColor(BG);
+        TextView menuButton = text("☰", 23, MUTED, false);
+        menuButton.setGravity(Gravity.CENTER);
+        menuButton.setContentDescription("Open Forge sections");
+        menuButton.setBackground(shape(SURFACE, 14));
+        header.addView(menuButton, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        menuButton.setOnClickListener(view -> showNavigationMenu(menuButton));
+        LinearLayout titleBlock = column();
+        titleBlock.setGravity(Gravity.CENTER);
+        TextView wordmark = text("✦  Forge", 22, WHITE, true);
+        wordmark.setGravity(Gravity.CENTER);
+        titleBlock.addView(wordmark);
+        TextView strap = text("PRIVATE  ·  ON DEVICE", 9, MUTED, true);
+        strap.setLetterSpacing(0.13f);
+        strap.setGravity(Gravity.CENTER);
+        titleBlock.addView(strap);
+        header.addView(titleBlock, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView headerSpacer = text("", 12, MUTED, false);
+        header.addView(headerSpacer, new LinearLayout.LayoutParams(dp(48), dp(48)));
         root.addView(header);
 
         content = new FrameLayout(this);
         root.addView(content, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        LinearLayout nav = new LinearLayout(this);
-        nav.setOrientation(LinearLayout.HORIZONTAL);
-        nav.setGravity(Gravity.CENTER);
-        nav.setBackgroundColor(SURFACE);
-        nav.setPadding(dp(6), dp(4), dp(6), dp(8));
-        navigation = new TextView[TABS.length];
-        for (int i = 0; i < TABS.length; i++) {
-            final int index = i;
-            TextView tab = text(TABS[i], 11, MUTED, i == 0);
-            tab.setGravity(Gravity.CENTER);
-            tab.setContentDescription("Open " + TABS[i]);
-            tab.setOnClickListener(view -> showTab(index));
-            LinearLayout.LayoutParams tabParams = new LinearLayout.LayoutParams(0, dp(52), 1f);
-            tabParams.setMargins(dp(2), 0, dp(2), 0);
-            nav.addView(tab, tabParams);
-            navigation[i] = tab;
-        }
-        root.addView(nav);
         setContentView(root);
         showTab(state == null ? 0 : state.getInt("selectedTab", 0));
     }
@@ -209,12 +205,6 @@ public final class ForgeHomeActivity extends Activity {
     private void showTab(int index) {
         selectedTab = Math.max(0, Math.min(index, TABS.length - 1));
         content.removeAllViews();
-        for (int i = 0; i < navigation.length; i++) {
-            navigation[i].setTextColor(i == selectedTab ? ACCENT : MUTED);
-            navigation[i].setTypeface(Typeface.DEFAULT,
-                    i == selectedTab ? Typeface.BOLD : Typeface.NORMAL);
-            navigation[i].setBackground(shape(i == selectedTab ? SURFACE_RAISED : SURFACE, 12));
-        }
         switch (selectedTab) {
             case 0: renderChat(); break;
             case 1: renderHistory(); break;
@@ -222,6 +212,16 @@ public final class ForgeHomeActivity extends Activity {
             case 3: renderSettings(); break;
             default: renderDiagnostics(); break;
         }
+    }
+
+    private void showNavigationMenu(View anchor) {
+        PopupMenu popup = new PopupMenu(this, anchor);
+        for (int i = 0; i < TABS.length; i++) popup.getMenu().add(Menu.NONE, i, i, TABS[i]);
+        popup.setOnMenuItemClickListener(item -> {
+            showTab(item.getItemId());
+            return true;
+        });
+        popup.show();
     }
 
     private JSONArray readEntriesOrWarn(LinearLayout destination) {
@@ -245,23 +245,23 @@ public final class ForgeHomeActivity extends Activity {
         LinearLayout.LayoutParams scrollingParams = new LinearLayout.LayoutParams(-1, 0, 1f);
         screen.addView(scrolling, scrollingParams);
         LinearLayout messages = column();
-        messages.setPadding(dp(18), dp(18), dp(18), dp(8));
+        messages.setPadding(dp(20), dp(4), dp(20), dp(14));
         scrolling.addView(messages);
 
         ForgeModelAdapter.ModelStatus modelStatus = model.status();
-        LinearLayout status = panel(messages, false);
-        status.addView(text(modelStatus.available
-                ? "●  LOCAL LANGUAGE BRIDGE READY"
-                : "●  FORGE SEED NOT CONNECTED", 12, ACCENT, true));
-        space(status, 9);
-        status.addView(text(modelStatus.available
-                ? "Replies are from the optional local helper model."
-                : "Forge Seed is still being developed.", 16, WHITE, true));
-        space(status, 6);
-        status.addView(text(modelStatus.available
-                ? "This pretrained helper runs on this device. It is not Forge Seed, and your messages do not train Forge."
-                : "You can write encrypted notes here, or import a local GGUF in Settings to chat with a clearly labeled helper. Notes are not sent to an AI until the helper is loaded.",
-                13, MUTED, false));
+        ForgeEmberView avatar = new ForgeEmberView(this);
+        LinearLayout.LayoutParams avatarParams = new LinearLayout.LayoutParams(-1, dp(282));
+        avatarParams.topMargin = dp(2);
+        avatarParams.bottomMargin = dp(8);
+        messages.addView(avatar, avatarParams);
+
+        TextView state = text(generating ? "GATHERING A RESPONSE" : modelStatus.available
+                ? "LOCAL LANGUAGE BRIDGE · READY" : "HERE WITH YOU", 10,
+                generating ? EMBER : MUTED, true);
+        state.setGravity(Gravity.CENTER);
+        state.setLetterSpacing(0.13f);
+        messages.addView(state);
+        space(messages, 15);
 
         if (!notice.isEmpty()) {
             LinearLayout info = panel(messages, true);
@@ -270,10 +270,17 @@ public final class ForgeHomeActivity extends Activity {
 
         JSONArray entries = readEntriesOrWarn(messages);
         if (entries != null && entries.length() == 0) {
-            LinearLayout welcome = panel(messages, true);
-            welcome.addView(text("A private space for Forge Core conversations", 18, WHITE, true));
-            space(welcome, 9);
-            welcome.addView(text("Write a note, or load the optional local language bridge in Settings to get an on-device reply. Its replies are labeled separately from Forge Seed.", 14, MUTED, false));
+            TextView welcome = text("I’m here. What are you thinking about?", 19, WHITE, false);
+            welcome.setGravity(Gravity.CENTER);
+            welcome.setPadding(dp(12), dp(3), dp(12), dp(13));
+            messages.addView(welcome);
+            TextView explain = text(modelStatus.available
+                    ? "Your reply will come from the optional local helper."
+                    : "Type a private note, or set up the local language bridge in Settings to chat.",
+                    12, MUTED, false);
+            explain.setGravity(Gravity.CENTER);
+            explain.setPadding(dp(18), 0, dp(18), dp(12));
+            messages.addView(explain);
         } else if (entries != null) {
             for (int i = 0; i < entries.length(); i++) {
                 JSONObject entry = entries.optJSONObject(i);
@@ -299,36 +306,62 @@ public final class ForgeHomeActivity extends Activity {
 
         scrolling.post(() -> scrolling.fullScroll(View.FOCUS_DOWN));
 
-        LinearLayout composer = column();
-        composer.setPadding(dp(16), dp(12), dp(16), dp(14));
-        composer.setBackgroundColor(SURFACE);
+        LinearLayout composer = new LinearLayout(this);
+        composer.setGravity(Gravity.CENTER);
+        composer.setPadding(dp(24), dp(7), dp(24), dp(8));
+        composer.setBackgroundColor(BG);
+        TextView keyboard = text("▦", 23, MUTED, false);
+        keyboard.setGravity(Gravity.CENTER);
+        keyboard.setContentDescription("Write a text message");
+        keyboard.setOnClickListener(view -> openTextComposer(modelStatus.available, generating));
+        composer.addView(keyboard, new LinearLayout.LayoutParams(dp(54), dp(54)));
+
+        View spacerLeft = new View(this);
+        composer.addView(spacerLeft, new LinearLayout.LayoutParams(0, 1, 1f));
+        FrameLayout microphone = new FrameLayout(this);
+        microphone.setContentDescription("Voice conversation is not connected yet");
+        microphone.setBackground(shape(ACCENT, 40));
+        microphone.setElevation(dp(5));
+        microphone.addView(new ForgeMicIconView(this), new FrameLayout.LayoutParams(-1, -1));
+        microphone.setOnClickListener(view -> Toast.makeText(this,
+                "Voice chat is not connected yet. Use the keyboard to message Forge.",
+                Toast.LENGTH_LONG).show());
+        composer.addView(microphone, new LinearLayout.LayoutParams(dp(66), dp(66)));
+
+        View spacerRight = new View(this);
+        composer.addView(spacerRight, new LinearLayout.LayoutParams(0, 1, 1f));
+        TextView settings = text("⚙", 23, MUTED, false);
+        settings.setGravity(Gravity.CENTER);
+        settings.setContentDescription("Open settings");
+        settings.setOnClickListener(view -> showTab(3));
+        composer.addView(settings, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        screen.addView(composer);
+    }
+
+    private void openTextComposer(boolean bridgeAvailable, boolean isGenerating) {
+        if (isGenerating) return;
         EditText input = new EditText(this);
-        input.setHint(modelStatus.available ? "Message the local language bridge…" : "Write to your private journal…");
+        input.setHint(bridgeAvailable ? "Message the local language bridge…" : "Write a private note…");
         input.setHintTextColor(MUTED);
         input.setTextColor(WHITE);
-        input.setTextSize(15);
+        input.setTextSize(16);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
                 | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        input.setMinLines(1);
-        input.setMaxLines(4);
+        input.setMinLines(2);
+        input.setMaxLines(5);
         input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(EncryptedJournal.MAX_MESSAGE_CHARS)});
-        input.setBackground(shape(SURFACE_RAISED, 12));
-        input.setPadding(dp(14), dp(8), dp(14), dp(8));
-        composer.addView(input, new LinearLayout.LayoutParams(-1, -2));
-        space(composer, 9);
-        TextView send = action(generating ? "Generating…" : modelStatus.available
-                ? "Send to local helper" : "Save private note", () -> {
-            String prompt = input.getText().toString().trim();
-            if (prompt.isEmpty()) {
-                Toast.makeText(this, "Write a note first", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            submitPrompt(prompt);
-        }, true);
-        send.setEnabled(!generating);
-        send.setAlpha(generating ? 0.55f : 1f);
-        composer.addView(send, new LinearLayout.LayoutParams(-1, -2));
-        screen.addView(composer);
+        input.setPadding(dp(14), dp(10), dp(14), dp(10));
+        input.setBackground(shape(SURFACE_RAISED, 13));
+        new AlertDialog.Builder(this)
+                .setTitle(bridgeAvailable ? "Message Forge’s local helper" : "Write to Forge")
+                .setView(input)
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton(bridgeAvailable ? "Send" : "Save note", (dialog, which) -> {
+                    String prompt = input.getText().toString().trim();
+                    if (prompt.isEmpty()) {
+                        Toast.makeText(this, "Write a message first", Toast.LENGTH_SHORT).show();
+                    } else submitPrompt(prompt);
+                }).show();
     }
 
     private void addMessage(LinearLayout parent, JSONObject item) {
