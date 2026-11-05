@@ -9,7 +9,7 @@
 ## Question
 
 Does a deterministically verified giver/recipient explanation help the
-36,000-step Forge Seed checkpoint identify roles, and does requiring a
+28,000-step Forge Seed checkpoint identify roles, and does requiring a
 candidate letter separate role selection from spelling an unfamiliar name?
 
 ## Design
