@@ -473,6 +473,7 @@ public final class ForgeHomeActivity extends Activity {
         if (!model.status().available) {
             voiceTurn = false;
             showTab(0);
+            if (avatarView != null) avatarView.pulse();
             return;
         }
 
@@ -480,6 +481,7 @@ public final class ForgeHomeActivity extends Activity {
         responseStarted = false;
         streaming = new StringBuilder();
         showTab(0);
+        if (avatarView != null) avatarView.pulse();
         try {
             model.generate(prompt, new ForgeModelAdapter.Listener() {
                 @Override public void onToken(String token) {
@@ -515,6 +517,7 @@ public final class ForgeHomeActivity extends Activity {
                             }
                         } else notice = "Local model finished without a reply.";
                         if (selectedTab == 0) showTab(0);
+                        if (avatarView != null) avatarView.pulse();
                         if (speakAnswer && !answer.trim().isEmpty()) speakReplyOffline(answer);
                     });
                 }
@@ -527,6 +530,7 @@ public final class ForgeHomeActivity extends Activity {
                         streaming.setLength(0);
                         notice = "Local inference unavailable: " + (reason == null ? "unknown error" : reason);
                         if (selectedTab == 0) showTab(0);
+                        if (avatarView != null) avatarView.pulse();
                     });
                 }
             });
