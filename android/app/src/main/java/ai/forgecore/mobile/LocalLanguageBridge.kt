@@ -3,6 +3,7 @@ package ai.forgecore.mobile
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.util.Log
 import com.arm.aichat.AiChat
 import com.arm.aichat.InferenceEngine
 import kotlinx.coroutines.CancellationException
@@ -53,6 +54,7 @@ class LocalLanguageBridge(context: Context) : ForgeModelAdapter {
             ready -> "Optional local language bridge ready. This is not Forge Seed."
             loading -> "Loading the local language bridge; this may take a few minutes."
             importing -> operation
+            operation.startsWith("Model load failed:") -> operation
             modelFile.isFile -> "Model is stored locally. Tap Load when you want to start a chat."
             else -> operation
         }
@@ -186,7 +188,21 @@ class LocalLanguageBridge(context: Context) : ForgeModelAdapter {
                 listener.onComplete(operation)
             } catch (error: Exception) {
                 modelLoaded = false
-                operation = "Model load failed: ${error.message ?: "unsupported GGUF or insufficient memory"}"
+                val engineFailure = (engine.state.value as? InferenceEngine.State.Error)?.exception
+                val failure = engineFailure ?: error
+                Log.e("ForgeLocalModel", "Could not load imported GGUF model", failure)
+                val sizeMiB = modelFile.length() / (1024L * 1024L)
+                val failureType = failure.javaClass.simpleName.ifBlank { "NativeLoadError" }
+                val failureReason = failure.message?.takeIf { it.isNotBlank() }
+                    ?: if (failureType == "UnsupportedArchitectureException") {
+                        "native loader rejected the GGUF"
+                    } else {
+                        "native model loader failed"
+                    }
+                operation = "Model load failed: $failureReason ($failureType). " +
+                    "File: ${importedName.ifBlank { modelFile.name }}, ${sizeMiB} MiB, " +
+                    "SHA-256 ${importedHash.take(12).ifBlank { "unknown" }}. " +
+                    "Check that the download completed and that the GGUF is supported by this app."
                 listener.onError(operation)
             } finally {
                 loading = false
