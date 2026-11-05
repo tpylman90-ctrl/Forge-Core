@@ -1,0 +1,80 @@
+name: Forge Seed v0.7 — structured role explanation diagnostic
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "Verified public-only 50 MiB scratch pretraining run"
+        type: string
+        required: true
+        default: "42085634121"
+      seeds:
+        description: "Independent training seeds"
+        type: string
+        required: true
+        default: "101 202 303"
+  push:
+    branches: [main]
+    paths: ["experiments/requests/role-reasoning-v2.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  diagnostic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_RUN: ${{ github.event_name == 'push' && '42085634121' || inputs.source_run_id || '42085634121' }}
+      SEEDS: ${{ github.event_name == 'push' && '101 202 303' || inputs.seeds || '101 202 303' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU-only PyTorch
+        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - name: Install scratch BPE tokenizer
+        run: python -m pip install "tokenizers>=0.20,<0.23"
+      - name: Install Forge Core
+        run: python -m pip install --no-deps -e .
+      - name: Validate bounded research settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_RUN" == "42085634121" ]]
+          read -r -a SEED_ARRAY <<< "$SEEDS"
+          (( ${#SEED_ARRAY[@]} >= 2 && ${#SEED_ARRAY[@]} <= 4 ))
+          for seed in "${SEED_ARRAY[@]}"; do
+            [[ "$seed" =~ ^[0-9]+$ ]]
+            (( seed >= 1 && seed <= 1000000 ))
+          done
+      - name: Restore the exact scratch checkpoint and public corpus
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source artifacts/role-reasoning-v2
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-research --dir source
+          for file in checkpoint.pt tokenizer.json source-manifest.json train.txt valid.txt; do
+            test -f "source/$file"
+          done
+      - name: Check data integrity and run the three-seed matched study
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest discover -s tests -p 'test_role_reasoning_v2.py' -v
+          read -r -a SEED_ARRAY <<< "$SEEDS"
+          python -m forge_core.neural.role_reasoning_v2 \
+            --checkpoint-dir source --out artifacts/role-reasoning-v2 \
+            --source-run "$SOURCE_RUN" --seeds "${SEED_ARRAY[@]}"
+      - name: Preserve replicated metrics and experimental controls
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-role-reasoning-v2
+          path: artifacts/role-reasoning-v2/
+          retention-days: 90
+          if-no-files-found: error
