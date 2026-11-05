@@ -30,7 +30,7 @@ final class ForgeEmberView extends View {
     private final RectF oval = new RectF();
     private final float density;
     private final long startTime = System.currentTimeMillis();
-    private final Bitmap smokeTexture;
+    private final Bitmap[] smokeTexture = new Bitmap[3];
     private final PorterDuffColorFilter[] smokeTint = new PorterDuffColorFilter[4];
     private final Shader[] smokeHalo = new Shader[4];
     private final Shader[] nodeGlow = new Shader[4];
@@ -51,7 +51,7 @@ final class ForgeEmberView extends View {
     ForgeEmberView(Context context) {
         super(context);
         density = getResources().getDisplayMetrics().density;
-        smokeTexture = createSmokeTexture();
+        for (int i = 0; i < smokeTexture.length; i++) smokeTexture[i] = createSmokeTexture(i * 37 + 13);
         smokeHalo[0] = radial(0xA84A1525);
         smokeHalo[1] = radial(0xA82D0B5A);
         smokeHalo[2] = radial(0xB8752574);
@@ -219,6 +219,11 @@ final class ForgeEmberView extends View {
             canvas.drawCircle(nodeScreenX[i], nodeScreenY[i], radius * pulse * .82f, paint);
             paint.setColor(withAlpha(Color.WHITE, front ? 235 : 125));
             canvas.drawCircle(nodeScreenX[i], nodeScreenY[i], Math.max(.75f * density, radius * .30f), paint);
+            if (front) {
+                paint.setColor(withAlpha(Color.WHITE, 165));
+                canvas.drawCircle(nodeScreenX[i] - radius * .24f, nodeScreenY[i] - radius * .24f,
+                        Math.max(.45f * density, radius * .13f), paint);
+            }
         }
 
         // Front ring segments catch light across the core; their rear halves stay behind it.
@@ -234,9 +239,13 @@ final class ForgeEmberView extends View {
         paint.setShader(null);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(hotColor);
-        canvas.drawCircle(cx, cy, coreRadius, paint);
+        canvas.drawCircle(cx, cy, coreRadius * 1.16f, paint);
+        paint.setColor(blend(hotColor, Color.YELLOW, .36f));
+        canvas.drawCircle(cx, cy, coreRadius * .76f, paint);
         paint.setColor(Color.WHITE);
-        canvas.drawCircle(cx, cy, coreRadius * .36f, paint);
+        canvas.drawCircle(cx - coreRadius * .08f, cy - coreRadius * .08f, coreRadius * .40f, paint);
+        paint.setColor(0xFFFFF8E9);
+        canvas.drawCircle(cx - coreRadius * .20f, cy - coreRadius * .20f, coreRadius * .16f, paint);
 
         // Sparks skim outward. Listening sends a few visible streams from the lower pole.
         drawSparks(canvas, cx, cy, w, h, time, hotColor, listeningWeight, smeltWeight, temperWeight);
@@ -252,7 +261,7 @@ final class ForgeEmberView extends View {
         paint.setStrokeCap(Paint.Cap.ROUND);
         float radiusX = Math.min(w * .39f, h * .46f);
         float radiusY = Math.min(h * .35f, w * .40f);
-        final int segments = 56;
+        final int segments = 84;
         for (int ring = 0; ring < 4; ring++) {
             float size = 1f - ring * .105f;
             float direction = ring % 2 == 0 ? 1f : -1f;
@@ -280,12 +289,28 @@ final class ForgeEmberView extends View {
                 float xA = cx + pointA[0], yA = cy + pointA[1];
                 float xB = cx + pointB[0], yB = cy + pointB[1];
                 if (frontHalf) {
-                    paint.setStrokeWidth((2.4f + energy * .55f) * density);
-                    paint.setColor(withAlpha(color, 20 + (int) (light * 34)));
+                    int ringTone = ring % 2 == 0 ? color : blend(color, Color.WHITE, .22f);
+                    paint.setStrokeWidth((6.2f + energy * .8f) * density);
+                    paint.setColor(withAlpha(ringTone, 12 + (int) (light * 20)));
                     canvas.drawLine(xA, yA, xB, yB, paint);
-                    paint.setStrokeWidth((ring == 1 ? 1.2f : .78f) * density);
-                    int highlight = segment % 11 == 0 ? blend(color, Color.WHITE, smeltWeight * .8f) : color;
-                    paint.setColor(withAlpha(highlight, 88 + (int) (light * 122)));
+                    paint.setStrokeWidth((2.4f + light * .8f) * density);
+                    paint.setColor(withAlpha(ringTone, 40 + (int) (light * 55)));
+                    canvas.drawLine(xA, yA, xB, yB, paint);
+                    paint.setStrokeWidth((ring == 1 ? 1.25f : .88f) * density);
+                    paint.setColor(withAlpha(ringTone, 88 + (int) (light * 135)));
+                    canvas.drawLine(xA, yA, xB, yB, paint);
+                    float glint = (time * (.035f + spin * .075f) + ring * .231f) % 1f;
+                    float progress = segment / (float) segments;
+                    float delta = Math.abs(progress - glint);
+                    delta = Math.min(delta, 1f - delta);
+                    if (delta < .035f) {
+                        float gx = (xA + xB) * .5f, gy = (yA + yB) * .5f;
+                        float intensity = 1f - delta / .035f;
+                        paint.setStyle(Paint.Style.FILL);
+                        paint.setColor(withAlpha(Color.WHITE, (int) ((70 + smeltWeight * 150) * intensity)));
+                        canvas.drawCircle(gx, gy, (1f + intensity * 1.5f) * density, paint);
+                        paint.setStyle(Paint.Style.STROKE);
+                    }
                 } else {
                     paint.setStrokeWidth(.68f * density);
                     paint.setColor(withAlpha(color, 23 + (int) (light * 34)));
@@ -348,49 +373,65 @@ final class ForgeEmberView extends View {
         paint.setStyle(Paint.Style.FILL);
         paint.setShader(null);
         paint.setColorFilter(smokeTint[paletteIndex]);
-        paint.setAlpha(Math.max(0, Math.min(255, (int) opacity)));
+        paint.setAlpha(Math.max(0, Math.min(255, (int) (opacity * .54f))));
         paint.setFilterBitmap(true);
-        float radiusX = w * .52f * scale * size;
-        float radiusY = h * .49f * scale * size;
-        oval.set(cx - radiusX, cy - radiusY, cx + radiusX, cy + radiusY);
-        int save = canvas.save();
-        canvas.rotate((float) Math.sin(time * .16f) * 2.2f + time * spinRate(paletteIndex) * .32f, cx, cy);
-        canvas.drawBitmap(smokeTexture, null, oval, paint);
-        canvas.restoreToCount(save);
+        for (int layer = 0; layer < smokeTexture.length; layer++) {
+            float phase = time * (.12f + layer * .035f) + layer * 2.1f + paletteIndex * .7f;
+            float layerScale = size * (1f - layer * .105f);
+            float radiusX = w * .52f * scale * layerScale;
+            float radiusY = h * .51f * scale * layerScale;
+            float offsetX = (float) Math.sin(phase) * w * (.025f + layer * .012f);
+            float offsetY = (float) Math.cos(phase * .83f) * h * (.035f + layer * .009f);
+            float x = cx + offsetX, y = cy + offsetY;
+            oval.set(x - radiusX, y - radiusY, x + radiusX, y + radiusY);
+            int save = canvas.save();
+            canvas.rotate((float) Math.sin(time * .16f + layer) * 5f
+                    + time * spinRate(paletteIndex) * (layer % 2 == 0 ? .32f : -.19f), x, y);
+            float layerAlpha = layer == 0 ? .32f : layer == 1 ? .21f : .15f;
+            paint.setAlpha(Math.max(0, Math.min(255, (int) (opacity * layerAlpha))));
+            canvas.drawBitmap(smokeTexture[layer], null, oval, paint);
+            canvas.restoreToCount(save);
+        }
         paint.setColorFilter(null);
         paint.setAlpha(255);
         paint.setFilterBitmap(false);
     }
 
-    private static Bitmap createSmokeTexture() {
-        final int size = 256;
+    private static Bitmap createSmokeTexture(int seed) {
+        final int size = 320;
         Bitmap bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888);
         int[] pixels = new int[size * size];
         for (int py = 0; py < size; py++) {
             float y = (py + .5f - size * .5f) / (size * .5f);
             for (int px = 0; px < size; px++) {
                 float x = (px + .5f - size * .5f) / (size * .5f);
-                float radius = (float) Math.sqrt(x * x + y * y);
-                float low = valueNoise(x * 3.8f + 8f, y * 3.8f - 4f, 13);
-                float mid = valueNoise(x * 9.2f - 3f, y * 9.2f + 7f, 29);
-                float high = valueNoise(x * 20f + 5f, y * 20f - 9f, 41);
-                float turbulence = low * .58f + mid * .29f + high * .13f;
-                float centerRadius = .63f + (low - .5f) * .20f;
-                float distance = (radius - centerRadius) / .27f;
-                float shell = (float) Math.exp(-distance * distance * 1.15f);
-                float wisps = Math.max(0f, Math.min(1f, (turbulence - .20f) * 1.55f));
-                float innerHaze = (float) Math.exp(-radius * radius * 5.4f) * .16f;
-                float density = Math.min(1f, shell * (.22f + wisps * .78f) + innerHaze);
-                // Radial smoothstep removes the rectangular bitmap edge entirely.
-                float edgeT = Math.max(0f, Math.min(1f, (radius - .86f) / .53f));
-                float edgeFade = 1f - edgeT * edgeT * (3f - 2f * edgeT);
-                density *= edgeFade;
-                int alpha = Math.max(0, Math.min(210, (int) (density * 210f)));
+                float low = valueNoise(x * 2.7f + seed, y * 2.7f - seed * .7f, seed);
+                float mid = valueNoise(x * 6.4f - seed * .3f, y * 6.4f + seed, seed + 17);
+                float high = valueNoise(x * 14.5f + seed * .2f, y * 14.5f - seed * .4f, seed + 31);
+                float detail = valueNoise(x * 29f - seed, y * 29f + seed * .5f, seed + 53);
+                float warpX = (low - .5f) * .23f + (mid - .5f) * .09f;
+                float warpY = (valueNoise(x * 3f + 8f, y * 3f - 5f, seed + 7) - .5f) * .26f;
+                float wx = x + warpX, wy = y + warpY;
+                float radius = (float) Math.sqrt(wx * wx * .92f + wy * wy * 1.18f);
+                float turbulence = low * .34f + mid * .31f + high * .23f + detail * .12f;
+                float wisps = smoothstep(.38f + radius * .12f, .63f + radius * .12f, turbulence);
+                float boundary = 1.02f + (low - .5f) * .25f + (mid - .5f) * .11f;
+                float edge = 1f - smoothstep(boundary - .30f, boundary + .08f, radius);
+                float volume = .20f + .80f * wisps;
+                float inner = (float) Math.exp(-radius * radius * 1.8f) * .20f;
+                float filaments = .78f + .22f * (float) Math.sin((wx * 7.2f + wy * 4.4f + low * 2f) * Math.PI);
+                float density = Math.max(0f, Math.min(1f, (volume * edge + inner) * filaments));
+                int alpha = Math.max(0, Math.min(220, (int) (density * 220f)));
                 pixels[py * size + px] = Color.argb(alpha, 255, 255, 255);
             }
         }
         bitmap.setPixels(pixels, 0, size, 0, 0, size, size);
         return bitmap;
+    }
+
+    private static float smoothstep(float edge0, float edge1, float value) {
+        float t = Math.max(0f, Math.min(1f, (value - edge0) / (edge1 - edge0)));
+        return t * t * (3f - 2f * t);
     }
 
     private static float valueNoise(float x, float y, int seed) {
@@ -455,19 +496,27 @@ final class ForgeEmberView extends View {
                             int color, float listeningWeight, float smeltWeight, float temperWeight) {
         paint.setShader(null);
         paint.setStyle(Paint.Style.FILL);
-        int count = 14;
+        int count = 72;
         for (int i = 0; i < count; i++) {
             float activity = Math.max(listeningWeight, smeltWeight);
-            float speed = .18f + listeningWeight * .24f + smeltWeight * .48f - temperWeight * .12f;
-            float phase = time * speed + i * 2.17f;
-            float orbit = .34f + (i % 4) * .026f;
+            float speed = .065f + listeningWeight * .14f + smeltWeight * .34f - temperWeight * .035f;
+            float phase = time * speed + i * 2.39996f;
+            float baseOrbit = .39f + (i % 9) * .029f;
+            float orbit = baseOrbit + .018f * (float) Math.sin(time * .31f + i * 1.9f);
             float x = cx + (float) Math.cos(phase) * w * orbit;
-            float y = cy + (float) Math.sin(phase * .88f + i) * h * (.29f + (i % 3) * .025f);
-            float radius = density * (i % 5 == 0 ? 1.45f : .72f);
-            paint.setColor(withAlpha(color, 24 + (int) (activity * (smeltWeight > listeningWeight ? 126 : 86))));
-            canvas.drawCircle(x, y, radius * 2.7f, paint);
-            paint.setColor(withAlpha(Color.WHITE, 24 + (int) (activity * (smeltWeight > listeningWeight ? 190 : 142))));
-            canvas.drawCircle(x, y, radius * .55f, paint);
+            float y = cy + (float) Math.sin(phase * (.75f + (i % 4) * .055f) + i * .8f)
+                    * h * (.30f + (i % 5) * .025f);
+            float twinkle = .48f + .52f * (float) Math.sin(time * (1f + (i % 7) * .17f) + i * 4.1f);
+            float radius = density * (i % 11 == 0 ? 1.05f : i % 4 == 0 ? .62f : .36f);
+            int alpha = (int) ((10 + activity * 85 + smeltWeight * 55) * twinkle);
+            if (i % 7 == 0) {
+                paint.setColor(withAlpha(color, alpha / 2));
+                canvas.drawCircle(x, y, radius * 3.8f, paint);
+            }
+            paint.setColor(withAlpha(color, alpha));
+            canvas.drawCircle(x, y, radius, paint);
+            paint.setColor(withAlpha(Color.WHITE, (int) (alpha * (i % 5 == 0 ? .92f : .48f))));
+            canvas.drawCircle(x - radius * .18f, y - radius * .18f, Math.max(.35f * density, radius * .34f), paint);
         }
     }
 

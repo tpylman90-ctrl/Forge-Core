@@ -33,23 +33,23 @@ final class ForgeMicAuraView extends View {
         int color = active ? 0xFFFF9A4D : 0xFFB269FF;
         float breath = active ? .78f + .22f * (float) Math.sin(time * 2.1f) : .72f;
         paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(1f * density);
-        paint.setColor(withAlpha(color, active ? 118 : 74));
+        paint.setStrokeWidth(1.25f * density);
+        paint.setColor(withAlpha(color, active ? 176 : 110));
         canvas.drawCircle(cx, cy, 34f * density, paint);
-        paint.setColor(withAlpha(color, active ? 76 : 42));
+        paint.setColor(withAlpha(color, active ? 116 : 72));
         canvas.drawCircle(cx, cy, 39f * density, paint);
 
         paint.setStyle(Paint.Style.FILL);
-        int bars = 36;
+        int bars = 48;
         for (int i = 0; i < bars; i++) {
             float centered = (i - (bars - 1) * .5f) / ((bars - 1) * .5f);
-            float envelope = (float) Math.exp(-centered * centered * 2.8f);
-            float variation = .38f + .62f * (float) Math.abs(Math.sin(i * 1.71f + (active ? time * 3f : 0f)));
-            float amplitude = (2f + 11f * envelope * variation * breath) * density;
-            float x = cx + centered * 72f * density;
-            paint.setColor(withAlpha(color, (int) ((active ? 164 : 96) * envelope)));
-            canvas.drawRoundRect(x - .85f * density, cy - amplitude,
-                    x + .85f * density, cy + amplitude, density, density, paint);
+            float envelope = (float) Math.exp(-centered * centered * 2.35f);
+            float wave = .28f + .72f * (float) Math.abs(Math.sin(i * 1.29f + (active ? time * 3.4f : 0f)));
+            float amplitude = (2f + 15f * envelope * wave * breath) * density;
+            float x = cx + centered * 75f * density;
+            paint.setColor(withAlpha(color, (int) ((active ? 225 : 145) * envelope)));
+            canvas.drawRoundRect(x - .95f * density, cy - amplitude,
+                    x + .95f * density, cy + amplitude, density, density, paint);
         }
         if (active) postInvalidateOnAnimation();
     }
