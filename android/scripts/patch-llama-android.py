@@ -84,7 +84,7 @@ old_callback = """    const int prio = android_log_prio_from_ggml(level);
     if (!ai_should_log(prio)) return;
     __android_log_write(prio, LOG_TAG, text);"""
 new_callback = """    const int prio = android_log_prio_from_ggml(level);
-    if (text && level <= GGML_LOG_LEVEL_WARN) {
+    if (text && level >= GGML_LOG_LEVEL_WARN) {
         std::lock_guard<std::mutex> lock(aichat_model_load_log_mutex);
         if (aichat_capture_model_load_logs && aichat_model_load_log.size() < 8192) {
             const size_t remaining = 8192 - aichat_model_load_log.size();
