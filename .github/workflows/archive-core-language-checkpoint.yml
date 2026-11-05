@@ -3,7 +3,7 @@ name: Archive Forge Seed research checkpoint as draft
 on:
   push:
     branches: [main]
-    paths: ["experiments/requests/archive-core-language-step-52000.md"]
+    paths: ["experiments/requests/archive-core-language-step-60000.md"]
 
 permissions:
   contents: write
@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
-      SOURCE_RUN: "42118418883"
+      SOURCE_RUN: "42120062062"
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -40,14 +40,14 @@ jobs:
             test -f "source/$file"
           done
           jq -e '.status == "research_candidate_not_promoted" and
-            .total_steps == 52000 and .android_integrated == false' \
+            .total_steps == 60000 and .android_integrated == false' \
             source/lineage.json >/dev/null
-          test "$(jq -r .steps_total source/metrics.json)" = "52000"
+          test "$(jq -r .steps_total source/metrics.json)" = "60000"
       - name: Preserve checkpoint, optimizer, exact dataset split and evidence
         shell: bash
         run: |
           set -euo pipefail
-          tar -czf forge-seed-v07-step-52000-research.tar.gz \
+          tar -czf forge-seed-v07-step-60000-research.tar.gz \
             -C source checkpoint.pt parent-checkpoint.pt tokenizer.json \
             source-manifest.json train.txt valid.txt metrics.json \
             capabilities.json lineage.json
@@ -64,8 +64,8 @@ jobs:
           This draft is a durable continuation point. It is not an Android
           release and has not passed capability promotion gates.
           EOF
-          gh release create forge-seed-v07-step-52000 \
-            forge-seed-v07-step-52000-research.tar.gz \
+          gh release create forge-seed-v07-step-60000 \
+            forge-seed-v07-step-60000-research.tar.gz \
             --repo "$GITHUB_REPOSITORY" --draft --prerelease \
             --title "Forge Seed v0.7 — 52,000-step research checkpoint" \
             --notes-file release-notes.md
