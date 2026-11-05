@@ -100,7 +100,7 @@ jobs:
             --checkpoint-dir artifacts/preschool \
             --out artifacts/preschool/capabilities.json
           python - <<'PY'
-          import hashlib, json
+          import hashlib, json, torch
           from pathlib import Path
           source = Path("source/checkpoint.pt").read_bytes()
           candidate = Path("artifacts/preschool/checkpoint.pt").read_bytes()
