@@ -24,3 +24,8 @@ workflow run 42085634121.
 One seed is a diagnostic run, not a capability certification. If the result
 shows transfer above both the frozen source and shuffled control, replicate
 on new examples and seeds before considering any promotion.
+
+
+Retry note: the first workflow attempt stopped during bounded input validation
+because the workflow expressions were escaped. No training occurred. The
+workflow input expressions are corrected; rerun this same one-time request.
