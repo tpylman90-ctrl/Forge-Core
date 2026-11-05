@@ -1,4 +1,4 @@
-"""Matched answer-only, one-shot structured, and staged structured feedback trials."""
+"""Matched answer-only and answer-first explanatory feedback trials."""
 from __future__ import annotations
 
 import argparse
@@ -121,27 +121,37 @@ def structured_fields(row: dict) -> dict[str, str]:
             "found": found, "expected": expected, "repair": repair}
 
 
+def feedback_reason(row: dict) -> str:
+    fields = structured_fields(row)
+    error = row["error"]
+    if error == "missing":
+        return f"The attempt is missing {fields['expected']} at position {fields['position']}; insert it."
+    if error == "extra":
+        return f"The attempt has an extra {fields['found']} at position {fields['position']}; remove it."
+    if error == "order":
+        return f"Position {fields['position']} has {fields['found']}, but it should be {fields['expected']}; reorder the letters."
+    if error == "spacing" and row["task"] == "join":
+        return "The letters are correct, but spaces are not allowed in the requested format; remove the spaces."
+    if error == "spacing":
+        return "The letters are correct, but the requested format needs spaces between them; add the spaces."
+    return f"Position {fields['position']} has {fields['found']}, but it should be {fields['expected']}; replace it."
+
+
 def target(row: dict, method: str, phase: str = "full") -> str:
-    if method == "answer_only":
+    if method == "answer_only" or (method == "staged_feedback" and phase == "diagnosis"):
         return f"Correct answer: {row['gold']}.\n"
     fields = structured_fields(row)
-    if method == "staged_feedback" and phase == "diagnosis":
-        fields = {key: fields[key] for key in ("answer", "error", "position", "found", "expected")}
-    return "; ".join(f"{key}={value}" for key, value in fields.items()) + "\n"
+    diagnostic = "; ".join(
+        f"{key}={value}" for key, value in fields.items() if key != "answer")
+    return (f"Correct answer: {row['gold']}. "
+            f"Reason: {feedback_reason(row)}; {diagnostic}\n")
 
 
 def prompt(row: dict, train: bool) -> str:
-    if train:
-        lead = "Feedback lesson"
-        source_label, task_label, attempt_label = "Source letters", "Task", "Proposed answer"
-        request = "This response is incorrect. Give helpful feedback and a correction."
-    else:
-        lead = "Review this attempt"
-        source_label, task_label, attempt_label = "Letters given", "Required format", "Attempt"
-        request = "The attempt is wrong. Give helpful feedback and a correction."
-    return (f"{lead}\n{source_label}: {' '.join(row['source'])}\n"
-            f"{task_label}: {instruction(row['task'])}.\n"
-            f"{attempt_label}: {row['attempt']}\n{request}\nResponse:")
+    return (f"Review this attempt\nLetters given: {' '.join(row['source'])}\n"
+            f"Required format: {instruction(row['task'])}.\n"
+            f"Attempt: {row['attempt']}\n"
+            "The attempt is wrong. Give helpful feedback and a correction.\nResponse:")
 
 
 def verify_example(row: dict) -> None:
@@ -275,7 +285,7 @@ def generate(model, codec, text: str, max_tokens: int = 160) -> str:
 
 
 def score(model, codec, rows: list[dict]) -> dict:
-    metrics = ("answer", "error", "position", "found", "expected", "repair", "diagnosis", "record")
+    metrics = ("answer", "reason", "error", "position", "found", "expected", "repair", "diagnosis", "record")
     totals = {m: 0 for m in metrics}
     by_error = {e: {**{m: 0 for m in metrics}, "total": 0} for e in ERRORS}
     by_task = {t: {**{m: 0 for m in metrics}, "total": 0} for t in TASKS}
@@ -294,8 +304,9 @@ def score(model, codec, rows: list[dict]) -> dict:
         values = {key: parsed.get(key, "").replace("_", " ") == expected[key].replace("_", " ")
                   for key in ("error", "position", "found", "expected", "repair")}
         values["answer"] = answer == row["gold"]
+        values["reason"] = feedback_reason(row).casefold() in generated.casefold()
         values["diagnosis"] = all(values[key] for key in ("answer", "error", "position", "found", "expected"))
-        values["record"] = values["diagnosis"] and values["repair"]
+        values["record"] = values["diagnosis"] and values["repair"] and values["reason"]
         for key, value in values.items():
             totals[key] += int(value)
             by_error[row["error"]][key] += int(value)
@@ -370,7 +381,7 @@ def train_one(source_dir: Path, prepared_dir: Path, out: Path,
             curve.append(point)
             print(json.dumps({"data": dataset_id, "method": method, "step": step,
                               **{key: point["heldout"][key]["correct"] for key in
-                                 ("answer", "error", "position", "found",
+                                 ("answer", "reason", "error", "position", "found",
                                   "expected", "repair", "diagnosis", "record")},
                               "story_loss": point["story_loss"]}), flush=True)
             model.train()
@@ -402,7 +413,7 @@ def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
     got = {(r["data_id"], r["method"]) for r in results}
     if got != expected:
         raise ValueError(f"Expected all 15 run results; missing={sorted(expected-got)} extra={sorted(got-expected)}")
-    metrics = ("answer", "error", "position", "found", "expected", "repair", "diagnosis", "record")
+    metrics = ("answer", "reason", "error", "position", "found", "expected", "repair", "diagnosis", "record")
     summary = {}
     for method in methods:
         subset = [r for r in results if r["method"] == method]
@@ -489,7 +500,7 @@ def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
                      f"{x['diagnosis']['staged_feedback']:.1f} | {x['record']['full_structured']:.1f} | "
                      f"{x['record']['staged_feedback']:.1f} |")
     lines += ["", "All methods share the same public Forge Seed checkpoint, data partitions, update budget, optimizer, and sealed exam. "
-              "The staged arm learns answer plus diagnosis fields in its first 160 updates, then adds repair for the final 160.", ""]
+              "The staged arm learns answer-only corrections for its first 160 updates, then learns answer-first reasons and diagnostic fields.", ""]
     (results_dir / "cross-examination.md").write_text("\n".join(lines), encoding="utf-8")
     return report
 
@@ -514,7 +525,7 @@ def main():
     else:
         result = aggregate(a.out, a.prepared_dir)
         print(json.dumps({"completed": result["runs_completed"],
-                          "comparison": result["paired_320_update_comparison"]}, indent=2), flush=True)
+                          "comparison": result["paired_comparisons"]}, indent=2), flush=True)
 
 
 if __name__ == "__main__":
