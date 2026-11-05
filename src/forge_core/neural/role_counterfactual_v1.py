@@ -142,13 +142,33 @@ def make_final(episodes: int = 50, seed: int = 9187) -> list[RoleExample]:
     rng = random.Random(seed)
     rows: list[RoleExample] = []
     seen: set[str] = set()
-    for i in range(episodes):
-        left, right = rng.sample(FINAL_PEOPLE, 2)
-        item = rng.choice(FINAL_OBJECTS)
-        unseen_verb = i >= episodes // 2
-        stratum = "unseen_verb" if unseen_verb else "seen_verb_new_construction"
+    import itertools
+    pairs = tuple(itertools.combinations(FINAL_PEOPLE, 2))
+    known_configs = [
+        (left, right, item, i % len(FINAL_SEEN_VERB_STORIES))
+        for left, right in pairs for item in FINAL_OBJECTS for i in range(2)
+    ]
+    novel_configs = [
+        (left, right, item, i % len(FINAL_UNSEEN_VERB_STORIES))
+        for left, right in pairs for item in FINAL_OBJECTS for i in range(2)
+    ]
+    half = episodes // 2
+    if half > len(known_configs) or half > len(novel_configs):
+        raise ValueError("Too many final examples for unique story configurations")
+    rng.shuffle(known_configs)
+    rng.shuffle(novel_configs)
+    selected = [
+        ("seen_verb_new_construction", *cfg)
+        for cfg in known_configs[:half]
+    ] + [
+        ("unseen_verb", *cfg)
+        for cfg in novel_configs[:half]
+    ]
+    rng.shuffle(selected)
+    for i, (stratum, left, right, item, template_index) in enumerate(selected):
+        unseen_verb = stratum == "unseen_verb"
         templates = FINAL_UNSEEN_VERB_STORIES if unseen_verb else FINAL_SEEN_VERB_STORIES
-        template = templates[i % len(templates)]
+        template = templates[template_index]
         for direction, (giver, recipient) in enumerate(((left, right), (right, left))):
             story = _story(template, giver, recipient, item)
             for role_index, skill in enumerate(SKILLS):
