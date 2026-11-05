@@ -537,3 +537,25 @@ isolated.
   the same explanation recipe without a new hypothesis and independent exam.
 - [ ] Keep Android model weights unchanged until human-reviewed language
   quality and separate held-out capability gates pass.
+
+### Continued language learning through 52,000 steps
+
+- [x] Continue the exact 28,000-step source checkpoint through 36k, 44k
+  and 52k using matching corpus hashes and optimizer/RNG state; reports:
+  [36k](CORE-LANGUAGE-CONTINUATION-36000.md),
+  [44k](CORE-LANGUAGE-CONTINUATION-44000.md),
+  [52k](CORE-LANGUAGE-CONTINUATION-52000.md).
+- [x] Same-protocol 64-window held-out loss curve:
+  **2.369578 (28k) → 2.308715 (36k) → 2.238001 (44k) →
+  2.201201 (52k)**. The sampled 256-window final diagnostics are reported
+  separately and are not compared directly to the 64-window curve.
+- [x] Forced-choice capability check remains at chance, **20/40**, with
+  **0/20** fully correct mirror pairs at 52k; this does not establish
+  comprehension or general reasoning.
+- [x] Start the next bounded continuation from the verified 52k checkpoint,
+  Actions run **42120062062**. It stays research-only; Android weights remain
+  unchanged.
+- [ ] Review the 60k result and continue only while the matched held-out
+  language curve improves without loss regression.
+- [ ] Preserve a durable checkpoint archive beyond the 90-day Actions
+  retention window before it expires.
