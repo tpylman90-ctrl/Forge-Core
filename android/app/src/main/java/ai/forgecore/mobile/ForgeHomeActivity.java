@@ -997,4 +997,53 @@ public final class ForgeHomeActivity extends Activity {
         platform.addView(text("APP & DEVICE", 11, ACCENT, true));
         space(platform, 7);
         platform.addView(text("Package: " + getPackageName(), 13, WHITE, false));
-        platform.addView(text("Android API: " + android.os.Build.VERSION.SDK_INT, 13, WHITE, false));
+        platform.addView(text("Android API: " + android.os.Build.VERSION.SDK_INT, 13, WHITE, false));        platform.addView(text("Version: " + appVersion(), 13, WHITE, false));
+        platform.addView(text("Network permission: " +
+                (getPackageManager().checkPermission("android.permission.INTERNET", getPackageName())
+                        == PackageManager.PERMISSION_GRANTED ? "granted" : "not requested"), 13, WHITE, false));
+        platform.addView(text("Usage Access: " + (hasUsageAccess() ? "granted" : "not granted"),
+                13, WHITE, false));
+
+        LinearLayout storage = panel(body, false);
+        storage.addView(text("LOCAL STORAGE", 11, ACCENT, true));
+        space(storage, 7);
+        try {
+            storage.addView(text("Encrypted journal entries: " + journal.entries().length(),
+                    13, WHITE, false));
+        } catch (Exception error) {
+            storage.addView(text("Encrypted journal: unavailable (data retained)",
+                    13, WHITE, false));
+        }
+        try {
+            EncryptedMemory vault = new EncryptedMemory(this);
+            storage.addView(text("Confirmed principles: " + vault.principles().length(),
+                    13, WHITE, false));
+            storage.addView(text("Allowed observed apps: " + vault.allowed().size(),
+                    13, WHITE, false));
+        } catch (Exception error) {
+            storage.addView(text("Principle vault: unavailable (data retained)",
+                    13, WHITE, false));
+        }
+        space(storage, 8);
+        storage.addView(text("At-rest protection: Android Keystore AES-GCM / app-private files. Automatic backups disabled.", 13, MUTED, false));
+
+        LinearLayout limitations = panel(body, false);
+        limitations.addView(text("NOT YET AVAILABLE", 11, ACCENT, true));
+        space(limitations, 8);
+        limitations.addView(text("Forge Seed chat inference, autonomous actions, screen reading and independent on-device learning.", 13, WHITE, false));
+    }
+
+    private String appVersion() {
+        try {
+            return getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception error) {
+            return "unknown";
+        }
+    }
+
+    private boolean hasUsageAccess() {
+        AppOpsManager ops = (AppOpsManager) getSystemService(Context.APP_OPS_SERVICE);
+        return ops != null && ops.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS,
+                Process.myUid(), getPackageName()) == AppOpsManager.MODE_ALLOWED;
+    }
+}
