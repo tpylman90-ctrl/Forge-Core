@@ -508,3 +508,31 @@ selection is not English reading, phonics, understanding, spontaneous
 word writing or human preschool readiness. The original language
 checkpoint and the independently developed Android companion remain
 isolated.
+
+## Nov 5 — approved core-language runs and role-study cross-examination
+
+- [x] Complete the approved scratch language-model run at **28,000 steps**
+  (run 42085634121), then resume the exact checkpoint, optimizer state,
+  tokenizer, RNG and data split for **36,000** and **44,000 total steps**
+  (runs 42115007553 and 42116842094).
+- [x] Across the two continuations, held-out TinyStories token loss fell
+  from **2.369578** at step 28,000 to **2.262222** at step 44,000
+  (4.53% relative reduction); exact checkpoints, metrics and lineage are
+  preserved in 90-day Actions artifacts and durable reports:
+  [36k](CORE-LANGUAGE-CONTINUATION-36000.md),
+  [44k](CORE-LANGUAGE-CONTINUATION-44000.md).
+- [x] Finish the three-seed structured role-explanation comparison
+  (run 42108171047): candidate-letter accuracy **387/720 (53.75%)**,
+  highly variable by seed; exact-name output **1/720**; complete giver /
+  recipient traces **0/180**. No promotion.
+  [Role-study report](ROLE-REASONING-V2-RESULTS.md).
+- [ ] Continue measured, bounded core language training from the latest
+  verified checkpoint while held-out loss improves; do not equate lower
+  next-token loss with broad intelligence or comprehension.
+- [ ] Review the fresh continuation result and generated samples, then
+  define a durable checkpoint retention route beyond expiring Actions
+  artifacts before the current artifacts expire.
+- [ ] Redesign role learning from the observed failure modes; do not repeat
+  the same explanation recipe without a new hypothesis and independent exam.
+- [ ] Keep Android model weights unchanged until human-reviewed language
+  quality and separate held-out capability gates pass.
