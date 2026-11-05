@@ -1,4 +1,4 @@
-name: Forge Core — answer-first feedback curriculum
+name: Forge Core — extended answer-first feedback curriculum
 
 on:
   push:
@@ -61,7 +61,7 @@ jobs:
       max-parallel: 5
       matrix:
         dataset_id: [1, 2, 3, 4, 5]
-        method: [answer_only, full_structured, staged_feedback]
+        method: [answer_only, staged_feedback]
     env:
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
@@ -80,7 +80,7 @@ jobs:
         with:
           name: forge-curriculum-prepared
           path: prepared
-      - name: Train matched 320-update branch with the curriculum split at step 160
+      - name: Train matched 640-update branch with the curriculum split at step 320
         run: |
           python experiments/curriculum_feedback_batch.py train \
             --source-dir prepared --prepared-dir prepared --out results \
@@ -127,11 +127,11 @@ jobs:
       - name: Preserve report and all fifteen checkpoints
         uses: actions/upload-artifact@v4
         with:
-          name: curriculum-15-run-cross-examination
+          name: curriculum-10-run-cross-examination
           path: |
             results/cross-examination.json
             results/cross-examination.md
-            batch-artifacts/run-*-step320.pt
+            batch-artifacts/run-*-step640.pt
             batch-artifacts/run-*.json
             prepared/manifest.json
           retention-days: 90

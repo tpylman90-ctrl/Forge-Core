@@ -23,7 +23,7 @@ VOWELS = "aeiou"
 RUNS = 5
 TRAIN_SEQUENCES_PER_RUN = 60
 EXAM_SEQUENCES = 10
-UPDATES = 320
+UPDATES = 640
 
 
 def digest(data: bytes) -> str:
@@ -216,7 +216,7 @@ def prepare(source_dir: Path, out: Path) -> dict:
     save_json(out / "exam.json", {"examples": exam})
     result = {
         "schema": 1, "run_count": RUNS, "updates_per_run": UPDATES,
-        "methods": ["answer_only", "full_structured", "staged_feedback"],
+        "methods": ["answer_only", "staged_feedback"],
         "datasets_per_method": RUNS,
         "training_examples_per_dataset": len(datasets[0]),
         "heldout_examples": len(exam),
@@ -336,7 +336,7 @@ def story_loss(model, tokens: torch.Tensor, windows: int = 32, seq_len: int = 12
 
 def train_one(source_dir: Path, prepared_dir: Path, out: Path,
               dataset_id: int, method: str) -> dict:
-    methods = ("answer_only", "full_structured", "staged_feedback")
+    methods = ("answer_only", "staged_feedback")
     if dataset_id not in range(1, RUNS + 1) or method not in methods:
         raise ValueError("Invalid matrix parameters")
     torch.set_num_threads(min(2, torch.get_num_threads()))
@@ -374,7 +374,7 @@ def train_one(source_dir: Path, prepared_dir: Path, out: Path,
         loss.backward()
         nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
-        if step in (160, 320):
+        if step in (UPDATES // 2, UPDATES):
             model.eval()
             point = {"step": step, "heldout": score(model, codec, exam),
                      "story_loss": story_loss(model, valid_tokens)}
@@ -402,13 +402,13 @@ def train_one(source_dir: Path, prepared_dir: Path, out: Path,
                 "configuration": {k: getattr(cfg, k) for k in
                                   ("vocab_size", "max_seq_len", "n_layer", "n_head", "n_embd", "dropout")},
                 "model": model.state_dict()},
-               out / f"run-{dataset_id:02d}-{method}-step320.pt")
+               out / f"run-{dataset_id:02d}-{method}-step{UPDATES}.pt")
     return result
 
 
 def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
     results = [json.loads(p.read_text()) for p in sorted(results_dir.glob("run-*.json"))]
-    methods = ("answer_only", "full_structured", "staged_feedback")
+    methods = ("answer_only", "staged_feedback")
     expected = {(i, method) for i in range(1, RUNS + 1) for method in methods}
     got = {(r["data_id"], r["method"]) for r in results}
     if got != expected:
@@ -418,7 +418,7 @@ def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
     for method in methods:
         subset = [r for r in results if r["method"] == method]
         summary[method] = {}
-        for step in (160, 320):
+        for step in (UPDATES // 2, UPDATES):
             arm = [next(x for x in r["curve"] if x["step"] == step) for r in subset]
             summary[method][str(step)] = {
                 m: {"mean_correct": round(statistics.mean(x["heldout"][m]["correct"] for x in arm), 3),
@@ -427,9 +427,7 @@ def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
             summary[method][str(step)]["story_loss_mean"] = round(statistics.mean(x["story_loss"] for x in arm), 6)
             summary[method][str(step)]["story_loss_sd"] = round(statistics.stdev(x["story_loss"] for x in arm), 6)
     paired = {}
-    for base, candidate in (("answer_only", "full_structured"),
-                            ("answer_only", "staged_feedback"),
-                            ("full_structured", "staged_feedback")):
+    for base, candidate in (("answer_only", "staged_feedback"),):
         label = f"{candidate}_minus_{base}"
         paired[label] = {}
         for metric in metrics:
@@ -477,13 +475,13 @@ def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
              "| Method | Step | Exact answer / 100 | Diagnosis record / 100 | Full record / 100 | Story loss |",
              "|---|---:|---:|---:|---:|---:|"]
     for method in methods:
-        for step in (160, 320):
+        for step in (UPDATES // 2, UPDATES):
             x = summary[method][str(step)]
             lines.append(f"| {method} | {step} | {x['answer']['mean_correct']:.1f} ± {x['answer']['sd_correct']:.1f} | "
                          f"{x['diagnosis']['mean_correct']:.1f} ± {x['diagnosis']['sd_correct']:.1f} | "
                          f"{x['record']['mean_correct']:.1f} ± {x['record']['sd_correct']:.1f} | "
                          f"{x['story_loss_mean']:.6f} ± {x['story_loss_sd']:.6f} |")
-    lines += ["", "## Paired 320-update deltas", "",
+    lines += ["", "## Paired 640-update deltas", "",
               "| Comparison | Measure | Mean delta / 100 | Candidate wins | Ties | Base wins |",
               "|---|---|---:|---:|---:|---:|"]
     for comparison, values in paired.items():
@@ -500,7 +498,7 @@ def aggregate(results_dir: Path, prepared_dir: Path) -> dict:
                      f"{x['diagnosis']['staged_feedback']:.1f} | {x['record']['full_structured']:.1f} | "
                      f"{x['record']['staged_feedback']:.1f} |")
     lines += ["", "All methods share the same public Forge Seed checkpoint, data partitions, update budget, optimizer, and sealed exam. "
-              "The staged arm learns answer-only corrections for its first 160 updates, then learns answer-first reasons and diagnostic fields.", ""]
+              "The staged arm learns answer-only corrections for its first 320 updates, then learns answer-first reasons and diagnostic fields.", ""]
     (results_dir / "cross-examination.md").write_text("\n".join(lines), encoding="utf-8")
     return report
 
