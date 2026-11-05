@@ -39,10 +39,11 @@ instruction following or general intelligence.
 - Candidate step: **60,000**, run 42120062062.
 - Candidate Actions artifact SHA256:
   `aeaa54b5e9b90d019014d2512e2ff830b2e41933e13dbc1a8bd73ded16cda0dd`
-- Candidate artifact expires **2027-02-03**. It includes the parent and
-  candidate checkpoints, exact public split, metrics, capability check and
-  checkpoint hash lineage. The durable unpublished draft archive is being
-  created separately.
+- Bounded Actions artifact expires **2027-02-03**.
+- Durable unpublished draft archive:
+  [Forge Seed v0.7 — 60,000-step research checkpoint](https://github.com/tpylman90-ctrl/Forge-Core/releases/tag/untagged-18c8f7bb311985009414).
+  It includes the parent and candidate checkpoints, exact public split,
+  metrics, capability check and checkpoint hash lineage. It remains research-only.
 
 ## Decision
 
