@@ -17,9 +17,8 @@ rate 0.0003 were retained. No teacher model or private/user data was used.
 - Total optimizer steps: **36,000**
 - Training updates in this continuation: **8,000**
 - Runtime: **441.69 seconds**
-- Held-out TinyStories token loss at continuation start: **2.369578**
-- Held-out TinyStories token loss after continuation: **2.298014**
-- Relative loss reduction during this continuation: **3.02%**
+- Same-protocol 64-window progress loss: **2.369578 at step 28,000 → 2.308715 at step 36,000** (2.57% reduction).
+- Separate final 256-window diagnostic: **2.298014**; it uses more windows and should not be directly compared to the 64-window curve.
 - Sampled estimated bits per byte: **0.910549**; this is an estimate from
   sampled token windows, not an exact full-validation measurement.
 
