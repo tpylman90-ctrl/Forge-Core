@@ -1,0 +1,75 @@
+name: Forge Seed — v7 neural copying length-transfer experiment
+on:
+  workflow_dispatch:
+    inputs:
+      updates:
+        type: number
+        required: true
+        default: 500
+      seeds:
+        type: choice
+        required: true
+        default: "2"
+        options: ["1", "2"]
+  push:
+    branches: [main]
+    paths: ["experiments/requests/english-length-v7-001.md"]
+concurrency:
+  group: forge-scratch-language-english-class
+  cancel-in-progress: false
+permissions:
+  contents: read
+  actions: read
+jobs:
+  length-transfer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      UPDATES: ${{ inputs.updates || '500' }}
+      SEEDS: ${{ inputs.seeds || '2' }}
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install original CPU-only neural research dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Validate budget and v7/v6 source isolation tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$UPDATES" =~ ^[0-9]+$ ]]
+          [[ "$SEEDS" =~ ^[12]$ ]]
+          (( UPDATES >= 20 && UPDATES <= 1000 ))
+          python -m unittest discover -s tests -p test_english_length_v7.py -v
+          python -m unittest discover -s tests -p test_english_learned_pointer_v6.py -v
+      - name: Verify archived scratch Seed provenance without training on it
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original results
+          gh run download 41572257363 --repo "$GITHUB_REPOSITORY" --name forge-seed-v07-research --dir original
+          test -f original/checkpoint.pt
+          test -f original/source-manifest.json
+          test -f original/tokenizer.json
+      - name: Two matched scratch length-curriculum comparisons
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m forge_core.neural.english_length_v7 --source original --out results --updates "$UPDATES" --seeds "$SEEDS"
+      - name: Preserve research-only metrics and original auxiliary weights
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-length-generalization-v7-research
+          path: results/
+          retention-days: 30
+          if-no-files-found: warn
