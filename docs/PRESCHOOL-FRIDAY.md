@@ -184,3 +184,24 @@ correct answers overall. Giver recall remained weak (31/90 plain,
 head is merged into the language checkpoint. The result points to a
 counterfactual giver/recipient lesson followed by a newly authored final
 split; see [question-intent study results](QUESTION-INTENT-STUDENT-V1-RESULTS.md).
+
+
+## November 5 — direct role-reversal lesson
+
+A focused lesson trained direct name generation on 800 paired giver/recipient
+episodes. The final 200 prompts used disjoint names and objects and held-out
+story/question forms; half also used unseen transfer verbs. On greedy exact
+name match, verified training scored **48/200**, versus **0/200** for both
+the frozen source and within-role shuffled control. Giver was **20/100**,
+recipient **28/100**; the familiar-verb new-construction slice was **32/100**
+and unseen-verb slice **16/100**. No four-answer episode was fully correct
+(0/50). Two-role reversal accuracy remained incomplete, and generated names
+sometimes broke down (e.g. “Juby” for Jude).
+
+Held-out TinyStories token loss improved **2.369578 → 2.339282**, with no
+measured regression. This is a useful narrow signal, not robust semantic
+understanding: it is one seed on an internal synthetic benchmark, and
+no candidate weights are promoted. The next useful distinction is role
+binding versus name spelling; test a structured Giver/Receiver intermediate
+target and a separate name-selection diagnostic on a newly authored final
+split. See [role-counterfactual results](ROLE-COUNTERFACTUAL-V1-RESULTS.md).
