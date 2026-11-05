@@ -135,3 +135,23 @@ deficit persists; "preschool" is not an established capability.
 
 All weights remain experimental and the original 14,000-step
 scratch checkpoint remains preserved.
+
+
+## November 5 — 28,000-step continuation (research checkpoint)
+
+A bounded continuation from the preserved 14,000-step v0.7 checkpoint
+completed 14,000 further steps on the same pinned public corpus. Held-out
+token loss improved **2.637959 → 2.431283**. The fresh 40-choice QA probe
+scored **19/40**, with **0/20** answer-order mirror pairs both correct;
+color 5/10, count 5/10, location 5/10 and recipient 4/10. The audit remains
+well below its QA threshold. Six qualitative fixed-prompt generations show
+some grammatical clauses but still repeat phrases and drift between events.
+The 10-item human sentence, 5-item linked-story and 10-item instruction
+criteria have not yet been formally rated.
+
+**Decision: no readiness pass and no model promotion.** This is a measured
+language-model improvement, not evidence of preschool-level comprehension
+or instruction following. The separate copy/role apprenticeship remained
+weak on held-out skills (20/120 overall; 0/20 selection, recipient and giver)
+and is not merged. See [28,000-step results](PRESCHOOL-28000-RESULTS.md)
+for lineage, full metrics and the next experiment design.
