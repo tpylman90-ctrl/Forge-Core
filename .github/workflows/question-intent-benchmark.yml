@@ -1,0 +1,29 @@
+name: Forge question-intent benchmark v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/question-intent-benchmark-v1.md"]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-and-archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Build and integrity-check balanced question-only splits
+        run: python -m forge_core.neural.question_intent_benchmark --out artifacts/question-intent-v1
+      - name: Archive benchmark source and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-question-intent-v1
+          path: artifacts/question-intent-v1/
+          retention-days: 90
+          if-no-files-found: error
