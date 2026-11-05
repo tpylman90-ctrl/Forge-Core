@@ -493,7 +493,6 @@ public final class ForgeHomeActivity extends Activity {
                                 if (streamingView == null && selectedTab == 0) showTab(0);
                             }
                             if (streamingView != null) streamingView.setText(streaming.toString());
-                            if (avatarView != null) avatarView.pulse();
                         }
                     });
                 }
