@@ -1,0 +1,126 @@
+name: Forge Qwen3 language distillation v1
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/qwen-language-distill-v1.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  generate-teacher-targets:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install pinned CPU inference stack
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "transformers==4.51.3" "accelerate>=1.6,<2" "tokenizers>=0.21,<0.22" safetensors
+          python -m pip install --no-deps -e .
+      - name: Generate public, non-personal Qwen language targets
+        run: |
+          python -m forge_core.neural.qwen_distill_v1 generate \
+            --out artifacts/teacher --train-count 192 --valid-count 32
+      - name: Preserve teacher data and exact provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-qwen3-teacher-data-${{ github.run_id }}
+          path: artifacts/teacher/
+          retention-days: 90
+          if-no-files-found: error
+
+  matched-student-study:
+    needs: generate-teacher-targets
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [uniform, qwen]
+    env:
+      SOURCE_RUN: "42143390701"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Forge CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Download the pinned Qwen teacher dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-qwen3-teacher-data-${{ github.run_id }}
+          path: teacher
+      - name: Restore and verify the exact scratch-origin Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          checkpoint = Path('source/checkpoint.pt')
+          value = torch.load(checkpoint, map_location='cpu', weights_only=True)
+          sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+          assert value['step'] == 95000
+          assert sha == 'a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a'
+          print({'parent_step': value['step'], 'parent_sha256': sha,
+                 'tokenizer_sha256': value['tokenizer_sha256']})
+          PY
+      - name: Train the matched ${{ matrix.lane }} arm from the verified parent
+        run: |
+          python -m forge_core.neural.qwen_distill_v1 train \
+            --source source --teacher-dir teacher --out "artifacts/${{ matrix.lane }}" \
+            --lane "${{ matrix.lane }}" --steps 8000
+      - name: Evaluate the parent on the same capability probe
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir source --out "artifacts/${{ matrix.lane }}/parent-capabilities.json"
+      - name: Evaluate the candidate on the capability probe
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir "artifacts/${{ matrix.lane }}" \
+            --out "artifacts/${{ matrix.lane }}/capabilities.json"
+      - name: Upload the reproducible arm
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-qwen-distill-${{ matrix.lane }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Preserve successful arm as a draft research release
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          lane="${{ matrix.lane }}"
+          tag="forge-qwen-distill-v1-${lane}-${GITHUB_RUN_ID}"
+          mkdir -p release
+          tar -czf "release/${tag}.tar.gz" -C "artifacts/${lane}" .
+          cat > release-notes.md <<EOF
+          Forge Qwen3-0.6B sequence-distillation comparison, ${lane} arm.
+          Student starts from Forge's verified scratch-origin 95k checkpoint;
+          Qwen is used only to generate short synthetic language targets and its
+          weights are never loaded into Forge. The uniform control has the same
+          parent, optimizer state, update budget and evaluation. Research only:
+          not evidence of general reasoning, not promoted, and not integrated
+          into Android. Teacher text is synthetic and not source-verified fact.
+          EOF
+          gh release create "$tag" "release/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Qwen3 distillation ${lane} arm — run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
