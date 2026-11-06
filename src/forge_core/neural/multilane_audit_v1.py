@@ -182,7 +182,7 @@ def main():
     for split in ("train", "valid"):
         if sha256_file(args.parent / f"{split}.txt") != source_manifest[f"{split}_sha256"]:
             raise ValueError(f"Parent {split} data hash mismatch")
-    if candidate_ckpt.get("parent_sha256") != PARENT_SHA256:
+    if candidate_ckpt.get("parent_sha256") != parent_sha:
         raise ValueError("Candidate lineage does not point to the verified 95k parent")
 
     test_text, audit_manifest = fetch_language_test(args.parent, source_manifest)
@@ -190,7 +190,9 @@ def main():
     losses = {}
     capabilities = {}
     generations = {}
-    for name, model in (("parent_95k", parent), ("candidate_152k", candidate)):
+    parent_key = f"parent_{parent_ckpt['step']}"
+    candidate_key = f"candidate_{candidate_ckpt['step']}"
+    for name, model in ((parent_key, parent), (candidate_key, candidate)):
         losses[name] = round(heldout(model, test_tokens, windows=EVAL_WINDOWS, seq_len=SEQ_LEN), 8)
         capabilities[name] = mirrored_score(model, tokenizer)
         generations[name] = generate_ungraded(model, tokenizer, 8300)
@@ -223,7 +225,7 @@ def main():
             "context_tokens": SEQ_LEN,
             "loss_by_checkpoint": losses,
             "candidate_minus_parent": round(
-                losses["candidate_152k"] - losses["parent_95k"], 8
+                losses[candidate_key] - losses[parent_key], 8
             ),
         },
         "fresh_mirrored_capability": {
@@ -253,8 +255,8 @@ def main():
     )
     print(json.dumps({
         "status": result["status"],
-        "parent_loss": losses["parent_95k"],
-        "candidate_loss": losses["candidate_152k"],
+        "parent_loss": losses[parent_key],
+        "candidate_loss": losses[candidate_key],
         "fresh_capability": {
             name: {k: v for k, v in score.items()
                    if k in ("correct", "total", "both_orientations_correct", "one_orientation_correct")}
