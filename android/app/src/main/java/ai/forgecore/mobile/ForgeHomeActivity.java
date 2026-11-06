@@ -26,6 +26,8 @@ import android.view.Gravity;
 import android.view.Menu;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
@@ -55,6 +57,8 @@ public final class ForgeHomeActivity extends Activity {
     private static final int SURFACE_RAISED = Color.rgb(25, 24, 31);
     private static final int ACCENT = Color.rgb(178, 105, 255);
     private static final int EMBER = Color.rgb(255, 139, 51);
+    private static final int HOLO_CYAN = Color.rgb(98, 230, 255);
+    private static final int HOLO_VIOLET = Color.rgb(183, 112, 255);
     private static final int WHITE = Color.rgb(244, 241, 247);
     private static final int MUTED = Color.rgb(157, 151, 167);
     private static final String[] TABS = {"Chat", "Chats & Projects", "Memory", "Settings", "Diagnostics"};
@@ -76,6 +80,7 @@ public final class ForgeHomeActivity extends Activity {
     private TextView stateLabel;
     private TextView streamingView;
     private FrameLayout microphoneButton;
+    private EditText inlineComposer;
     private StringBuilder streaming = new StringBuilder();
     private String notice = "";
 
@@ -213,12 +218,8 @@ public final class ForgeHomeActivity extends Activity {
     private LinearLayout panel(LinearLayout parent, boolean raised) {
         LinearLayout card = column();
         card.setPadding(dp(16), dp(15), dp(16), dp(15));
-        GradientDrawable background = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                raised ? new int[]{0xFF211C2B, SURFACE_RAISED, 0xFF19171F}
-                        : new int[]{0xFF181A20, SURFACE, 0xFF101116});
-        background.setCornerRadius(dp(17));
-        background.setStroke(dp(1), raised ? 0x604B3569 : 0x38383B48);
-        card.setBackground(background);
+        card.setBackground(new ForgeHoloDrawable(getResources().getDisplayMetrics().density,
+                raised ? HOLO_VIOLET : HOLO_CYAN, raised ? HOLO_CYAN : HOLO_VIOLET));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(12);
         parent.addView(card, params);
@@ -230,7 +231,7 @@ public final class ForgeHomeActivity extends Activity {
         button.setGravity(Gravity.CENTER);
         button.setPadding(dp(14), dp(12), dp(14), dp(12));
         button.setMinHeight(dp(48));
-        button.setBackground(shape(prominent ? ACCENT : SURFACE_RAISED, 13));
+        button.setBackground(prominent ? shape(ACCENT, 13) : new ForgeHoloDrawable(getResources().getDisplayMetrics().density, HOLO_CYAN, HOLO_VIOLET));
         button.setOnClickListener(view -> callback.run());
         return button;
     }
@@ -267,6 +268,7 @@ public final class ForgeHomeActivity extends Activity {
         stateLabel = null;
         streamingView = null;
         microphoneButton = null;
+        inlineComposer = null;
         switch (selectedTab) {
             case 0: renderChat(); break;
             case 1: renderHistory(); break;
@@ -311,7 +313,7 @@ public final class ForgeHomeActivity extends Activity {
         currentConversation.setSingleLine(true);
         currentConversation.setEllipsize(android.text.TextUtils.TruncateAt.END);
         currentConversation.setPadding(dp(12), dp(9), dp(12), dp(9));
-        currentConversation.setBackground(shape(SURFACE, 18));
+        currentConversation.setBackground(new ForgeHoloDrawable(getResources().getDisplayMetrics().density, HOLO_VIOLET, HOLO_CYAN));
         currentConversation.setOnClickListener(v -> showConversationPicker());
         conversationBar.addView(currentConversation, new LinearLayout.LayoutParams(0, -2, 1f));
         TextView newConversation = text("＋", 22, ACCENT, true);
@@ -394,18 +396,56 @@ public final class ForgeHomeActivity extends Activity {
         }
 
         // The newest exchange is at the top; preserve the default top scroll position.
-        LinearLayout composer = new LinearLayout(this);
-        composer.setGravity(Gravity.CENTER);
-        composer.setPadding(dp(24), dp(7), dp(24), dp(8));
+        LinearLayout composer = column();
+        composer.setPadding(dp(16), dp(6), dp(16), dp(7));
         composer.setBackgroundColor(BG);
-        TextView keyboard = text("⌨", 23, MUTED, false);
-        keyboard.setGravity(Gravity.CENTER);
-        keyboard.setContentDescription("Write a text message");
-        keyboard.setOnClickListener(view -> openTextComposer(modelStatus.available, generating));
-        composer.addView(keyboard, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        FrameLayout inputWindow = new FrameLayout(this);
+        inputWindow.setBackground(new ForgeHoloDrawable(getResources().getDisplayMetrics().density,
+                HOLO_CYAN, HOLO_VIOLET));
+        EditText input = new EditText(this);
+        inlineComposer = input;
+        input.setHint(modelStatus.available ? "Message the local language bridge…" : "Write a private note…");
+        input.setHintTextColor(MUTED);
+        input.setTextColor(WHITE);
+        input.setTextSize(15);
+        input.setGravity(Gravity.CENTER_VERTICAL);
+        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
+        input.setSingleLine(false);
+        input.setMinLines(1);
+        input.setMaxLines(3);
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(EncryptedJournal.MAX_MESSAGE_CHARS)});
+        input.setImeOptions(EditorInfo.IME_ACTION_SEND | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+        input.setPadding(dp(14), dp(8), dp(2), dp(8));
+        input.setBackgroundColor(Color.TRANSPARENT);
+        FrameLayout.LayoutParams inputParams = new FrameLayout.LayoutParams(-1, -2, Gravity.TOP | Gravity.LEFT);
+        inputParams.leftMargin = dp(2);
+        inputParams.rightMargin = dp(49);
+        inputParams.topMargin = dp(2);
+        inputWindow.addView(input, inputParams);
+        inputWindow.setMinimumHeight(dp(56));
+        TextView send = text("➤", 20, HOLO_CYAN, true);
+        send.setGravity(Gravity.CENTER);
+        send.setContentDescription(modelStatus.available ? "Send message" : "Save private note");
+        send.setOnClickListener(view -> sendComposedPrompt());
+        FrameLayout.LayoutParams sendParams = new FrameLayout.LayoutParams(dp(46), -1,
+                Gravity.RIGHT | Gravity.CENTER_VERTICAL);
+        sendParams.rightMargin = dp(3);
+        inputWindow.addView(send, sendParams);
+        LinearLayout.LayoutParams inputWindowParams = new LinearLayout.LayoutParams(-1, -2);
+        inputWindowParams.bottomMargin = dp(5);
+        composer.addView(inputWindow, inputWindowParams);
+        input.setEnabled(!generating);
+        send.setEnabled(!generating);
+        input.setAlpha(generating ? .58f : 1f);
+        send.setAlpha(generating ? .58f : 1f);
+        input.setOnEditorActionListener((view, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEND) { sendComposedPrompt(); return true; }
+            return false;
+        });
 
-        View spacerLeft = new View(this);
-        composer.addView(spacerLeft, new LinearLayout.LayoutParams(0, 1, 1f));
+        LinearLayout controls = new LinearLayout(this);
+        controls.setGravity(Gravity.CENTER);
         FrameLayout microphone = new FrameLayout(this);
         microphoneButton = microphone;
         microphone.setContentDescription("Start on-device voice chat");
@@ -420,59 +460,42 @@ public final class ForgeHomeActivity extends Activity {
         micCore.addView(new ForgeMicIconView(this), new FrameLayout.LayoutParams(-1, -1));
         microphone.addView(micCore, new FrameLayout.LayoutParams(dp(66), dp(66), Gravity.CENTER));
         microphone.setOnClickListener(view -> toggleOnDeviceListening());
-        composer.addView(microphone, new LinearLayout.LayoutParams(dp(148), dp(76)));
+        controls.addView(microphone, new LinearLayout.LayoutParams(dp(148), dp(70)));
 
         View spacerRight = new View(this);
-        composer.addView(spacerRight, new LinearLayout.LayoutParams(0, 1, 1f));
+        controls.addView(spacerRight, new LinearLayout.LayoutParams(0, 1, 1f));
         TextView settings = text("⚙", 23, MUTED, false);
         settings.setGravity(Gravity.CENTER);
         settings.setContentDescription("Open settings");
         settings.setOnClickListener(view -> showTab(3));
-        composer.addView(settings, new LinearLayout.LayoutParams(dp(54), dp(54)));
+        controls.addView(settings, new LinearLayout.LayoutParams(dp(48), dp(54)));
+        composer.addView(controls, new LinearLayout.LayoutParams(-1, -2));
         screen.addView(composer);
     }
 
-    private void openTextComposer(boolean bridgeAvailable, boolean isGenerating) {
-        if (isGenerating) return;
-        EditText input = new EditText(this);
-        input.setHint(bridgeAvailable ? "Message the local language bridge…" : "Write a private note…");
-        input.setHintTextColor(MUTED);
-        input.setTextColor(WHITE);
-        input.setTextSize(16);
-        input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
-                | InputType.TYPE_TEXT_FLAG_MULTI_LINE);
-        input.setMinLines(2);
-        input.setMaxLines(5);
-        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(EncryptedJournal.MAX_MESSAGE_CHARS)});
-        input.setPadding(dp(14), dp(10), dp(14), dp(10));
-        input.setBackground(shape(SURFACE_RAISED, 13));
-        new AlertDialog.Builder(this)
-                .setTitle(bridgeAvailable ? "Message Forge’s local helper" : "Write to Forge")
-                .setView(input)
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton(bridgeAvailable ? "Send" : "Save note", (dialog, which) -> {
-                    String prompt = input.getText().toString().trim();
-                    if (prompt.isEmpty()) {
-                        Toast.makeText(this, "Write a message first", Toast.LENGTH_SHORT).show();
-                    } else submitPrompt(prompt);
-                }).show();
+    private void sendComposedPrompt() {
+        if (generating || inlineComposer == null) return;
+        String prompt = inlineComposer.getText().toString().trim();
+        if (prompt.isEmpty()) {
+            Toast.makeText(this, "Write a message first", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        InputMethodManager keyboard = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (keyboard != null) keyboard.hideSoftInputFromWindow(inlineComposer.getWindowToken(), 0);
+        inlineComposer.setText("");
+        submitPrompt(prompt);
     }
 
     private void addMessage(LinearLayout parent, JSONObject item) {
         boolean fromForge = "forge".equals(item.optString("role"));
         boolean fromTeacher = "teacher".equals(item.optString("role"));
         LinearLayout bubble = panel(parent, fromForge || fromTeacher);
-        if (!fromForge && !fromTeacher) {
-            GradientDrawable userSurface = new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                    new int[]{0xFF142126, SURFACE, 0xFF101116});
-            userSurface.setCornerRadius(dp(17));
-            userSurface.setStroke(dp(1), 0x5843AEBE);
-            bubble.setBackground(userSurface);
-        }
+        if (!fromForge && !fromTeacher) bubble.setBackground(new ForgeHoloDrawable(
+                getResources().getDisplayMetrics().density, HOLO_CYAN, HOLO_VIOLET));
         String label = fromForge ? "FORGE SEED · NATIVE MODEL"
                 : fromTeacher ? "LOCAL LANGUAGE BRIDGE · NOT FORGE SEED"
                 : "YOU · PRIVATE MESSAGE";
-        bubble.addView(text(label, 10, fromForge || fromTeacher ? ACCENT : MUTED, true));
+        bubble.addView(text(label, 10, fromForge || fromTeacher ? HOLO_VIOLET : HOLO_CYAN, true));
         space(bubble, 8);
         TextView body = text(item.optString("text"), 15, WHITE, false);
         body.setTextIsSelectable(true);
