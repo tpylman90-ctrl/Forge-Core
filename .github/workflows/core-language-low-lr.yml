@@ -1,0 +1,140 @@
+name: Forge Seed v0.7 — conservative low-rate continuation
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/core-language-low-lr-2026-11-06.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: forge-core-language-low-rate
+  cancel-in-progress: false
+
+jobs:
+  continue-language:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_RUN: "42143390701"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the exact 95k Forge checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source artifacts/language artifacts/parent
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          for file in checkpoint.pt tokenizer.json source-manifest.json train.txt valid.txt; do
+            test -s "source/$file"
+          done
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          root = Path("source")
+          checkpoint = root / "checkpoint.pt"
+          ckpt = torch.load(checkpoint, map_location="cpu", weights_only=True)
+          manifest = json.loads((root / "source-manifest.json").read_text())
+          sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+          assert ckpt["step"] == 95000
+          assert sha == "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a"
+          assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          assert manifest["license"] == "cdla-sharing-1.0"
+          assert hashlib.sha256((root / "tokenizer.json").read_bytes()).hexdigest() == ckpt["tokenizer_sha256"]
+          for split in ("train", "valid"):
+              actual = hashlib.sha256((root / f"{split}.txt").read_bytes()).hexdigest()
+              assert actual == manifest[f"{split}_sha256"] == ckpt[f"{split}_sha256"]
+          print(json.dumps({"verified": True, "parent_run": 42143390701,
+              "parent_step": ckpt["step"], "parent_sha256": sha,
+              "parent_lr": ckpt["lr"], "tokenizer_sha256": ckpt["tokenizer_sha256"],
+              "train_sha256": ckpt["train_sha256"], "valid_sha256": ckpt["valid_sha256"]}, indent=2))
+          PY
+          cp source/checkpoint.pt artifacts/parent/checkpoint.pt
+          cp source/tokenizer.json artifacts/parent/tokenizer.json
+      - name: Train Forge at lower rate with validation-based early stopping
+        run: |
+          python -m forge_core.neural.conservative_continuation \
+            --source source --out artifacts/language \
+            --steps 4000 --eval-every 1000 --patience 2 --lr 0.0001
+      - name: Compare parent, selected checkpoint, and last attempted checkpoint
+        run: |
+          python - <<'PY'
+          import json, torch
+          from pathlib import Path
+          from tokenizers import Tokenizer
+          from forge_core.neural.model import ByteTransformer, ModelConfig
+          from forge_core.neural.seed_v07 import heldout
+          root = Path("source")
+          out = Path("artifacts/language")
+          parent = torch.load(root / "checkpoint.pt", map_location="cpu", weights_only=True)
+          codec = Tokenizer.from_file(str(root / "tokenizer.json"))
+          tests = torch.tensor(codec.encode((root / "test.txt").read_text()).ids, dtype=torch.long)
+          def score(path):
+              checkpoint = torch.load(path, map_location="cpu", weights_only=True)
+              model = ByteTransformer(ModelConfig(**checkpoint["configuration"]))
+              model.load_state_dict(checkpoint["model"], strict=True)
+              return checkpoint["step"], heldout(model, tests, windows=2048, seq_len=128, batch=4)
+          parent_step, parent_loss = score(root / "checkpoint.pt")
+          selected_step, selected_loss = score(out / "checkpoint.pt")
+          last_step, last_loss = score(out / "last-checkpoint.pt")
+          result = {
+              "method": "same pinned untouched TinyStories byte-range test; 2,048 evenly spaced 128-token windows",
+              "parent_step": parent_step, "parent_test_loss": round(parent_loss, 8),
+              "selected_step": selected_step, "selected_test_loss": round(selected_loss, 8),
+              "selected_test_delta": round(selected_loss - parent_loss, 8),
+              "last_attempted_step": last_step, "last_test_loss": round(last_loss, 8),
+              "last_test_delta": round(last_loss - parent_loss, 8),
+              "lower_is_better": True,
+              "selection_rule": "Validation only; independent test used for final comparison, not checkpoint selection.",
+              "interpretation": "Next-token prediction diagnostic only; not proof of general comprehension or reasoning."
+          }
+          (out / "independent-test-comparison.json").write_text(json.dumps(result, indent=2) + "\n")
+          print(json.dumps(result, indent=2))
+          PY
+      - name: Evaluate parent and selected candidate on capability diagnostics
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/capabilities.json
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/fresh-capabilities.json
+      - name: Preserve reproducible checkpoints and reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-low-lr-95k-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Build durable draft research archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="forge-seed-low-lr-95k-${GITHUB_RUN_ID}"
+          tar -czf "artifacts/${tag}.tar.gz" -C artifacts parent language
+          cat > artifacts/release-notes.md <<EOF
+          Research-only Forge Seed low-rate continuation from the verified 95k checkpoint.
+          Resumes Forge's own weights and AdamW moments at a lower learning rate.
+          Includes parent, best-validation candidate, final attempted checkpoint,
+          exact licensed data, fixed evaluations and lineage. Not an Android release
+          or a capability certification.
+          EOF
+          gh release create "${tag}" "artifacts/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Seed low-rate continuation — run ${GITHUB_RUN_ID}" \
+            --notes-file artifacts/release-notes.md
