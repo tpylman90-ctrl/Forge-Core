@@ -12,7 +12,7 @@ on:
         type: string
         description: "Successful core-continuation run containing the checkpoint to resume"
         required: false
-        default: "42121807463"
+        default: "42138215923"
   push:
     branches: [main]
     paths: ["experiments/requests/core-language-continuation-006.md"]
@@ -88,6 +88,41 @@ jobs:
             --model-size seed --steps "$STEPS" --batch 4 --seq-len 128 \
             --vocab 2048 --eval-every 1000 --seed 43 \
             --resume source/checkpoint.pt
+      - name: Compare parent and candidate on the same 2,048 validation windows
+        run: |
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          from tokenizers import Tokenizer
+          from forge_core.neural.model import ByteTransformer, ModelConfig
+          from forge_core.neural.seed_v07 import heldout
+          source, candidate = Path("source"), Path("artifacts/preschool")
+          parent_ckpt = torch.load(source / "checkpoint.pt", map_location="cpu", weights_only=True)
+          candidate_ckpt = torch.load(candidate / "checkpoint.pt", map_location="cpu", weights_only=True)
+          assert hashlib.sha256((source / "tokenizer.json").read_bytes()).hexdigest() == parent_ckpt["tokenizer_sha256"]
+          assert hashlib.sha256((candidate / "tokenizer.json").read_bytes()).hexdigest() == candidate_ckpt["tokenizer_sha256"]
+          assert parent_ckpt["tokenizer_sha256"] == candidate_ckpt["tokenizer_sha256"]
+          assert parent_ckpt["valid_sha256"] == candidate_ckpt["valid_sha256"]
+          tokens = torch.tensor(Tokenizer.from_file(str(source / "tokenizer.json")).encode((source / "valid.txt").read_text()).ids, dtype=torch.long)
+          scores = {}
+          for name, ckpt in (("parent", parent_ckpt), ("candidate", candidate_ckpt)):
+              model = ByteTransformer(ModelConfig(**ckpt["configuration"]))
+              model.load_state_dict(ckpt["model"])
+              scores[name] = heldout(model, tokens, windows=2048, seq_len=128)
+          result = {
+              "schema": 1,
+              "method": "same tokenizer and validation split; 2,048 evenly spaced 128-token windows",
+              "parent_step": parent_ckpt["step"],
+              "candidate_step": candidate_ckpt["step"],
+              "parent_token_loss": round(scores["parent"], 8),
+              "candidate_token_loss": round(scores["candidate"], 8),
+              "delta_candidate_minus_parent": round(scores["candidate"] - scores["parent"], 8),
+              "lower_is_better": True,
+              "interpretation": "Matched text-prediction diagnostic only; not evidence of general comprehension or reasoning."
+          }
+          Path("artifacts/preschool/matched-heldout-2048.json").write_text(json.dumps(result, indent=2) + "\\n")
+          print(json.dumps(result, indent=2))
+          PY
       - name: Evaluate the continued checkpoint and preserve parent lineage
         shell: bash
         run: |
@@ -135,7 +170,7 @@ jobs:
           tar -czf "release/forge-seed-v07-step-${TOTAL_STEPS}.tar.gz" \
             -C artifacts/preschool checkpoint.pt parent-checkpoint.pt \
             tokenizer.json source-manifest.json train.txt valid.txt \
-            metrics.json capabilities.json lineage.json
+            metrics.json capabilities.json lineage.json matched-heldout-2048.json
           echo "TOTAL_STEPS=$TOTAL_STEPS" >> "$GITHUB_ENV"
       - name: Preserve the candidate as an unpublished draft release
         shell: bash
