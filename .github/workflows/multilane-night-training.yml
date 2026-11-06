@@ -88,9 +88,11 @@ jobs:
           tag="forge-multilane-${lane}-${GITHUB_RUN_ID}"
           mkdir -p release
           files=(checkpoint.pt lineage.json metrics.json source-manifest.json tokenizer.json train.txt valid.txt test.txt ATTRIBUTION.txt)
-          if [[ -f "artifacts/${lane}/capabilities.json" ]]; then
-            files+=(capabilities.json)
-          fi
+          for optional in capabilities.json task-samples.json; do
+            if [[ -f "artifacts/${lane}/${optional}" ]]; then
+              files+=("${optional}")
+            fi
+          done
           tar -czf "release/${tag}.tar.gz" -C "artifacts/${lane}" "${files[@]}"
           cat > release-notes.md <<EOF
           Forge isolated ${lane} lane research checkpoint, initialized from the
