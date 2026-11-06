@@ -1,0 +1,103 @@
+name: Forge isolated three-lane night training
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        type: number
+        description: "Maximum training time per isolated lane (60–3600 seconds)"
+        required: true
+        default: 3600
+  push:
+    branches: [main]
+    paths: ["experiments/requests/multilane-night-training-v1.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  train-lane:
+    name: Train ${{ matrix.lane }} lane
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        lane: [language, blender, godot]
+    env:
+      SOURCE_RUN: "42143390701"
+      DURATION_SECONDS: ${{ github.event_name == 'push' && '3600' || inputs.duration_seconds || '3600' }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Validate the requested lane budget
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DURATION_SECONDS" =~ ^[0-9]+$ ]]
+          (( DURATION_SECONDS >= 60 && DURATION_SECONDS <= 3600 ))
+      - name: Restore the verified Forge 95k parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          p = Path("source/checkpoint.pt")
+          ckpt = torch.load(p, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ckpt["step"] == 95000, ckpt["step"]
+          assert digest == "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a", digest
+          print({"verified_parent_step": ckpt["step"], "parent_sha256": digest,
+                 "tokenizer_sha256": ckpt["tokenizer_sha256"]})
+          PY
+      - name: Train isolated lane for its bounded time budget
+        run: |
+          python -m forge_core.neural.multilane_v1 \
+            --lane "${{ matrix.lane }}" \
+            --source source \
+            --out "artifacts/${{ matrix.lane }}" \
+            --seconds "$DURATION_SECONDS"
+      - name: Upload reproducible lane artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-multilane-${{ matrix.lane }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Preserve a durable research draft for this lane
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          lane="${{ matrix.lane }}"
+          tag="forge-multilane-${lane}-${GITHUB_RUN_ID}"
+          mkdir -p release
+          tar -czf "release/${tag}.tar.gz" -C "artifacts/${lane}" \
+            checkpoint.pt lineage.json metrics.json source-manifest.json \
+            tokenizer.json train.txt valid.txt test.txt ATTRIBUTION.txt \
+            ${{ matrix.lane == 'language' && 'capabilities.json' || '' }}
+          cat > release-notes.md <<EOF
+          Forge isolated ${lane} lane research checkpoint, initialized from the
+          verified Forge Seed v0.7 95k checkpoint. This lane used its own data
+          manifest, optimizer, and candidate weights. It is research-only,
+          is not a capability certification, and is not integrated into Android.
+          EOF
+          gh release create "$tag" "release/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge isolated ${lane} lane — research run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
