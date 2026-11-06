@@ -174,12 +174,12 @@ def fetch_manual(lane: str, out: Path) -> dict:
         pages.append({"url": url, "resolved_url": final_url,
                       "html_sha256": sha256_bytes(raw), "extracted_characters": len(text)})
         texts.append(text)
-    lesson_text = "\\n\\n".join(
-        f"Task: {item['task']}\\nAnswer:\\n{item['answer']}\\nWhy:\\n{item['why']}"
+    lesson_text = "\n\n".join(
+        f"Task: {item['task']}\nAnswer:\n{item['answer']}\nWhy:\n{item['why']}"
         for item in LESSONS[lane]
     )
     lesson_bytes = lesson_text.encode("utf-8")
-    train_text = "\\n\\n".join(texts[:4]) + "\\n\\n" + lesson_text
+    train_text = "\n\n".join(texts[:4]) + "\n\n" + lesson_text
     valid_text, test_text = texts[4], texts[5]
     if len(train_text) < 8000 or min(len(valid_text), len(test_text)) < 1500:
         raise ValueError("Documentation train/validation/test split is too small")
@@ -261,7 +261,7 @@ def generate_task_samples(model, tokenizer: Tokenizer, lane: str) -> list[dict]:
     with torch.random.fork_rng():
         for index, prompt in enumerate(TASK_PROMPTS[lane]):
             torch.manual_seed(12000 + index)
-            prefix = tokenizer.encode(prompt + "\\nAnswer:\\n").ids
+            prefix = tokenizer.encode(prompt + "\nAnswer:\n").ids
             generated = model.generate(
                 torch.tensor([prefix], dtype=torch.long), new_tokens=96, temperature=0.35
             )
@@ -370,7 +370,7 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
                     best_torch_rng, best_sample_rng)
     task_samples = generate_task_samples(model, tokenizer, lane) if lane in TASK_PROMPTS else []
     if task_samples:
-        (out / "task-samples.json").write_text(json.dumps(task_samples, indent=2) + "\\n")
+        (out / "task-samples.json").write_text(json.dumps(task_samples, indent=2) + "\n")
     report = {
         "schema": 1, "status": "research_only_not_promoted", "lane": lane,
         "parent_run": 42143390701, "parent_checkpoint_sha256": parent_hash,
@@ -406,9 +406,9 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
             (out / filename).write_bytes((source / filename).read_bytes())
         (out / "test.txt").write_bytes((source / "valid.txt").read_bytes())
         (out / "ATTRIBUTION.txt").write_text(
-            "TinyStories by Ronen Eldan; license: CDLA-Sharing-1.0.\\n"
-            "Dataset revision f54c09fd23315a6f9c86f9dc80f725de7d8f9c64.\\n"
-            "https://huggingface.co/datasets/roneneldan/TinyStories\\n",
+            "TinyStories by Ronen Eldan; license: CDLA-Sharing-1.0.\n"
+            "Dataset revision f54c09fd23315a6f9c86f9dc80f725de7d8f9c64.\n"
+            "https://huggingface.co/datasets/roneneldan/TinyStories\n",
             encoding="utf-8",
         )
     else:
