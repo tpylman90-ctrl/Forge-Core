@@ -174,12 +174,13 @@ def teacher_stream(path: Path, tokenizer: Tokenizer, split: str) -> torch.Tensor
 
 
 def batch_for_lane(train_ids: torch.Tensor, teacher_ids: torch.Tensor,
-                   lane: str, generator: torch.Generator):
+                   lane: str, generator: torch.Generator,
+                   mix_fraction: float):
     if lane == "uniform":
         return make_batch(train_ids, BATCH, SEQ_LEN, generator)
     xs, ys = [], []
     for _ in range(BATCH):
-        use_teacher = bool(torch.rand((), generator=generator).item() < 0.10)
+        use_teacher = bool(torch.rand((), generator=generator).item() < mix_fraction)
         data = teacher_ids if use_teacher else train_ids
         start = int(torch.randint(0, data.numel() - SEQ_LEN - 1,
                                   (1,), generator=generator).item())
@@ -189,9 +190,16 @@ def batch_for_lane(train_ids: torch.Tensor, teacher_ids: torch.Tensor,
 
 
 def run_training(source: Path, teacher_dir: Path, out: Path, lane: str,
-                 steps: int = 8000, seed: int = 43) -> dict:
+                 steps: int = 8000, seed: int = 43,
+                 mix_fraction: float = 0.10) -> dict:
     if lane not in {"uniform", "qwen"} or not 1 <= steps <= 8000:
         raise ValueError("Expected lane=uniform|qwen and 1–8000 updates")
+    if not 1 <= seed <= 1000000 or not 0.0 <= mix_fraction <= 0.10:
+        raise ValueError("Seed or mix fraction outside approved replication limits")
+    if lane == "uniform" and mix_fraction != 0.0:
+        raise ValueError("Uniform control must use a zero teacher mix")
+    if lane == "qwen" and mix_fraction <= 0.0:
+        raise ValueError("Qwen arm requires a positive teacher mix")
     parent_path = source / "checkpoint.pt"
     parent_sha = digest_file(parent_path)
     if parent_sha != PARENT_SHA256:
@@ -227,16 +235,18 @@ def run_training(source: Path, teacher_dir: Path, out: Path, lane: str,
     model.load_state_dict(parent["model"])
     optimizer = torch.optim.AdamW(model.parameters(), lr=float(parent["lr"]))
     optimizer.load_state_dict(parent["optimizer"])
-    torch.set_rng_state(parent["torch_rng_state"])
-    generator = torch.Generator()
-    generator.set_state(parent["sample_rng_state"])
+    # All arms start with the same Forge weights and optimizer moments. Seed
+    # controls only the sampled training stream, not model initialization.
+    torch.manual_seed(seed + 1000)
+    generator = torch.Generator().manual_seed(seed + 1)
     initial_valid = heldout(model, valid_ids, windows=EVAL_WINDOWS, seq_len=256)
     initial_test = heldout(model, test_ids, windows=EVAL_WINDOWS, seq_len=256)
     initial_teacher = heldout(model, teacher_valid, windows=min(256, max(16, teacher_valid.numel() // 256)), seq_len=256)
     curve = []
     model.train()
     for update in range(1, steps + 1):
-        x, y = batch_for_lane(train_ids, teacher_train, lane, generator)
+        x, y = batch_for_lane(train_ids, teacher_train, lane, generator,
+                              mix_fraction if lane == "qwen" else 0.0)
         _, loss = model(x, y)
         optimizer.zero_grad(set_to_none=True)
         loss.backward()
@@ -255,11 +265,12 @@ def run_training(source: Path, teacher_dir: Path, out: Path, lane: str,
     ckpt = {
         **{k: v for k, v in parent.items() if k not in {"model", "optimizer", "torch_rng_state", "sample_rng_state"}},
         "step": PARENT_STEP + steps, "lane": lane, "lane_updates": steps,
+        "seed": seed, "parent_seed": parent.get("seed"),
         "model": model.state_dict(), "optimizer": optimizer.state_dict(),
         "torch_rng_state": torch.get_rng_state(), "sample_rng_state": generator.get_state(),
         "teacher_model": QWEN_REPO, "teacher_revision": QWEN_REVISION,
         "teacher_data_sha256": teacher_manifest["teacher_data_sha256"],
-        "distillation_fraction": 0.10 if lane == "qwen" else 0.0,
+        "distillation_fraction": mix_fraction if lane == "qwen" else 0.0,
         "evaluation_manifest": manifest,
     }
     tmp = out / "checkpoint.pt.tmp"
@@ -272,7 +283,8 @@ def run_training(source: Path, teacher_dir: Path, out: Path, lane: str,
         "parent_run": PARENT_RUN, "parent_step": PARENT_STEP,
         "parent_checkpoint_sha256": parent_sha, "candidate_step": PARENT_STEP + steps,
         "candidate_checkpoint_sha256": digest_file(out / "checkpoint.pt"),
-        "updates": steps, "mix_fraction": 0.10 if lane == "qwen" else 0.0,
+        "updates": steps, "training_seed": seed,
+        "mix_fraction": mix_fraction if lane == "qwen" else 0.0,
         "tokenizer_sha256": TOKENIZER_SHA256,
         "train_sha256": manifest["train_sha256"], "valid_sha256": manifest["valid_sha256"],
         "independent_test_sha256": manifest["test_sha256"],
@@ -300,6 +312,7 @@ def run_training(source: Path, teacher_dir: Path, out: Path, lane: str,
         "teacher_revision": QWEN_REVISION, "teacher_license": QWEN_LICENSE,
         "teacher_data_sha256": teacher_manifest["teacher_data_sha256"],
         "optimizer_state_resumed_from_parent": True,
+        "sampling_seed": seed,
         "forge_weights_initialized_from_own_verified_checkpoint": True,
         "promoted": False, "android_integrated": False,
     }, indent=2) + "\n")
@@ -320,11 +333,14 @@ def main() -> None:
     train.add_argument("--out", type=Path, required=True)
     train.add_argument("--lane", choices=("uniform", "qwen"), required=True)
     train.add_argument("--steps", type=int, default=8000)
+    train.add_argument("--seed", type=int, default=43)
+    train.add_argument("--mix-fraction", type=float, default=0.10)
     args = parser.parse_args()
     if args.command == "generate":
         print(json.dumps(generate_teacher_data(args.out, args.train_count, args.valid_count), indent=2))
     else:
-        run_training(args.source, args.teacher_dir, args.out, args.lane, args.steps)
+        run_training(args.source, args.teacher_dir, args.out, args.lane,
+                     args.steps, args.seed, args.mix_fraction)
 
 
 if __name__ == "__main__":
