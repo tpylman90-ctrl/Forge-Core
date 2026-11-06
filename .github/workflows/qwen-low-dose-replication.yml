@@ -1,0 +1,140 @@
+name: Forge Qwen3 low-dose language replication
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/qwen-low-dose-replication-2026-11-06.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  matched-student-study:
+    name: Train ${{ matrix.label }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - lane: uniform
+            seed: 43
+            mix: "0.0"
+            label: uniform-seed43
+          - lane: qwen
+            seed: 43
+            mix: "0.01"
+            label: qwen-1pct-seed43
+          - lane: uniform
+            seed: 73
+            mix: "0.0"
+            label: uniform-seed73
+          - lane: qwen
+            seed: 73
+            mix: "0.01"
+            label: qwen-1pct-seed73
+          - lane: uniform
+            seed: 101
+            mix: "0.0"
+            label: uniform-seed101
+          - lane: qwen
+            seed: 101
+            mix: "0.01"
+            label: qwen-1pct-seed101
+    env:
+      SOURCE_RUN: "42143390701"
+      TEACHER_RUN: "42247943454"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install Forge CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Download the exact shared Qwen target set
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p teacher
+          gh run download "$TEACHER_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-qwen3-teacher-data-42247943454 --dir teacher
+      - name: Restore and verify the common 95k Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          checkpoint = Path('source/checkpoint.pt')
+          value = torch.load(checkpoint, map_location='cpu', weights_only=True)
+          sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+          assert value['step'] == 95000
+          assert sha == 'a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a'
+          print({'parent_step': value['step'], 'parent_sha256': sha,
+                 'tokenizer_sha256': value['tokenizer_sha256']})
+          PY
+      - name: Train matched ${{ matrix.lane }} arm
+        run: |
+          python -m forge_core.neural.qwen_distill_v1 train \
+            --source source --teacher-dir teacher \
+            --out "artifacts/${{ matrix.label }}" \
+            --lane "${{ matrix.lane }}" --seed "${{ matrix.seed }}" \
+            --mix-fraction "${{ matrix.mix }}" --steps 8000
+      - name: Evaluate the parent on the fixed capability probe
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir source \
+            --out "artifacts/${{ matrix.label }}/parent-capabilities.json"
+      - name: Evaluate the candidate on the fixed capability probe
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir "artifacts/${{ matrix.label }}" \
+            --out "artifacts/${{ matrix.label }}/capabilities.json"
+      - name: Evaluate parent on the fresh mirrored probe
+        run: |
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir source \
+            --out "artifacts/${{ matrix.label }}/parent-fresh-capabilities.json"
+      - name: Evaluate candidate on the same fresh mirrored probe
+        run: |
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir "artifacts/${{ matrix.label }}" \
+            --out "artifacts/${{ matrix.label }}/fresh-capabilities.json"
+      - name: Upload the reproducible arm
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-qwen-low-dose-${{ matrix.label }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.label }}/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Preserve successful arm as a draft research release
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          label="${{ matrix.label }}"
+          tag="forge-qwen-low-dose-${label}-${GITHUB_RUN_ID}"
+          mkdir -p release
+          tar -czf "release/${tag}.tar.gz" -C "artifacts/${label}" .
+          cat > release-notes.md <<EOF
+          Matched Forge language replication arm: ${label}.
+          Starts from the verified scratch-origin 95k parent with Forge's own
+          tokenizer and optimizer state. The Qwen arm uses the exact prior
+          pinned Qwen3 target set at a 1% sequence mix; Qwen weights are never
+          loaded into Forge. Research only, not a capability certification,
+          not promoted, and not integrated into Android.
+          EOF
+          gh release create "$tag" "release/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Qwen low-dose ${label} — run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
