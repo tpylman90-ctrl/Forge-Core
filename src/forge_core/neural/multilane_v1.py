@@ -316,6 +316,15 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
     if lane == "language":
         from forge_core.neural.preschool_eval import evaluate_checkpoint
         evaluate_checkpoint(out, out / "capabilities.json")
+        for filename in ("train.txt", "valid.txt"):
+            (out / filename).write_bytes((source / filename).read_bytes())
+        (out / "test.txt").write_bytes((source / "valid.txt").read_bytes())
+        (out / "ATTRIBUTION.txt").write_text(
+            "TinyStories by Ronen Eldan; license: CDLA-Sharing-1.0.\\n"
+            "Dataset revision f54c09fd23315a6f9c86f9dc80f725de7d8f9c64.\\n"
+            "https://huggingface.co/datasets/roneneldan/TinyStories\\n",
+            encoding="utf-8",
+        )
     else:
         for filename in ("train.txt", "valid.txt", "test.txt", "ATTRIBUTION.txt"):
             (out / filename).write_bytes((out / "source" / filename).read_bytes())
