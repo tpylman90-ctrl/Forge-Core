@@ -5,8 +5,7 @@ first Blender job in run 42149964829 failed before training because one
 documentation URL yielded too little text. That attempt produced no checkpoint
 or training updates.
 
-Use the corrected Blender 5.4 documentation source list, with the Mesh Editing
-chapter replacing the thin Geometry Nodes Input page. Verify all source hashes,
+Use the corrected Blender 5.4 documentation source list, with a specific Mesh Structure page for the final test split. Verify all source hashes,
 keep code blocks from the Blender Manual excluded, retain Blender Documentation
 Team attribution and CC BY-SA 4.0 notice, and include the original CC0-1.0
 lesson cards. Resume the Blender-only branch from the verified 95k Forge parent
