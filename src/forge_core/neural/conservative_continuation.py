@@ -185,16 +185,18 @@ def main() -> None:
         "curve": curve,
     }, out / "last-checkpoint.pt")
     selected_from = "candidate" if best_updates else "parent"
-    selected = {
-        **parent, "step": PARENT_STEP + best_updates, "lr": args.lr,
-        "model": best_model, "optimizer": best_optimizer,
-        "torch_rng_state": best_torch_rng, "sample_rng_state": best_sample_rng,
-        "curve": curve,
-    }
-    torch.save(selected, out / "checkpoint.pt")
     if best_updates:
+        selected = {
+            **parent, "step": PARENT_STEP + best_updates, "lr": args.lr,
+            "model": best_model, "optimizer": best_optimizer,
+            "torch_rng_state": best_torch_rng, "sample_rng_state": best_sample_rng,
+            "curve": curve,
+        }
+        torch.save(selected, out / "checkpoint.pt")
         torch.save(selected, out / "best-checkpoint.pt")
     else:
+        selected = parent
+        shutil.copy2(parent_path, out / "checkpoint.pt")
         shutil.copy2(parent_path, out / "best-checkpoint.pt")
 
     selected_model = ByteTransformer(ModelConfig(**selected["configuration"]))
