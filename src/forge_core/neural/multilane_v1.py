@@ -66,6 +66,59 @@ SOURCES = {
     },
 }
 
+# Original Forge-Core lesson cards. These are authored for this project (CC0-1.0);
+# they are separate from the licensed manual prose and carry explicit why steps.
+LESSONS = {
+    "blender": [
+        {
+            "task": "Create a two-unit cube and add a clean three-segment bevel.",
+            "answer": "import bpy\nbpy.ops.mesh.primitive_cube_add(size=2)\nobj = bpy.context.object\nobj.name = 'Beveled_Block'\nbpy.ops.object.transform_apply(location=False, rotation=False, scale=True)\nbevel = obj.modifiers.new('Edge_Bevel', 'BEVEL')\nbevel.width = 0.08\nbevel.segments = 3\nobj.modifiers.new('Weighted_Normals', 'WEIGHTED_NORMAL')",
+            "why": "Apply non-uniform scale before setting a bevel width so the bevel remains consistent across faces. A weighted normal modifier improves hard-surface shading without changing the silhouette."
+        },
+        {
+            "task": "Move an object's origin to the center of its geometry before export.",
+            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None:\n    raise RuntimeError('Select an object first')\nbpy.context.view_layer.objects.active = obj\nobj.select_set(True)\nbpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')",
+            "why": "A useful origin makes rotation, placement, and engine-side transforms predictable. The operation needs the intended object selected and active."
+        },
+        {
+            "task": "Export only the selected object as a binary glTF file.",
+            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None:\n    raise RuntimeError('Select an object first')\nbpy.ops.object.select_all(action='DESELECT')\nobj.select_set(True)\nbpy.context.view_layer.objects.active = obj\nbpy.ops.export_scene.gltf(filepath='asset.glb', export_format='GLB', use_selection=True)",
+            "why": "A selection-only export prevents unrelated scene objects from entering the asset package. Check materials and scale again after importing the GLB into the target engine."
+        }
+    ],
+    "godot": [
+        {
+            "task": "Load a PackedScene, instantiate it, and add the instance to the current scene.",
+            "answer": "var actor_scene: PackedScene = load('res://actors/actor.tscn')\nif actor_scene == null:\n    push_error('Actor scene could not be loaded')\n    return\nvar actor := actor_scene.instantiate()\nadd_child(actor)",
+            "why": "A PackedScene is a reusable resource; instantiate it to create a live node tree. Add the new root to the intended parent so it enters the active scene."
+        },
+        {
+            "task": "Connect a Button press signal to a method in the current script.",
+            "answer": "func _ready() -> void:\n    $Button.pressed.connect(_on_button_pressed)\n\nfunc _on_button_pressed() -> void:\n    print('Button pressed')",
+            "why": "Signal connections let a node announce an event without owning the receiver's behavior. Connect once during setup and keep the response in a named callback."
+        },
+        {
+            "task": "Create a triangle using ArrayMesh from three vertices.",
+            "answer": "var arrays := []\narrays.resize(Mesh.ARRAY_MAX)\narrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP])\narrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])\nvar mesh := ArrayMesh.new()\nmesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)",
+            "why": "ArrayMesh stores vertex attributes in indexed array slots. The vertex and index arrays describe one triangle; normals and UVs can be added when lighting or texturing requires them."
+        }
+    ]
+}
+
+TASK_PROMPTS = {
+    "blender": [
+        "Write a Blender Python script that creates a tapered low-poly rock and gives it smooth shading.",
+        "Explain how to prepare a Blender object for a clean GLB export to a game engine.",
+        "Write a Blender Python script that adds a named bevel modifier to the active mesh and checks for no active object."
+    ],
+    "godot": [
+        "Write GDScript that moves a CharacterBody3D from input in _physics_process and calls move_and_slide.",
+        "Explain when to use a signal instead of a direct node path dependency in a reusable Godot scene.",
+        "Write GDScript that loads a PackedScene, handles a missing resource, instantiates it, and attaches it to a parent."
+    ],
+}
+
+
 
 def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
@@ -121,7 +174,12 @@ def fetch_manual(lane: str, out: Path) -> dict:
         pages.append({"url": url, "resolved_url": final_url,
                       "html_sha256": sha256_bytes(raw), "extracted_characters": len(text)})
         texts.append(text)
-    train_text = "\n\n".join(texts[:4])
+    lesson_text = "\\n\\n".join(
+        f"Task: {item['task']}\\nAnswer:\\n{item['answer']}\\nWhy:\\n{item['why']}"
+        for item in LESSONS[lane]
+    )
+    lesson_bytes = lesson_text.encode("utf-8")
+    train_text = "\\n\\n".join(texts[:4]) + "\\n\\n" + lesson_text
     valid_text, test_text = texts[4], texts[5]
     if len(train_text) < 8000 or min(len(valid_text), len(test_text)) < 1500:
         raise ValueError("Documentation train/validation/test split is too small")
@@ -133,7 +191,10 @@ def fetch_manual(lane: str, out: Path) -> dict:
         "license": config["license"], "license_url": config["license_url"],
         "attribution": config["attribution"],
         "split_policy": "source pages 1-4 train; page 5 validation; page 6 final test; whole-page split",
-        "code_samples": "HTML pre/code blocks excluded from extracted prose",
+        "code_samples": "HTML pre/code blocks excluded; original lesson code is CC0-1.0",
+        "curriculum_license": "CC0-1.0, original Forge-Core lesson cards",
+        "lesson_sha256": sha256_bytes(lesson_bytes),
+        "lesson_count": len(LESSONS[lane]),
         "pages": pages,
         "train_sha256": sha256_file(out / "train.txt"),
         "valid_sha256": sha256_file(out / "valid.txt"),
