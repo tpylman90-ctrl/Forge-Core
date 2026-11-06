@@ -31,7 +31,6 @@ final class ForgeEmberView extends View {
     private final float density;
     private final long startTime = System.currentTimeMillis();
     private final Bitmap[] smokeTexture = new Bitmap[3];
-    private final PorterDuffColorFilter[] smokeTint = new PorterDuffColorFilter[4];
     private final Shader[] smokeHalo = new Shader[4];
     private final Shader[] nodeGlow = new Shader[4];
     private final Shader[] coreGlow = new Shader[4];
@@ -45,8 +44,16 @@ final class ForgeEmberView extends View {
     private volatile Mode mode = Mode.IDLE;
     private volatile float audioLevel = 0f;
     private volatile float audioTargetLevel = 0f;
-    private volatile long modeChangedAt = System.currentTimeMillis();
-    private volatile Mode previousMode = Mode.IDLE;
+    // Persistent blend weights let a new state retarget from the current look,
+    // even when another phase begins before the previous transition completes.
+    private final float[] phaseWeights = {1f, 0f, 0f, 0f};
+    private long previousFrameAt = System.currentTimeMillis();
+    private float nodeRotation;
+    private float gyroscopeRotation;
+    private float sparkRotation;
+    private float inputStreamRotation;
+    private int blendedSmokeColor;
+    private PorterDuffColorFilter blendedSmokeTint;
 
     ForgeEmberView(Context context) {
         super(context);
@@ -57,7 +64,6 @@ final class ForgeEmberView extends View {
         smokeHalo[2] = radial(0xB8752574);
         smokeHalo[3] = radial(0xA8004650);
         for (int i = 0; i < 4; i++) {
-            smokeTint[i] = new PorterDuffColorFilter(PALETTE[i][3], PorterDuff.Mode.SRC_IN);
             nodeGlow[i] = radial(withAlpha(PALETTE[i][0], 230));
         }
         coreGlow[0] = radial(0xD9FF9900);
@@ -69,9 +75,7 @@ final class ForgeEmberView extends View {
 
     void setMode(Mode next) {
         if (next == null || mode == next) return;
-        previousMode = mode;
         mode = next;
-        modeChangedAt = System.currentTimeMillis();
         postInvalidateOnAnimation();
     }
 
@@ -82,6 +86,7 @@ final class ForgeEmberView extends View {
 
     @Override protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        previousFrameAt = System.currentTimeMillis();
         postInvalidateOnAnimation();
     }
 
@@ -94,23 +99,18 @@ final class ForgeEmberView extends View {
         float w = getWidth(), h = getHeight();
         if (w <= 0 || h <= 0) return;
         float cx = w * .5f, cy = h * .48f;
-        float time = (System.currentTimeMillis() - startTime) / 1000f;
-        float elapsed = System.currentTimeMillis() - modeChangedAt;
-        float transition = Math.min(1f, elapsed / 920f);
-        transition = transition * transition * (3f - 2f * transition);
+        long now = System.currentTimeMillis();
+        float time = (now - startTime) / 1000f;
+        float dt = Math.max(0f, Math.min(.05f, (now - previousFrameAt) / 1000f));
+        previousFrameAt = now;
         Mode current = mode;
-        int paletteIndex = current == Mode.LISTENING ? 1 : current == Mode.THINKING || current == Mode.RESPONDING ? 2
-                : current == Mode.SPEAKING ? 3 : 0;
-        int oldIndex = previousMode == Mode.LISTENING ? 1 : previousMode == Mode.THINKING || previousMode == Mode.RESPONDING ? 2
-                : previousMode == Mode.SPEAKING ? 3 : 0;
-        float listeningWeight = lerp(previousMode == Mode.LISTENING ? 1f : 0f,
-                current == Mode.LISTENING ? 1f : 0f, transition);
-        float smeltWeight = lerp(isSmelting(previousMode) ? 1f : 0f, isSmelting(current) ? 1f : 0f, transition);
-        float temperWeight = lerp(previousMode == Mode.SPEAKING ? 1f : 0f,
-                current == Mode.SPEAKING ? 1f : 0f, transition);
-        float idleWeight = Math.max(0f, 1f - listeningWeight - smeltWeight - temperWeight);
+        updatePhaseWeights(current, dt);
+        float idleWeight = phaseWeights[0];
+        float listeningWeight = phaseWeights[1];
+        float smeltWeight = phaseWeights[2];
+        float temperWeight = phaseWeights[3];
         float audioTarget = audioTargetLevel;
-        audioLevel += (audioTarget - audioLevel) * .16f;
+        audioLevel += (audioTarget - audioLevel) * (1f - (float) Math.exp(-dt / .12f));
         float voice = listeningWeight * audioLevel;
         float breath = .5f + .5f * (float) Math.sin(time * (.58f + listeningWeight * .57f));
         float responseBreath = .5f + .5f * (float) Math.sin(time * 1.18f - .7f);
@@ -118,11 +118,18 @@ final class ForgeEmberView extends View {
                 + listeningWeight * (.34f + audioLevel * .38f)
                 + smeltWeight * (.76f + responseBreath * .20f)
                 + temperWeight * .37f;
-        float gyroSpeed = lerp(spinRate(oldIndex), spinRate(paletteIndex), transition);
-        int nodeColor = blend(PALETTE[oldIndex][0], PALETTE[paletteIndex][0], transition);
-        int synapseColor = blend(PALETTE[oldIndex][1], PALETTE[paletteIndex][1], transition);
-        int ringColor = blend(PALETTE[oldIndex][2], PALETTE[paletteIndex][2], transition);
-        int hotColor = blend(PALETTE[oldIndex][3], PALETTE[paletteIndex][3], transition);
+        float gyroSpeed = weightedSpin();
+        int nodeColor = weightedPaletteColor(0);
+        int synapseColor = weightedPaletteColor(1);
+        int ringColor = weightedPaletteColor(2);
+        int hotColor = weightedPaletteColor(3);
+        updateSmokeTint(hotColor);
+        nodeRotation = wrapAngle(nodeRotation + dt * (.22f * idleWeight + .54f * listeningWeight
+                + 1.12f * smeltWeight + .16f * temperWeight));
+        gyroscopeRotation = wrapAngle(gyroscopeRotation + dt * gyroSpeed);
+        sparkRotation = wrapAngle(sparkRotation + dt * (.065f + listeningWeight * .14f
+                + smeltWeight * .34f - temperWeight * .035f));
+        inputStreamRotation = wrapAngle(inputStreamRotation + dt * (1.3f + voice * 1.4f));
 
         // Fine instrument-style guides give the orb a holographic frame without crowding it.
         drawHudGuides(canvas, cx, cy, w, h, time, ringColor, energy);
@@ -135,17 +142,16 @@ final class ForgeEmberView extends View {
                 + temperWeight * 1.02f;
         float smokeOpacity = idleWeight * 135f + listeningWeight * (150f + audioLevel * 55f)
                 + smeltWeight * 185f + temperWeight * 135f;
-        drawSoftEllipse(canvas, cx, cy, w * .49f * auraScale, h * .46f * auraScale,
-                smokeHalo[oldIndex], (int) (smokeOpacity * (1f - transition)));
-        drawSoftEllipse(canvas, cx, cy, w * .49f * auraScale, h * .46f * auraScale,
-                smokeHalo[paletteIndex], (int) (smokeOpacity * transition));
-        drawSmoke(canvas, cx, cy, w, h, time, auraScale, oldIndex, paletteIndex,
-                transition, (int) smokeOpacity);
+        for (int phase = 0; phase < phaseWeights.length; phase++) {
+            if (phaseWeights[phase] < .004f) continue;
+            drawSoftEllipse(canvas, cx, cy, w * .49f * auraScale, h * .46f * auraScale,
+                    smokeHalo[phase], (int) (smokeOpacity * phaseWeights[phase]));
+        }
+        drawSmoke(canvas, cx, cy, w, h, time, gyroscopeRotation, auraScale, (int) smokeOpacity);
 
         // Neural points arranged on a spherical shell and projected into the vessel.
-        float yawRate = idleWeight * .22f + listeningWeight * .54f + smeltWeight * 1.12f + temperWeight * .16f;
         float pitchAmplitude = idleWeight * .18f + listeningWeight * .22f + smeltWeight * .30f + temperWeight * .14f;
-        float yaw = time * yawRate;
+        float yaw = nodeRotation;
         float pitch = (float) Math.sin(time * .31f) * pitchAmplitude;
         float cp = (float) Math.cos(pitch), sp = (float) Math.sin(pitch);
         for (int i = 0; i < NODE_COUNT; i++) {
@@ -174,7 +180,7 @@ final class ForgeEmberView extends View {
         }
 
         // Back halves of the gyroscopes sit behind the synaptic core.
-        drawGyro(canvas, cx, cy, w, h, time, ringColor, energy, gyroSpeed, smeltWeight, false);
+        drawGyro(canvas, cx, cy, w, h, time, gyroscopeRotation, ringColor, energy, gyroSpeed, smeltWeight, false);
 
         // Thin 3D proximity links avoid the tangled false connections of a flat projection.
         paint.setShader(null);
@@ -211,10 +217,11 @@ final class ForgeEmberView extends View {
             float radius = density * (1.25f + (i % 4) * .20f) * depthScale * (1f + smeltWeight * .13f);
             int color = i % 6 == 0 ? blend(nodeColor, Color.WHITE, smeltWeight * .65f) : nodeColor;
             int glowOpacity = (front ? 88 : 45) + (int) (pulse * 45);
-            drawSoftEllipse(canvas, nodeScreenX[i], nodeScreenY[i], radius * 2.9f, radius * 2.9f,
-                    nodeGlow[oldIndex], (int) (glowOpacity * (1f - transition)));
-            drawSoftEllipse(canvas, nodeScreenX[i], nodeScreenY[i], radius * 2.9f, radius * 2.9f,
-                    nodeGlow[paletteIndex], (int) (glowOpacity * transition));
+            for (int phase = 0; phase < phaseWeights.length; phase++) {
+                if (phaseWeights[phase] > .004f) drawSoftEllipse(canvas, nodeScreenX[i], nodeScreenY[i],
+                        radius * 2.9f, radius * 2.9f, nodeGlow[phase],
+                        (int) (glowOpacity * phaseWeights[phase]));
+            }
             paint.setColor(withAlpha(color, front ? 220 : 125));
             canvas.drawCircle(nodeScreenX[i], nodeScreenY[i], radius * pulse * .82f, paint);
             paint.setColor(withAlpha(Color.WHITE, front ? 235 : 125));
@@ -227,20 +234,18 @@ final class ForgeEmberView extends View {
         }
 
         // Front ring segments catch light across the core; their rear halves stay behind it.
-        drawGyro(canvas, cx, cy, w, h, time, ringColor, energy, gyroSpeed, smeltWeight, true);
+        drawGyro(canvas, cx, cy, w, h, time, gyroscopeRotation, ringColor, energy, gyroSpeed, smeltWeight, true);
         // A faint near-side veil makes the rings feel embedded in the cloud, not pasted on it.
-        drawSmokeVeil(canvas, cx, cy, w, h, time, auraScale, oldIndex,
-                (int) (smokeOpacity * (1f - transition) * .34f), 0);
-        drawSmokeVeil(canvas, cx, cy, w, h, time, auraScale, paletteIndex,
-                (int) (smokeOpacity * transition * .34f), 1);
+        drawSmokeVeil(canvas, cx, cy, w, h, time, gyroscopeRotation, auraScale,
+                (int) (smokeOpacity * .34f), 0);
 
         // Hot central point, plus the smooth thermal pulse for the entire processing interval.
         float coreRadius = density * (5f + energy * 2f);
         int coreOpacity = (int) (190 + smeltWeight * 65 + listeningWeight * 25);
-        drawSoftEllipse(canvas, cx, cy, coreRadius * 6.8f, coreRadius * 5.6f, coreGlow[oldIndex],
-                (int) (coreOpacity * (1f - transition)));
-        drawSoftEllipse(canvas, cx, cy, coreRadius * 6.8f, coreRadius * 5.6f, coreGlow[paletteIndex],
-                (int) (coreOpacity * transition));
+        for (int phase = 0; phase < phaseWeights.length; phase++) {
+            if (phaseWeights[phase] > .004f) drawSoftEllipse(canvas, cx, cy, coreRadius * 6.8f,
+                    coreRadius * 5.6f, coreGlow[phase], (int) (coreOpacity * phaseWeights[phase]));
+        }
         paint.setShader(null);
         paint.setStyle(Paint.Style.FILL);
         paint.setColor(hotColor);
@@ -253,13 +258,13 @@ final class ForgeEmberView extends View {
         canvas.drawCircle(cx - coreRadius * .20f, cy - coreRadius * .20f, coreRadius * .16f, paint);
 
         // Sparks skim outward. Listening sends a few visible streams from the lower pole.
-        drawSparks(canvas, cx, cy, w, h, time, hotColor, listeningWeight, smeltWeight, temperWeight);
-        if (listeningWeight > .01f) drawInputStreams(canvas, cx, cy, w, h, time, voice, nodeColor, listeningWeight);
+        drawSparks(canvas, cx, cy, w, h, time, sparkRotation, hotColor, listeningWeight, smeltWeight, temperWeight);
+        if (listeningWeight > .01f) drawInputStreams(canvas, cx, cy, w, h, inputStreamRotation, voice, nodeColor, listeningWeight);
 
         postInvalidateOnAnimation();
     }
 
-    private void drawGyro(Canvas canvas, float cx, float cy, float w, float h, float time,
+    private void drawGyro(Canvas canvas, float cx, float cy, float w, float h, float time, float rotation,
                           int color, float energy, float spin, float smeltWeight, boolean frontHalf) {
         paint.setShader(null);
         paint.setStyle(Paint.Style.STROKE);
@@ -270,9 +275,9 @@ final class ForgeEmberView extends View {
         for (int ring = 0; ring < 4; ring++) {
             float size = 1f - ring * .105f;
             float direction = ring % 2 == 0 ? 1f : -1f;
-            float yaw = time * spin * direction * (1.05f + ring * .21f) + ring * 1.21f;
+            float yaw = rotation * direction * (1.05f + ring * .21f) + ring * 1.21f;
             float pitch = .62f + (float) Math.sin(time * .23f + ring) * .13f + ring * .12f;
-            float roll = time * spin * (ring % 2 == 0 ? .28f : -.21f) + ring * .75f;
+            float roll = rotation * (ring % 2 == 0 ? .28f : -.21f) + ring * .75f;
             for (int segment = 0; segment < segments; segment++) {
                 float a0 = (float) (segment * Math.PI * 2.0 / segments);
                 float a1 = (float) ((segment + 1) * Math.PI * 2.0 / segments);
@@ -304,7 +309,7 @@ final class ForgeEmberView extends View {
                     paint.setStrokeWidth((ring == 1 ? 1.25f : .88f) * density);
                     paint.setColor(withAlpha(ringTone, 88 + (int) (light * 135)));
                     canvas.drawLine(xA, yA, xB, yB, paint);
-                    float glint = (time * (.035f + spin * .075f) + ring * .231f) % 1f;
+                    float glint = (rotation * .11f + ring * .231f) % 1f;
                     float progress = segment / (float) segments;
                     float delta = Math.abs(progress - glint);
                     delta = Math.min(delta, 1f - delta);
@@ -358,30 +363,72 @@ final class ForgeEmberView extends View {
         paint.setStyle(Paint.Style.FILL);
     }
 
-    private static boolean isSmelting(Mode mode) {
-        return mode == Mode.THINKING || mode == Mode.RESPONDING;
-    }
-
     private static float spinRate(int paletteIndex) {
         return paletteIndex == 2 ? 1f : paletteIndex == 1 ? .48f : paletteIndex == 3 ? .13f : .18f;
     }
 
+    private void updatePhaseWeights(Mode current, float dt) {
+        int targetIndex = current == Mode.LISTENING ? 1
+                : current == Mode.THINKING || current == Mode.RESPONDING ? 2
+                : current == Mode.SPEAKING ? 3 : 0;
+        float blend = 1f - (float) Math.exp(-dt / .42f);
+        float total = 0f;
+        for (int i = 0; i < phaseWeights.length; i++) {
+            phaseWeights[i] += ((i == targetIndex ? 1f : 0f) - phaseWeights[i]) * blend;
+            total += phaseWeights[i];
+        }
+        if (total > 0f) for (int i = 0; i < phaseWeights.length; i++) phaseWeights[i] /= total;
+    }
+
+    private float weightedSpin() {
+        float result = 0f;
+        for (int i = 0; i < phaseWeights.length; i++) result += phaseWeights[i] * spinRate(i);
+        return result;
+    }
+
+    private int weightedPaletteColor(int colorIndex) {
+        float alpha = 0f, red = 0f, green = 0f, blue = 0f;
+        for (int i = 0; i < phaseWeights.length; i++) {
+            float weight = phaseWeights[i];
+            int color = PALETTE[i][colorIndex];
+            alpha += Color.alpha(color) * weight;
+            red += Color.red(color) * weight;
+            green += Color.green(color) * weight;
+            blue += Color.blue(color) * weight;
+        }
+        return Color.argb(Math.round(alpha), Math.round(red), Math.round(green), Math.round(blue));
+    }
+
+    private void updateSmokeTint(int color) {
+        int quantized = Color.rgb((Color.red(color) >> 3) << 3,
+                (Color.green(color) >> 3) << 3, (Color.blue(color) >> 3) << 3);
+        if (blendedSmokeTint == null || quantized != blendedSmokeColor) {
+            blendedSmokeColor = quantized;
+            blendedSmokeTint = new PorterDuffColorFilter(quantized, PorterDuff.Mode.MULTIPLY);
+        }
+    }
+
+    private static float wrapAngle(float angle) {
+        float turn = (float) (Math.PI * 2.0);
+        angle %= turn;
+        return angle < 0f ? angle + turn : angle;
+    }
+
     private void drawSmoke(Canvas canvas, float cx, float cy, float w, float h, float time,
-                           float scale, int oldIndex, int paletteIndex, float transition, int opacity) {
-        drawSmokeLayer(canvas, cx, cy, w, h, time, scale, oldIndex, opacity * (1f - transition), 1f);
-        drawSmokeLayer(canvas, cx, cy, w, h, time, scale, paletteIndex, opacity * transition, .72f);
+                           float rotation, float scale, int opacity) {
+        drawSmokeLayer(canvas, cx, cy, w, h, time, rotation, scale, opacity, 1f);
     }
 
     private void drawSmokeLayer(Canvas canvas, float cx, float cy, float w, float h, float time,
-                                float scale, int paletteIndex, float opacity, float size) {
+                                float rotation, float scale, float opacity, float size) {
         if (opacity < 1f) return;
         paint.setStyle(Paint.Style.FILL);
         paint.setShader(null);
-        paint.setColorFilter(smokeTint[paletteIndex]);
+        paint.setColorFilter(blendedSmokeTint);
         paint.setAlpha(Math.max(0, Math.min(255, (int) (opacity * .54f))));
         paint.setFilterBitmap(true);
         for (int layer = 0; layer < smokeTexture.length; layer++) {
-            float phase = time * (.12f + layer * .035f) + layer * 2.1f + paletteIndex * .7f;
+            float phase = time * (.12f + layer * .035f) + layer * 2.1f;
             float layerScale = size * (1f - layer * .105f);
             // Keep the soft texture inside the view; clipping its bitmap bounds made a
             // hard rectangular smoke edge on some phone aspect ratios.
@@ -393,7 +440,7 @@ final class ForgeEmberView extends View {
             oval.set(x - radiusX, y - radiusY, x + radiusX, y + radiusY);
             int save = canvas.save();
             canvas.rotate((float) Math.sin(time * .16f + layer) * 5f
-                    + time * spinRate(paletteIndex) * (layer % 2 == 0 ? .32f : -.19f), x, y);
+                    + rotation * (layer % 2 == 0 ? .32f : -.19f), x, y);
             float layerAlpha = layer == 0 ? .32f : layer == 1 ? .21f : .15f;
             paint.setAlpha(Math.max(0, Math.min(255, (int) (opacity * layerAlpha))));
             canvas.drawBitmap(smokeTexture[layer], null, oval, paint);
@@ -405,7 +452,7 @@ final class ForgeEmberView extends View {
     }
 
     private void drawSmokeVeil(Canvas canvas, float cx, float cy, float w, float h, float time,
-                               float scale, int paletteIndex, int opacity, int layer) {
+                               float rotation, float scale, int opacity, int layer) {
         if (opacity < 1) return;
         float phase = time * (.14f + layer * .035f) + layer * 2.6f;
         float x = cx + (float) Math.sin(phase) * w * .045f;
@@ -414,10 +461,10 @@ final class ForgeEmberView extends View {
         float radiusY = Math.min(h * .38f, h * .36f * scale);
         oval.set(x - radiusX, y - radiusY, x + radiusX, y + radiusY);
         int save = canvas.save();
-        canvas.rotate((float) Math.sin(time * .19f + layer) * 8f - time * .04f, x, y);
+        canvas.rotate((float) Math.sin(time * .19f + layer) * 8f - rotation * .04f, x, y);
         paint.setStyle(Paint.Style.FILL);
         paint.setShader(null);
-        paint.setColorFilter(smokeTint[paletteIndex]);
+        paint.setColorFilter(blendedSmokeTint);
         paint.setAlpha(Math.min(255, opacity));
         paint.setFilterBitmap(true);
         canvas.drawBitmap(smokeTexture[layer], null, oval, paint);
@@ -522,15 +569,14 @@ final class ForgeEmberView extends View {
         paint.setStyle(Paint.Style.FILL);
     }
 
-    private void drawSparks(Canvas canvas, float cx, float cy, float w, float h, float time,
+    private void drawSparks(Canvas canvas, float cx, float cy, float w, float h, float time, float rotation,
                             int color, float listeningWeight, float smeltWeight, float temperWeight) {
         paint.setShader(null);
         paint.setStyle(Paint.Style.FILL);
         int count = 72;
         for (int i = 0; i < count; i++) {
             float activity = Math.max(listeningWeight, smeltWeight);
-            float speed = .065f + listeningWeight * .14f + smeltWeight * .34f - temperWeight * .035f;
-            float phase = time * speed + i * 2.39996f;
+            float phase = rotation + i * 2.39996f;
             float baseOrbit = .39f + (i % 9) * .029f;
             float orbit = baseOrbit + .018f * (float) Math.sin(time * .31f + i * 1.9f);
             float x = cx + (float) Math.cos(phase) * w * orbit;
@@ -551,11 +597,11 @@ final class ForgeEmberView extends View {
     }
 
     private void drawInputStreams(Canvas canvas, float cx, float cy, float w, float h,
-                                  float time, float voice, int color, float listeningWeight) {
+                                  float rotation, float voice, int color, float listeningWeight) {
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1.3f * density);
         for (int i = 0; i < 3; i++) {
-            float phase = time * (1.3f + voice * 1.4f) + i * 2.1f;
+            float phase = rotation + i * 2.1f;
             float x = cx + (float) Math.sin(phase) * w * .045f;
             float y = cy + h * (.43f - (phase % 1.6f) * .28f);
             paint.setColor(withAlpha(color, (int) ((55 + voice * 130) * listeningWeight)));
