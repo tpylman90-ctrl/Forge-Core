@@ -209,17 +209,19 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
         raise ValueError("Base tokenizer hash mismatch")
     tokenizer = Tokenizer.from_file(str(source / "tokenizer.json"))
     if lane == "language":
-        _, train_ids, valid_ids, manifest = load_language_data(source)
+        _, train_ids, valid_ids, test_ids, manifest = load_language_data(source)
     else:
-        train_ids, valid_ids, manifest = load_manual_data(lane, out / "source", tokenizer)
+        train_ids, valid_ids, test_ids, manifest = load_manual_data(lane, out / "source", tokenizer)
 
     seed = 43 if lane == "language" else (731 if lane == "blender" else 947)
+    eval_windows = 2048 if lane == "language" else EVAL_WINDOWS
     torch.set_num_threads(min(2, torch.get_num_threads()))
     torch.manual_seed(seed)
     random.seed(seed)
     model = ByteTransformer(ModelConfig(**parent["configuration"]))
     model.load_state_dict(parent["model"])
-    optimizer = torch.optim.AdamW(model.parameters(), lr=3e-4 if lane == "language" else 5e-5)
+    learning_rate = 3e-4 if lane == "language" else 5e-5
+    optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     if lane == "language":
         optimizer.load_state_dict(parent["optimizer"])
         torch.set_rng_state(parent["torch_rng_state"])
@@ -230,13 +232,16 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
 
     out.mkdir(parents=True, exist_ok=True)
     model.train()
-    initial = heldout(model, valid_ids, windows=EVAL_WINDOWS, seq_len=SEQ_LEN)
-    best = initial
+    initial_valid = heldout(model, valid_ids, windows=eval_windows, seq_len=SEQ_LEN)
+    initial_test = heldout(model, test_ids, windows=eval_windows, seq_len=SEQ_LEN)
+    best_valid = initial_valid
     best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-    no_improve = 0
+    best_optimizer = copy.deepcopy(optimizer.state_dict())
+    best_torch_rng = torch.get_rng_state().clone()
+    best_sample_rng = rng.get_state().clone()
     started = time.monotonic()
     updates = 0
-    evals = []
+    curve = []
     while time.monotonic() - started < seconds:
         x, y = make_batch(train_ids, BATCH, SEQ_LEN, rng)
         _, loss = model(x, y)
@@ -246,70 +251,69 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
         optimizer.step()
         updates += 1
         if updates % 1000 == 0:
-            score = heldout(model, valid_ids, windows=EVAL_WINDOWS, seq_len=SEQ_LEN)
-            evals.append({"updates": updates, "valid_token_loss": round(score, 8)})
-            if score < best:
-                best = score
+            score = heldout(model, valid_ids, windows=eval_windows, seq_len=SEQ_LEN)
+            curve.append({"updates": updates, "valid_token_loss": round(score, 8)})
+            if lane == "language" or score < best_valid:
+                best_valid = score
                 best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
-                no_improve = 0
-            else:
-                no_improve += 1
-            model.load_state_dict(best_state)
-            save_checkpoint(out, model, optimizer, lane, parent, updates, seed,
-                            {"rng": rng, "manifest": manifest}, best)
+                best_optimizer = copy.deepcopy(optimizer.state_dict())
+                best_torch_rng = torch.get_rng_state().clone()
+                best_sample_rng = rng.get_state().clone()
+            current_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+            selected_optimizer = optimizer.state_dict() if lane == "language" else best_optimizer
+            if lane != "language":
+                model.load_state_dict(best_state)
+            save_checkpoint(out, model, selected_optimizer, lane, parent, updates, seed,
+                            {"rng": rng, "manifest": manifest}, best_valid,
+                            best_torch_rng, best_sample_rng)
+            if lane != "language":
+                model.load_state_dict(current_state)
             model.train()
             print(json.dumps({"lane": lane, "updates": updates,
                               "valid_token_loss": round(score, 8),
-                              "best_valid_loss": round(best, 8),
+                              "selected_valid_loss": round(best_valid, 8),
                               "elapsed_seconds": round(time.monotonic() - started, 1)}),
                   flush=True)
-            # Stop after sustained regression; retain the best branch checkpoint.
-            if no_improve >= PATIENCE:
-                break
     model.load_state_dict(best_state)
-    final = heldout(model, valid_ids, windows=EVAL_WINDOWS, seq_len=SEQ_LEN)
-    save_checkpoint(out, model, optimizer, lane, parent, updates, seed,
-                    {"rng": rng, "manifest": manifest}, best)
+    selected_valid = heldout(model, valid_ids, windows=eval_windows, seq_len=SEQ_LEN)
+    final_test = heldout(model, test_ids, windows=eval_windows, seq_len=SEQ_LEN)
+    final_optimizer = optimizer.state_dict() if lane == "language" else best_optimizer
+    save_checkpoint(out, model, final_optimizer, lane, parent, updates, seed,
+                    {"rng": rng, "manifest": manifest}, best_valid,
+                    best_torch_rng, best_sample_rng)
     report = {
         "schema": 1, "status": "research_only_not_promoted", "lane": lane,
-        "parent_checkpoint_sha256": parent_hash, "parent_step": BASE_STEP,
-        "candidate_checkpoint_sha256": sha256_file(out / "checkpoint.pt"),
+        "parent_run": 42143390701, "parent_checkpoint_sha256": parent_hash,
+        "parent_step": BASE_STEP, "candidate_checkpoint_sha256": sha256_file(out / "checkpoint.pt"),
         "candidate_language_step": BASE_STEP + updates if lane == "language" else None,
         "updates": updates, "elapsed_seconds": round(time.monotonic() - started, 2),
         "parameters": model.num_parameters, "tokenizer_sha256": BASE_TOKENIZER_SHA256,
-        "train_sha256": manifest["train_sha256"],
-        "valid_sha256": manifest["valid_sha256"],
-        "validation_windows": EVAL_WINDOWS, "validation_loss_parent": round(initial, 8),
-        "validation_loss_best": round(best, 8), "validation_loss_final": round(final, 8),
-        "curve": evals,
-        "capability_claim": "None. This is sampled next-token loss, not task competence.",
+        "train_sha256": manifest["train_sha256"], "valid_sha256": manifest["valid_sha256"],
+        "test_sha256": manifest.get("test_sha256", manifest["valid_sha256"]),
+        "validation_windows": eval_windows,
+        "validation_loss_parent": round(initial_valid, 8),
+        "validation_loss_selected": round(selected_valid, 8),
+        "test_loss_parent": round(initial_test, 8), "test_loss_candidate": round(final_test, 8),
+        "curve": curve,
+        "capability_claim": "None. Token prediction on documentation is not proof of tool competence.",
         "android_integrated": False,
         "optimizer_policy": "resumed only for language; fresh and lane-local for specialist branches",
     }
     (out / "metrics.json").write_text(json.dumps(report, indent=2) + "\n")
     (out / "lineage.json").write_text(json.dumps({
         "lane": lane, "parent_run": 42143390701, "parent_step": BASE_STEP,
-        "parent_sha256": parent_hash,
-        "candidate_sha256": report["candidate_checkpoint_sha256"],
+        "parent_sha256": parent_hash, "candidate_sha256": report["candidate_checkpoint_sha256"],
         "lane_updates": updates, "base_shared_weights_modified": False,
         "lane_weights_isolated": True, "android_integrated": False,
     }, indent=2) + "\n")
+    (out / "source-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (out / "tokenizer.json").write_bytes((source / "tokenizer.json").read_bytes())
     if lane == "language":
         from forge_core.neural.preschool_eval import evaluate_checkpoint
-        # The evaluator expects the original manifest name used by the language lane.
-        (out / "source-manifest.json").write_text((source / "source-manifest.json").read_text())
-        (out / "tokenizer.json").write_bytes((source / "tokenizer.json").read_bytes())
-        (out / "capabilities.json").write_text(json.dumps(
-            evaluate_checkpoint(out, out / "capabilities.json"), indent=2) + "\n")
+        evaluate_checkpoint(out, out / "capabilities.json")
     else:
-        (out / "source-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        (out / "tokenizer.json").write_bytes((source / "tokenizer.json").read_bytes())
-        (out / "source").mkdir(exist_ok=True)
-        for filename in ("train.txt", "valid.txt", "ATTRIBUTION.txt"):
-            original = out / "source" / filename
-            # Keep exact data used by the lane inside the reproducible artifact.
-            if original.exists():
-                (out / filename).write_bytes(original.read_bytes())
+        for filename in ("train.txt", "valid.txt", "test.txt", "ATTRIBUTION.txt"):
+            (out / filename).write_bytes((out / "source" / filename).read_bytes())
     print(json.dumps(report, indent=2), flush=True)
     return report
 
