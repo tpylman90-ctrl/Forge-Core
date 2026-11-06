@@ -1,0 +1,89 @@
+name: Forge isolated Blender and Godot specialist training
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/tool-lanes-training-2026-11-06.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  train-lane:
+    name: Train ${{ matrix.lane }} specialist lane
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [blender, godot]
+    env:
+      SOURCE_RUN: "42143390701"
+      DURATION_SECONDS: "3600"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the frozen Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          checkpoint = Path("source/checkpoint.pt")
+          state = torch.load(checkpoint, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+          assert state["step"] == 95000, state["step"]
+          assert digest == "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a", digest
+          assert hashlib.sha256(Path("source/tokenizer.json").read_bytes()).hexdigest() == "4ecd7803d4c369e80bda2e74c30cfb769b7e3a942f931df83383eec9f794f04c"
+          print({"parent_step": state["step"], "parent_sha256": digest,
+                 "lane": "${{ matrix.lane }}", "lane_duration_seconds": 3600})
+          PY
+      - name: Train isolated specialist lane
+        run: |
+          python -m forge_core.neural.multilane_v1 \
+            --lane "${{ matrix.lane }}" \
+            --source source \
+            --out "artifacts/${{ matrix.lane }}" \
+            --seconds "$DURATION_SECONDS"
+      - name: Upload reproducible research artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-tool-lane-${{ matrix.lane }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Preserve lane checkpoint in a draft release
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          lane="${{ matrix.lane }}"
+          tag="forge-tool-lane-${lane}-${GITHUB_RUN_ID}"
+          files=(checkpoint.pt lineage.json metrics.json source-manifest.json tokenizer.json train.txt valid.txt test.txt ATTRIBUTION.txt task-samples.json)
+          tar -czf "artifacts/${tag}.tar.gz" -C "artifacts/${lane}" "${files[@]}"
+          cat > release-notes.md <<EOF
+          Isolated Forge ${lane} specialist research branch trained for 3,600
+          seconds from the exact verified Forge Seed v0.7 95k checkpoint.
+          Optimizer and candidate weights are lane-local. This checkpoint is
+          research-only, is not capability-certified, is not merged into the
+          language model, and is not integrated into Android.
+          EOF
+          gh release create "$tag" "artifacts/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge ${lane} specialist research — run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
