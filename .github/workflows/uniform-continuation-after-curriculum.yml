@@ -1,0 +1,160 @@
+name: Forge Seed v0.7 — uniform 79k continuation
+
+on:
+  push:
+    branches: ["main"]
+    paths: ["experiments/requests/uniform-continuation-after-curriculum.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: forge-core-language-continuation
+  cancel-in-progress: false
+
+jobs:
+  continue-language-model:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_RUN: "42123730003"
+      STUDY_RUN: "42133325924"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore best uniform candidate and approved data split
+        run: |
+          set -euo pipefail
+          mkdir -p study source
+          gh run download "$STUDY_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-mistake-curriculum-v1 --dir study
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir approved-source
+          candidate="study/uniform/seed-73"
+          for f in checkpoint.pt tokenizer.json source-manifest.json; do
+            test -s "$candidate/$f"
+          done
+          for f in train.txt valid.txt source-manifest.json; do
+            test -s "approved-source/$f"
+          done
+          cp "$candidate/checkpoint.pt" source/checkpoint.pt
+          cp "$candidate/tokenizer.json" source/tokenizer.json
+          cp "$candidate/source-manifest.json" source/source-manifest.json
+          cp approved-source/train.txt approved-source/valid.txt source/
+          cp source/source-manifest.json source/manifest.json
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          root=Path("source")
+          manifest=json.loads((root/"manifest.json").read_text())
+          ckpt=torch.load(root/"checkpoint.pt",map_location="cpu",weights_only=True)
+          assert ckpt["step"]==79000
+          assert hashlib.sha256((root/"checkpoint.pt").read_bytes()).hexdigest()=="45c16830595356ac023533e4a6947115ddd4f123b1fcb3b74764a0987fe31f42"
+          assert manifest["revision"]=="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          assert manifest["license"]=="cdla-sharing-1.0"
+          for split in ("train","valid"):
+              digest=hashlib.sha256((root/f"{split}.txt").read_bytes()).hexdigest()
+              assert digest==manifest[f"{split}_sha256"]==ckpt[f"{split}_sha256"]
+          assert hashlib.sha256((root/"tokenizer.json").read_bytes()).hexdigest()==ckpt["tokenizer_sha256"]
+          print(json.dumps({"verified":True,"step":ckpt["step"],
+            "parent_checkpoint_sha256":hashlib.sha256((root/"checkpoint.pt").read_bytes()).hexdigest(),
+            "train_sha256":manifest["train_sha256"],"valid_sha256":manifest["valid_sha256"]},indent=2))
+          PY
+      - name: Preserve parent and measure fixed-window baseline
+        run: |
+          mkdir -p artifacts/continuation
+          cp source/checkpoint.pt artifacts/continuation/parent-checkpoint.pt
+          cp source/source-manifest.json source/train.txt source/valid.txt artifacts/continuation/
+          cp source/tokenizer.json artifacts/continuation/
+          python - <<'PY'
+          import json, torch
+          from pathlib import Path
+          from tokenizers import Tokenizer
+          from forge_core.neural.model import ByteTransformer, ModelConfig
+          from forge_core.neural.seed_v07 import heldout
+          source=Path("source")
+          ckpt=torch.load(source/"checkpoint.pt",map_location="cpu",weights_only=True)
+          codec=Tokenizer.from_file(str(source/"tokenizer.json"))
+          valid=torch.tensor(codec.encode((source/"valid.txt").read_text()).ids,dtype=torch.long)
+          model=ByteTransformer(ModelConfig(**ckpt["configuration"]))
+          model.load_state_dict(ckpt["model"],strict=True)
+          loss=heldout(model,valid,windows=256,seq_len=128,batch=4)
+          Path("artifacts/continuation/parent-eval.json").write_text(json.dumps(
+            {"parent_step":ckpt["step"],"validation_loss_256":round(loss,6)},indent=2)+"\n")
+          PY
+      - name: Continue the original Forge language model for 8,000 updates
+        run: |
+          python -m forge_core.neural.seed_v07 \
+            --source source --out artifacts/continuation \
+            --model-size seed --steps 8000 --batch 4 --seq-len 128 \
+            --vocab 2048 --eval-every 1000 --seed 43 \
+            --resume source/checkpoint.pt
+      - name: Compare parent and candidate under identical evaluation
+        run: |
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          from tokenizers import Tokenizer
+          from forge_core.neural.model import ByteTransformer, ModelConfig
+          from forge_core.neural.seed_v07 import heldout
+          source=Path("source")
+          out=Path("artifacts/continuation")
+          parent=torch.load(source/"checkpoint.pt",map_location="cpu",weights_only=True)
+          candidate=torch.load(out/"checkpoint.pt",map_location="cpu",weights_only=True)
+          codec=Tokenizer.from_file(str(source/"tokenizer.json"))
+          valid=torch.tensor(codec.encode((source/"valid.txt").read_text()).ids,dtype=torch.long)
+          def score(ckpt):
+              model=ByteTransformer(ModelConfig(**ckpt["configuration"]))
+              model.load_state_dict(ckpt["model"],strict=True)
+              return heldout(model,valid,windows=256,seq_len=128,batch=4)
+          before,after=score(parent),score(candidate)
+          metrics={"parent_step":parent["step"],"candidate_step":candidate["step"],
+            "validation_loss_256_parent":round(before,6),
+            "validation_loss_256_candidate":round(after,6),
+            "validation_loss_delta":round(after-before,6),
+            "candidate_checkpoint_sha256":hashlib.sha256((out/"checkpoint.pt").read_bytes()).hexdigest(),
+            "evaluation":"same pinned validation text; same 256 windows; lower is better"}
+          (out/"matched-evaluation.json").write_text(json.dumps(metrics,indent=2)+"\n")
+          lineage={"status":"research_candidate_not_promoted","parent_run":42133325924,
+            "parent_arm":"uniform","parent_sampler_seed":73,"parent_step":79000,
+            "total_steps":candidate["step"],"additional_steps":8000,
+            "source_data_reused_exactly":True,"optimizer_state_resumed":True,
+            "android_integrated":False,"candidate_sha256":metrics["candidate_checkpoint_sha256"]}
+          (out/"lineage.json").write_text(json.dumps(lineage,indent=2)+"\n")
+          print(json.dumps(metrics,indent=2))
+          PY
+      - name: Run common capability evaluation
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/continuation \
+            --out artifacts/continuation/capabilities.json
+      - name: Upload resumable 87k continuation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-v07-continuation
+          path: artifacts/continuation/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Preserve unpublished durable checkpoint
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          tar -czf release/forge-seed-v07-step-87000.tar.gz \
+            -C artifacts/continuation checkpoint.pt parent-checkpoint.pt \
+            tokenizer.json source-manifest.json train.txt valid.txt metrics.json \
+            matched-evaluation.json parent-eval.json capabilities.json lineage.json
+          gh release create forge-seed-v07-step-87000 \
+            release/forge-seed-v07-step-87000.tar.gz \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Seed v0.7 — 87,000-step research checkpoint" \
+            --notes "Unpublished research-only continuation from the best uniform 79k candidate. Includes parent and candidate checkpoints, exact source split, metrics, capability check, and lineage. Not an Android release."
