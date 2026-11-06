@@ -1,0 +1,78 @@
+name: Forge Blender specialist lane retry
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/blender-lane-retry-2026-11-06.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  train-blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      SOURCE_RUN: "42143390701"
+      DURATION_SECONDS: "3600"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the 95k Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          p = Path("source/checkpoint.pt")
+          ckpt = torch.load(p, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ckpt["step"] == 95000
+          assert digest == "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a"
+          print({"parent_step": ckpt["step"], "parent_sha256": digest})
+          PY
+      - name: Run the Blender-only 60-minute lane
+        run: |
+          python -m forge_core.neural.multilane_v1 \
+            --lane blender --source source --out artifacts/blender \
+            --seconds "$DURATION_SECONDS"
+      - name: Upload Blender research artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-multilane-blender-retry-${{ github.run_id }}
+          path: artifacts/blender/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Preserve the Blender checkpoint as a draft
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="forge-multilane-blender-retry-${GITHUB_RUN_ID}"
+          files=(checkpoint.pt lineage.json metrics.json source-manifest.json tokenizer.json train.txt valid.txt test.txt ATTRIBUTION.txt task-samples.json)
+          tar -czf "artifacts/${tag}.tar.gz" -C artifacts/blender "${files[@]}"
+          cat > release-notes.md <<EOF
+          Blender specialist research branch initialized from the verified
+          Forge Seed v0.7 95k checkpoint. This is a separate branch, not merged
+          into language weights, not capability-certified, and not integrated
+          into Android. Includes the pinned Blender 5.4 Manual attribution,
+          whole-page data splits, original CC0 lesson cards, and held-out probes.
+          EOF
+          gh release create "$tag" "artifacts/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Blender specialist — research run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
