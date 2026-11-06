@@ -274,6 +274,11 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
                               "selected_valid_loss": round(best_valid, 8),
                               "elapsed_seconds": round(time.monotonic() - started, 1)}),
                   flush=True)
+    if lane == "language":
+        best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
+        best_optimizer = copy.deepcopy(optimizer.state_dict())
+        best_torch_rng = torch.get_rng_state().clone()
+        best_sample_rng = rng.get_state().clone()
     model.load_state_dict(best_state)
     selected_valid = heldout(model, valid_ids, windows=eval_windows, seq_len=SEQ_LEN)
     final_test = heldout(model, test_ids, windows=eval_windows, seq_len=SEQ_LEN)
