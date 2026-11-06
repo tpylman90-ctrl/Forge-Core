@@ -1,7 +1,7 @@
 """Conservative low-learning-rate continuation of Forge Seed v0.7.
 
-Resumes Forge's own verified 95k checkpoint and optimizer moments. Selects the
-best checkpoint by the pinned validation split, uses an untouched TinyStories
+Resumes Forge's own validation-best 99k checkpoint and optimizer moments. Selects
+the best checkpoint by the pinned validation split, uses a fresh offset TinyStories
 range only for final reporting, and never changes Android weights.
 """
 from __future__ import annotations
