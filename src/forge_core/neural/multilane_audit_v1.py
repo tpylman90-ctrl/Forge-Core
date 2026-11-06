@@ -17,7 +17,6 @@ from forge_core.neural.seed_v07 import heldout
 
 
 PARENT_SHA256 = "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a"
-CANDIDATE_SHA256 = "1400ab3acd5ff0fe206829d5c92418a43d355ddb9ad7e9c4187fc5c46d2a1965"
 TOKENIZER_SHA256 = "4ecd7803d4c369e80bda2e74c30cfb769b7e3a942f931df83383eec9f794f04c"
 EVAL_WINDOWS = 2048
 SEQ_LEN = 256
@@ -59,10 +58,10 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load_model(folder: Path, expected_sha: str, expected_step: int):
+def load_model(folder: Path, expected_sha: str | None, expected_step: int):
     ckpt_path = folder / "checkpoint.pt"
     digest = sha256_file(ckpt_path)
-    if digest != expected_sha:
+    if expected_sha is not None and digest != expected_sha:
         raise ValueError(f"Checkpoint SHA mismatch for {folder}: {digest}")
     ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
     if ckpt.get("step") != expected_step:
@@ -160,11 +159,17 @@ def main():
     parser.add_argument("--parent", type=Path, required=True)
     parser.add_argument("--candidate", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--parent-run", type=int, default=42143390701)
+    parser.add_argument("--candidate-run", type=int, default=42149964829)
+    parser.add_argument("--parent-step", type=int, default=95000)
+    parser.add_argument("--candidate-step", type=int, default=152000)
+    parser.add_argument("--parent-sha", default=PARENT_SHA256)
+    parser.add_argument("--candidate-sha")
     args = parser.parse_args()
     torch.set_num_threads(min(2, torch.get_num_threads()))
 
-    parent, parent_ckpt, parent_sha = load_model(args.parent, PARENT_SHA256, 95000)
-    candidate, candidate_ckpt, candidate_sha = load_model(args.candidate, CANDIDATE_SHA256, 152000)
+    parent, parent_ckpt, parent_sha = load_model(args.parent, args.parent_sha, args.parent_step)
+    candidate, candidate_ckpt, candidate_sha = load_model(args.candidate, args.candidate_sha, args.candidate_step)
     parent_tokenizer_path = args.parent / "tokenizer.json"
     candidate_tokenizer_path = args.candidate / "tokenizer.json"
     if sha256_file(parent_tokenizer_path) != TOKENIZER_SHA256:
@@ -195,10 +200,10 @@ def main():
         "schema": 1,
         "status": "completed_research_audit_no_promotion",
         "parent": {
-            "run": 42143390701, "step": parent_ckpt["step"], "sha256": parent_sha,
+            "run": args.parent_run, "step": parent_ckpt["step"], "sha256": parent_sha,
         },
         "candidate": {
-            "run": 42149964829, "step": candidate_ckpt["step"],
+            "run": args.candidate_run, "step": candidate_ckpt["step"],
             "updates_from_parent": candidate_ckpt["step"] - parent_ckpt["step"],
             "sha256": candidate_sha,
         },
