@@ -36,11 +36,13 @@ def digest(path: Path) -> str:
 
 
 def save_state(path: Path, parent: dict, model: ByteTransformer, optimizer,
-               rng: torch.Generator, updates: int, lr: float, curve: list[dict]) -> None:
+               rng: torch.Generator, updates: int, lr: float, curve: list[dict],
+               sampler_seed: int) -> None:
     checkpoint = {
         **parent,
         "step": PARENT_STEP + updates,
         "lr": lr,
+        "sampler_seed": sampler_seed,
         "model": model.state_dict(),
         "optimizer": optimizer.state_dict(),
         "torch_rng_state": torch.get_rng_state(),
@@ -64,6 +66,8 @@ def main() -> None:
     parser.add_argument("--eval-every", type=int, default=1000)
     parser.add_argument("--patience", type=int, default=2)
     parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--sampler-seed", type=int, choices=(43, 73, 101), default=43,
+                        help="43 resumes the parent's sample RNG; 73/101 use paired alternate orders")
     args = parser.parse_args()
     if not 1 <= args.steps <= 8000 or not 1 <= args.eval_every <= args.steps:
         parser.error("steps must be 1–8000 and eval-every must be within steps")
@@ -114,7 +118,10 @@ def main() -> None:
         group["lr"] = args.lr
     torch.set_rng_state(parent["torch_rng_state"])
     rng = torch.Generator()
-    rng.set_state(parent["sample_rng_state"])
+    if args.sampler_seed == 43:
+        rng.set_state(parent["sample_rng_state"])
+    else:
+        rng.manual_seed(args.sampler_seed + 1)
 
     parent_valid = evaluate(model, valid_ids)
     parent_test = evaluate(model, test_ids)
@@ -153,7 +160,7 @@ def main() -> None:
             last_torch_rng = torch.get_rng_state().clone()
             last_sample_rng = rng.get_state().clone()
             save_state(out / "last-checkpoint.pt", parent, model, optimizer, rng,
-                       updates, args.lr, curve)
+                       updates, args.lr, curve, args.sampler_seed)
             improved = score < best_valid - 1e-4
             if improved:
                 best_valid = score
@@ -224,6 +231,7 @@ def main() -> None:
         "last_independent_test_loss_2048": round(last_test, 8),
         "last_independent_test_delta": round(last_test - parent_test, 8),
         "learning_rate_parent": parent["lr"], "learning_rate_used": args.lr,
+        "sampler_seed": args.sampler_seed,
         "optimizer_moments_resumed": True, "optimizer_moments_reset": False,
         "tokenizer_sha256": tokenizer_hash,
         "train_sha256": manifest["train_sha256"],
@@ -242,7 +250,8 @@ def main() -> None:
         "parent_sha256": parent_sha,
         "selected_step": PARENT_STEP + best_updates,
         "last_step": PARENT_STEP + updates,
-        "actual_updates": updates, "learning_rate_parent": parent["lr"],
+        "actual_updates": updates, "sampler_seed": args.sampler_seed,
+        "learning_rate_parent": parent["lr"],
         "learning_rate_used": args.lr,
         "optimizer_moments_resumed": True, "source_data_reused_exactly": True,
         "tokenizer_sha256": tokenizer_hash, "selected_checkpoint_sha256": digest(out / "checkpoint.pt"),
