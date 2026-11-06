@@ -23,3 +23,8 @@ Run one bounded, uniform TinyStories language continuation from the exact verifi
 The goal is a cautious actual Forge weight update with explicit rollback if the
 validation signal does not repeat. Next-token loss and toy forced-choice probes
 must not be described as proof of comprehension, reasoning, or capability gain.
+
+
+## Reproducible retry
+
+The first seeded attempt completed all 4,000 updates and evaluation but stopped before artifact upload because the parent evaluation directory lacked `source-manifest.json`. The workflow now includes that manifest. Repeat this exact deterministic run from the same verified parent and preserve the full artifact and draft archive.
