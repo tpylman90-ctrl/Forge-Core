@@ -1,0 +1,108 @@
+name: Forge Seed v0.7 — fresh-range 101k follow-up
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/core-language-followup-101k-2026-11-06.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: forge-core-followup-101k
+  cancel-in-progress: false
+
+jobs:
+  continue-language:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_RUN: "42290966213"
+      PARENT_ARTIFACT: "forge-seed-followup-99k-42290966213"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify validation-best 101k Forge checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p study source artifacts/language artifacts/parent
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$PARENT_ARTIFACT" --dir study
+          test -s study/language/checkpoint.pt
+          cp -a study/language/. source/
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          root = Path("source")
+          p = root / "checkpoint.pt"
+          ckpt = torch.load(p, map_location="cpu", weights_only=True)
+          manifest = json.loads((root / "source-manifest.json").read_text())
+          sha = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ckpt["step"] == 101000
+          assert sha == "94d87368faf8bad7fb34a43ca75448ddcd96bf2079dd731d4b5a0b808baf2eda"
+          assert ckpt["lr"] == 0.00005 and ckpt.get("sampler_seed") == 73
+          assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          assert manifest["license"] == "cdla-sharing-1.0"
+          for split in ("train", "valid"):
+              actual = hashlib.sha256((root / f"{split}.txt").read_bytes()).hexdigest()
+              assert actual == manifest[f"{split}_sha256"] == ckpt[f"{split}_sha256"]
+          assert hashlib.sha256((root / "tokenizer.json").read_bytes()).hexdigest() == ckpt["tokenizer_sha256"]
+          print(json.dumps({"verified": True, "parent_run": 42290966213,
+              "parent_step": ckpt["step"], "parent_sha256": sha,
+              "parent_lr": ckpt["lr"], "sampler_seed": ckpt["sampler_seed"],
+              "tokenizer_sha256": ckpt["tokenizer_sha256"]}, indent=2))
+          PY
+          cp source/checkpoint.pt artifacts/parent/checkpoint.pt
+          cp source/tokenizer.json artifacts/parent/tokenizer.json
+          cp source/source-manifest.json artifacts/parent/source-manifest.json
+      - name: Continue at half rate with another fresh test range
+        run: |
+          python -m forge_core.neural.conservative_followup_101k \
+            --source source --out artifacts/language \
+            --steps 2000 --eval-every 500 --patience 2 --lr 0.000025 \
+            --sampler-seed 0
+      - name: Evaluate parent and selected checkpoint
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/capabilities.json
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/fresh-capabilities.json
+      - name: Preserve checkpoint and evaluation bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-followup-101k-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Preserve unpublished draft research archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="forge-seed-followup-101k-${GITHUB_RUN_ID}"
+          tar -czf "artifacts/${tag}.tar.gz" -C artifacts parent language
+          cat > artifacts/release-notes.md <<EOF
+          Research-only Forge Seed continuation from the validation-best 101k candidate.
+          Resumes Forge's own weights, AdamW moments and sample RNG at learning rate
+          0.000025. Uses a second fresh pinned TinyStories byte-range evaluation slice.
+          Includes the parent, candidate, exact source, hashes, metrics, and diagnostics.
+          Not an Android release or a capability certification.
+          EOF
+          gh release create "${tag}" "artifacts/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Seed half-rate follow-up — run ${GITHUB_RUN_ID}" \
+            --notes-file artifacts/release-notes.md
