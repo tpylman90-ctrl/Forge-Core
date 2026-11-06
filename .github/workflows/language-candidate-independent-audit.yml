@@ -1,0 +1,64 @@
+name: Forge independent language candidate audit
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/language-candidate-independent-audit-2026-11-06.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  matched-audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      PARENT_RUN: "42143390701"
+      CANDIDATE_RUN: "42149964829"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU evaluation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Download the verified parent and language candidate
+        run: |
+          set -euo pipefail
+          mkdir -p data/parent data/candidate
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir data/parent
+          gh run download "$CANDIDATE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "forge-multilane-language-$CANDIDATE_RUN" --dir data/candidate
+      - name: Run matched independent audit
+        run: |
+          python -m forge_core.neural.multilane_audit_v1 \
+            --parent data/parent --candidate data/candidate --out artifacts/audit
+      - name: Upload reproducible audit artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-language-independent-audit-${{ github.run_id }}
+          path: artifacts/audit/
+          retention-days: 90
+          if-no-files-found: error
+      - name: Preserve the audit as a draft research release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="forge-language-independent-audit-${GITHUB_RUN_ID}"
+          cat > artifacts/audit/RELEASE-NOTES.md <<EOF
+          Matched evaluation of the verified Forge Seed 95k parent and the isolated
+          152k language research candidate. Includes an untouched TinyStories sample,
+          source and prompt hashes, forced-choice diagnostics, ungraded generations,
+          and explicit limitations. No weights were promoted.
+          EOF
+          tar -czf "artifacts/${tag}.tar.gz" -C artifacts/audit report.json source-manifest.json test.txt
+          gh release create "$tag" "artifacts/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge independent language audit — run ${GITHUB_RUN_ID}" \
+            --notes-file artifacts/audit/RELEASE-NOTES.md
