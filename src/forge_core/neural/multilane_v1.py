@@ -253,6 +253,27 @@ def save_checkpoint(out: Path, model, optimizer_state, lane, parent, updates, se
     torch.save(ckpt, tmp)
     os.replace(tmp, out / "checkpoint.pt")
 
+@torch.no_grad()
+def generate_task_samples(model, tokenizer: Tokenizer, lane: str) -> list[dict]:
+    samples = []
+    was_training = model.training
+    model.eval()
+    with torch.random.fork_rng():
+        for index, prompt in enumerate(TASK_PROMPTS[lane]):
+            torch.manual_seed(12000 + index)
+            prefix = tokenizer.encode(prompt + "\\nAnswer:\\n").ids
+            generated = model.generate(
+                torch.tensor([prefix], dtype=torch.long), new_tokens=96, temperature=0.35
+            )
+            response = tokenizer.decode(generated[0].tolist()[len(prefix):],
+                                        skip_special_tokens=True)
+            samples.append({
+                "prompt": prompt, "response": response,
+                "human_review": "not_reviewed",
+            })
+    model.train(was_training)
+    return samples
+
 
 def run_lane(lane: str, source: Path, out: Path, seconds: int):
     if lane not in {"language", "blender", "godot"}:
@@ -347,6 +368,9 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
     save_checkpoint(out, model, final_optimizer, lane, parent, updates, seed,
                     {"rng": rng, "manifest": manifest}, best_valid,
                     best_torch_rng, best_sample_rng)
+    task_samples = generate_task_samples(model, tokenizer, lane) if lane in TASK_PROMPTS else []
+    if task_samples:
+        (out / "task-samples.json").write_text(json.dumps(task_samples, indent=2) + "\\n")
     report = {
         "schema": 1, "status": "research_only_not_promoted", "lane": lane,
         "parent_run": 42143390701, "parent_checkpoint_sha256": parent_hash,
@@ -361,7 +385,8 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
         "validation_loss_selected": round(selected_valid, 8),
         "test_loss_parent": round(initial_test, 8), "test_loss_candidate": round(final_test, 8),
         "curve": curve,
-        "capability_claim": "None. Token prediction on documentation is not proof of tool competence.",
+        "capability_claim": "None. Documentation token loss and ungraded generated samples are not proof of tool competence.",
+        "task_samples_human_reviewed": False,
         "android_integrated": False,
         "optimizer_policy": "resumed only for language; fresh and lane-local for specialist branches",
     }
