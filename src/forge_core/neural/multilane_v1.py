@@ -47,7 +47,7 @@ SOURCES = {
             "https://docs.blender.org/manual/en/5.4/modeling/geometry_nodes/index.html",
             "https://docs.blender.org/manual/en/5.4/addons/scene_gltf2.html",
             "https://docs.blender.org/manual/en/5.4/scene_layout/object/properties/transforms.html",
-            "https://docs.blender.org/manual/en/5.4/modeling/meshes/editing/index.html",
+            "https://docs.blender.org/manual/en/5.4/modeling/meshes/structure.html",
         ],
     },
     "godot": {
