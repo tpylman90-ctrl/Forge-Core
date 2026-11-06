@@ -64,6 +64,7 @@ jobs:
           PY
           cp source/checkpoint.pt artifacts/parent/checkpoint.pt
           cp source/tokenizer.json artifacts/parent/tokenizer.json
+          cp source/source-manifest.json artifacts/parent/source-manifest.json
       - name: Train Forge at lower rate with validation-based early stopping
         run: |
           python -m forge_core.neural.conservative_continuation \
