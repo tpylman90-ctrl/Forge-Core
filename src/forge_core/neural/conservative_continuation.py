@@ -170,7 +170,7 @@ def main() -> None:
                 best_torch_rng = last_torch_rng.clone()
                 best_sample_rng = last_sample_rng.clone()
                 save_state(out / "best-checkpoint.pt", parent, model, optimizer,
-                           rng, updates, args.lr, curve)
+                           rng, updates, args.lr, curve, args.sampler_seed)
                 stale_evals = 0
             else:
                 stale_evals += 1
@@ -187,6 +187,7 @@ def main() -> None:
     # lowest-validation state; if no update beats the parent, select the parent.
     torch.save({
         **parent, "step": PARENT_STEP + updates, "lr": args.lr,
+        "sampler_seed": args.sampler_seed,
         "model": last_model, "optimizer": last_optimizer,
         "torch_rng_state": last_torch_rng, "sample_rng_state": last_sample_rng,
         "curve": curve,
@@ -195,6 +196,7 @@ def main() -> None:
     if best_updates:
         selected = {
             **parent, "step": PARENT_STEP + best_updates, "lr": args.lr,
+            "sampler_seed": args.sampler_seed,
             "model": best_model, "optimizer": best_optimizer,
             "torch_rng_state": best_torch_rng, "sample_rng_state": best_sample_rng,
             "curve": curve,
