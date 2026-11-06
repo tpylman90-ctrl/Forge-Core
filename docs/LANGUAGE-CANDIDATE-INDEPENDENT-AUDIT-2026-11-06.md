@@ -33,4 +33,4 @@ The first multilane language run copied the validation file to the test file, so
 Keep 152k as a research artifact and do not use it as Forge’s next continuation parent. Continue from the verified 95k checkpoint with the corrected independent test loader. Neither checkpoint is certified for comprehension or general reasoning, and neither is integrated into Android.
 
 Audit run: https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/42231310241
-Draft audit archive: https://github.com/tpylman90-ctrl/Forge-Core/releases/tag/forge-language-independent-audit-42231310241
+Draft audit archive: https://github.com/tpylman90-ctrl/Forge-Core/releases/tag/untagged-0cba6ee0ddedc514e771
