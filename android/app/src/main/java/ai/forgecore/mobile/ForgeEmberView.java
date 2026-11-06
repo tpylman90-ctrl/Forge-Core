@@ -228,6 +228,11 @@ final class ForgeEmberView extends View {
 
         // Front ring segments catch light across the core; their rear halves stay behind it.
         drawGyro(canvas, cx, cy, w, h, time, ringColor, energy, gyroSpeed, smeltWeight, true);
+        // A faint near-side veil makes the rings feel embedded in the cloud, not pasted on it.
+        drawSmokeVeil(canvas, cx, cy, w, h, time, auraScale, oldIndex,
+                (int) (smokeOpacity * (1f - transition) * .34f), 0);
+        drawSmokeVeil(canvas, cx, cy, w, h, time, auraScale, paletteIndex,
+                (int) (smokeOpacity * transition * .34f), 1);
 
         // Hot central point, plus the smooth thermal pulse for the entire processing interval.
         float coreRadius = density * (5f + energy * 2f);
@@ -378,10 +383,12 @@ final class ForgeEmberView extends View {
         for (int layer = 0; layer < smokeTexture.length; layer++) {
             float phase = time * (.12f + layer * .035f) + layer * 2.1f + paletteIndex * .7f;
             float layerScale = size * (1f - layer * .105f);
-            float radiusX = w * .52f * scale * layerScale;
-            float radiusY = h * .51f * scale * layerScale;
-            float offsetX = (float) Math.sin(phase) * w * (.025f + layer * .012f);
-            float offsetY = (float) Math.cos(phase * .83f) * h * (.035f + layer * .009f);
+            // Keep the soft texture inside the view; clipping its bitmap bounds made a
+            // hard rectangular smoke edge on some phone aspect ratios.
+            float radiusX = Math.min(w * .455f, w * .40f * scale * layerScale);
+            float radiusY = Math.min(h * .455f, h * .41f * scale * layerScale);
+            float offsetX = (float) Math.sin(phase) * w * (.018f + layer * .006f);
+            float offsetY = (float) Math.cos(phase * .83f) * h * (.022f + layer * .006f);
             float x = cx + offsetX, y = cy + offsetY;
             oval.set(x - radiusX, y - radiusY, x + radiusX, y + radiusY);
             int save = canvas.save();
@@ -392,6 +399,29 @@ final class ForgeEmberView extends View {
             canvas.drawBitmap(smokeTexture[layer], null, oval, paint);
             canvas.restoreToCount(save);
         }
+        paint.setColorFilter(null);
+        paint.setAlpha(255);
+        paint.setFilterBitmap(false);
+    }
+
+    private void drawSmokeVeil(Canvas canvas, float cx, float cy, float w, float h, float time,
+                               float scale, int paletteIndex, int opacity, int layer) {
+        if (opacity < 1) return;
+        float phase = time * (.14f + layer * .035f) + layer * 2.6f;
+        float x = cx + (float) Math.sin(phase) * w * .045f;
+        float y = cy + (float) Math.cos(phase * .78f) * h * .035f;
+        float radiusX = Math.min(w * .36f, w * .35f * scale);
+        float radiusY = Math.min(h * .38f, h * .36f * scale);
+        oval.set(x - radiusX, y - radiusY, x + radiusX, y + radiusY);
+        int save = canvas.save();
+        canvas.rotate((float) Math.sin(time * .19f + layer) * 8f - time * .04f, x, y);
+        paint.setStyle(Paint.Style.FILL);
+        paint.setShader(null);
+        paint.setColorFilter(smokeTint[paletteIndex]);
+        paint.setAlpha(Math.min(255, opacity));
+        paint.setFilterBitmap(true);
+        canvas.drawBitmap(smokeTexture[layer], null, oval, paint);
+        canvas.restoreToCount(save);
         paint.setColorFilter(null);
         paint.setAlpha(255);
         paint.setFilterBitmap(false);
