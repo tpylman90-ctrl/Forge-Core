@@ -213,6 +213,68 @@ def fetch_manual(lane: str, out: Path) -> dict:
     return manifest
 
 
+def fetch_language_test(source: Path, manifest: dict) -> tuple[str, dict]:
+    """Fetch a fixed TinyStories train-stream slice beyond the trained prefix."""
+    from forge_core.neural.pinned_corpus import clean_prefix, complete_stories, story_hash
+
+    train_limit = int(manifest["source_train_bytes_requested"])
+    sample_bytes = 4 * 1024 * 1024
+    end = train_limit + sample_bytes - 1
+    request = urllib.request.Request(
+        manifest["train_url"],
+        headers={
+            "User-Agent": "Forge-Core-audit/1.0 (pinned public corpus)",
+            "Range": f"bytes={train_limit}-{end}",
+        },
+    )
+    with urllib.request.urlopen(request, timeout=90) as response:
+        raw = response.read(sample_bytes)
+        content_range = response.headers.get("Content-Range", "")
+        status = response.status
+    if status != 206 or not content_range.startswith(f"bytes {train_limit}-"):
+        raise ValueError("TinyStories server did not honor the independent byte-range request")
+    if len(raw) != sample_bytes:
+        raise ValueError("Independent TinyStories range was shorter than requested")
+
+    decoded = raw.decode("utf-8", errors="ignore").replace("\r\n", "\n")
+    first_boundary = decoded.find("\n\n")
+    last_boundary = decoded.rfind("\n\n")
+    if first_boundary < 0 or last_boundary <= first_boundary:
+        raise ValueError("Independent range did not contain complete TinyStories records")
+    complete_range = decoded[first_boundary + 2:last_boundary + 2].encode("utf-8")
+
+    train_text = (source / "train.txt").read_text(encoding="utf-8")
+    valid_text = (source / "valid.txt").read_text(encoding="utf-8")
+    blocked = {story_hash(item) for item in complete_stories(
+        (train_text.rstrip() + "\n\n" + valid_text).encode("utf-8")
+    )}
+    before = len(complete_stories(complete_range))
+    test_text, document_count = clean_prefix(complete_range, blocked=blocked)
+    if not test_text.strip():
+        raise ValueError("Independent language test sample is empty")
+    test_path = source / "test.txt"
+    test_path.write_text(test_text, encoding="utf-8")
+    test_sha = sha256_file(test_path)
+    if test_sha in {manifest["train_sha256"], manifest["valid_sha256"]}:
+        raise ValueError("Language test data duplicates a train or validation split")
+    enriched = dict(manifest)
+    enriched["test_sha256"] = test_sha
+    enriched["test_document_count"] = document_count
+    enriched["test_utf8_bytes"] = test_path.stat().st_size
+    enriched["test_source"] = {
+        "url": manifest["train_url"],
+        "license": manifest["license"],
+        "revision": manifest["revision"],
+        "range_start_inclusive": train_limit,
+        "range_end_inclusive": end,
+        "raw_range_sha256": sha256_bytes(raw),
+        "complete_records_before_duplicate_filter": before,
+        "exact_train_or_validation_duplicates_removed": before - document_count,
+        "policy": "first 50 MiB was the pinned training prefix; this following 4 MiB is reserved for evaluation",
+    }
+    return test_text, enriched
+
+
 def load_language_data(source: Path) -> tuple[str, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
     manifest = json.loads((source / "source-manifest.json").read_text())
     ckpt = torch.load(source / "checkpoint.pt", map_location="cpu", weights_only=True)
@@ -222,7 +284,11 @@ def load_language_data(source: Path) -> tuple[str, torch.Tensor, torch.Tensor, t
     tokenizer = Tokenizer.from_file(str(source / "tokenizer.json"))
     train = torch.tensor(tokenizer.encode((source / "train.txt").read_text()).ids, dtype=torch.long)
     valid = torch.tensor(tokenizer.encode((source / "valid.txt").read_text()).ids, dtype=torch.long)
-    return sha256_file(source / "tokenizer.json"), train, valid, valid, manifest
+    test_text, manifest = fetch_language_test(source, manifest)
+    test = torch.tensor(tokenizer.encode(test_text).ids, dtype=torch.long)
+    if manifest["test_sha256"] == manifest["valid_sha256"]:
+        raise ValueError("Language test and validation hashes must be distinct")
+    return sha256_file(source / "tokenizer.json"), train, valid, test, manifest
 
 
 def load_manual_data(lane: str, folder: Path, tokenizer: Tokenizer):
@@ -379,7 +445,7 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
         "updates": updates, "elapsed_seconds": round(time.monotonic() - started, 2),
         "parameters": model.num_parameters, "tokenizer_sha256": BASE_TOKENIZER_SHA256,
         "train_sha256": manifest["train_sha256"], "valid_sha256": manifest["valid_sha256"],
-        "test_sha256": manifest.get("test_sha256", manifest["valid_sha256"]),
+        "test_sha256": manifest["test_sha256"],
         "validation_windows": eval_windows,
         "validation_loss_parent": round(initial_valid, 8),
         "validation_loss_selected": round(selected_valid, 8),
@@ -404,7 +470,7 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
         evaluate_checkpoint(out, out / "capabilities.json")
         for filename in ("train.txt", "valid.txt"):
             (out / filename).write_bytes((source / filename).read_bytes())
-        (out / "test.txt").write_bytes((source / "valid.txt").read_bytes())
+        (out / "test.txt").write_bytes((source / "test.txt").read_bytes())
         (out / "ATTRIBUTION.txt").write_text(
             "TinyStories by Ronen Eldan; license: CDLA-Sharing-1.0.\n"
             "Dataset revision f54c09fd23315a6f9c86f9dc80f725de7d8f9c64.\n"
