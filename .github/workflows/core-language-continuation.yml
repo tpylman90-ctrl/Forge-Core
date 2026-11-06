@@ -120,7 +120,7 @@ jobs:
               "lower_is_better": True,
               "interpretation": "Matched text-prediction diagnostic only; not evidence of general comprehension or reasoning."
           }
-          Path("artifacts/preschool/matched-heldout-2048.json").write_text(json.dumps(result, indent=2) + "\\n")
+          Path("artifacts/preschool/matched-heldout-2048.json").write_text(json.dumps(result, indent=2) + "\n")
           print(json.dumps(result, indent=2))
           PY
       - name: Evaluate the continued checkpoint and preserve parent lineage
