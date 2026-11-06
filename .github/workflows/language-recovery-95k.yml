@@ -16,6 +16,7 @@ jobs:
     env:
       SOURCE_RUN: "42143390701"
       DURATION_SECONDS: "3600"
+      MAX_UPDATES: "8000"
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
@@ -48,7 +49,7 @@ jobs:
         run: |
           python -m forge_core.neural.multilane_v1 \
             --lane language --source source --out artifacts/language \
-            --seconds "$DURATION_SECONDS"
+            --seconds "$DURATION_SECONDS" --max-updates 8000
       - name: Upload the reproducible language candidate
         if: always()
         uses: actions/upload-artifact@v4
