@@ -17,7 +17,7 @@ permissions:
 jobs:
   assemble-debug:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -30,10 +30,13 @@ jobs:
           SDKMANAGER=$(find "$ANDROID_HOME/cmdline-tools" -type f -path "*/bin/sdkmanager" | sort -V | tail -1)
           test -n "$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0"
+          "$SDKMANAGER" "platforms;android-35" "build-tools;35.0.0" \
+            "ndk;29.0.13113456" "cmake;3.31.6"
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.10.2"
+      - name: Prepare pinned offline inference runtime
+        run: cd android && bash scripts/setup-llama.sh
       - name: Compile debug APK
         run: gradle -p android :app:assembleDebug --no-daemon --stacktrace
       - name: Publish development debug APK
@@ -47,7 +50,7 @@ jobs:
       # Keep signing material unavailable to pull requests.
       - name: Check release signing configuration
         id: signing
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/android-local-language-bridge')
         env:
           FORGE_ANDROID_KEYSTORE_B64: ${{ secrets.FORGE_ANDROID_KEYSTORE_B64 }}
           FORGE_ANDROID_STORE_PASSWORD: ${{ secrets.FORGE_ANDROID_STORE_PASSWORD }}

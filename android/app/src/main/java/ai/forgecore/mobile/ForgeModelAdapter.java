@@ -1,9 +1,10 @@
 package ai.forgecore.mobile;
 
 /**
- * Local Forge-native inference boundary. No remote requests or pretrained fallback.
+ * Local inference boundary. The temporary language bridge and future Forge Seed
+ * backend are separately identified; no remote requests are supported.
  *
- * A real implementation must identify its weights and provenance, stay offline,
+ * Each implementation must identify its model role, weights and provenance, stay offline,
  * deliver callbacks without blocking the UI, and implement cooperative cancellation.
  * The Android shell never treats a missing model as a conversational agent.
  */
@@ -29,6 +30,12 @@ public interface ForgeModelAdapter {
         void onToken(String token);
         void onComplete();
         void onError(String reason);
+    }
+
+    interface OperationListener {
+        void onComplete(String message);
+        void onError(String reason);
+        default void onProgress(String message) {}
     }
 
     ModelStatus status();
