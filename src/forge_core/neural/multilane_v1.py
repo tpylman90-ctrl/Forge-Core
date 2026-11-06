@@ -213,25 +213,31 @@ def fetch_manual(lane: str, out: Path) -> dict:
     return manifest
 
 
-def fetch_language_test(source: Path, manifest: dict) -> tuple[str, dict]:
-    """Fetch a fixed TinyStories train-stream slice beyond the trained prefix."""
+def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0) -> tuple[str, dict]:
+    """Fetch a fixed TinyStories train-stream slice beyond the trained prefix.
+
+    byte_offset selects a later non-training range for fresh final evaluation.
+    """
     from forge_core.neural.pinned_corpus import clean_prefix, complete_stories, story_hash
 
     train_limit = int(manifest["source_train_bytes_requested"])
+    if byte_offset < 0 or byte_offset % (4 * 1024 * 1024):
+        raise ValueError("Test offset must be a nonnegative multiple of 4 MiB")
     sample_bytes = 4 * 1024 * 1024
-    end = train_limit + sample_bytes - 1
+    start = train_limit + byte_offset
+    end = start + sample_bytes - 1
     request = urllib.request.Request(
         manifest["train_url"],
         headers={
             "User-Agent": "Forge-Core-audit/1.0 (pinned public corpus)",
-            "Range": f"bytes={train_limit}-{end}",
+            "Range": f"bytes={start}-{end}",
         },
     )
     with urllib.request.urlopen(request, timeout=90) as response:
         raw = response.read(sample_bytes)
         content_range = response.headers.get("Content-Range", "")
         status = response.status
-    if status != 206 or not content_range.startswith(f"bytes {train_limit}-"):
+    if status != 206 or not content_range.startswith(f"bytes {start}-"):
         raise ValueError("TinyStories server did not honor the independent byte-range request")
     if len(raw) != sample_bytes:
         raise ValueError("Independent TinyStories range was shorter than requested")
@@ -265,8 +271,9 @@ def fetch_language_test(source: Path, manifest: dict) -> tuple[str, dict]:
         "url": manifest["train_url"],
         "license": manifest["license"],
         "revision": manifest["revision"],
-        "range_start_inclusive": train_limit,
+        "range_start_inclusive": start,
         "range_end_inclusive": end,
+        "byte_offset_after_training_prefix": byte_offset,
         "raw_range_sha256": sha256_bytes(raw),
         "complete_records_before_duplicate_filter": before,
         "exact_train_or_validation_duplicates_removed": before - document_count,
@@ -275,7 +282,7 @@ def fetch_language_test(source: Path, manifest: dict) -> tuple[str, dict]:
     return test_text, enriched
 
 
-def load_language_data(source: Path) -> tuple[str, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
+def load_language_data(source: Path, test_offset_bytes: int = 0) -> tuple[str, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
     manifest = json.loads((source / "source-manifest.json").read_text())
     ckpt = torch.load(source / "checkpoint.pt", map_location="cpu", weights_only=True)
     for split in ("train", "valid"):
@@ -284,7 +291,7 @@ def load_language_data(source: Path) -> tuple[str, torch.Tensor, torch.Tensor, t
     tokenizer = Tokenizer.from_file(str(source / "tokenizer.json"))
     train = torch.tensor(tokenizer.encode((source / "train.txt").read_text()).ids, dtype=torch.long)
     valid = torch.tensor(tokenizer.encode((source / "valid.txt").read_text()).ids, dtype=torch.long)
-    test_text, manifest = fetch_language_test(source, manifest)
+    test_text, manifest = fetch_language_test(source, manifest, byte_offset=test_offset_bytes)
     test = torch.tensor(tokenizer.encode(test_text).ids, dtype=torch.long)
     if manifest["test_sha256"] == manifest["valid_sha256"]:
         raise ValueError("Language test and validation hashes must be distinct")
