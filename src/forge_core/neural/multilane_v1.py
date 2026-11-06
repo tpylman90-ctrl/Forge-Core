@@ -341,11 +341,13 @@ def generate_task_samples(model, tokenizer: Tokenizer, lane: str) -> list[dict]:
     return samples
 
 
-def run_lane(lane: str, source: Path, out: Path, seconds: int):
+def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int | None = None):
     if lane not in {"language", "blender", "godot"}:
         raise ValueError("Unknown lane")
     if not 60 <= seconds <= MAX_SECONDS:
         raise ValueError("Each isolated lane must run from 60 to 3,600 seconds")
+    if max_updates is not None and (lane != "language" or not 1 <= max_updates <= 40000):
+        raise ValueError("A bounded update count is supported only for language (1–40000)")
     parent_path = source / "checkpoint.pt"
     parent_hash = sha256_file(parent_path)
     if parent_hash != BASE_SHA256:
@@ -390,7 +392,7 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int):
     started = time.monotonic()
     updates = 0
     curve = []
-    while time.monotonic() - started < seconds:
+    while time.monotonic() - started < seconds and (max_updates is None or updates < max_updates):
         x, y = make_batch(train_ids, BATCH, SEQ_LEN, rng)
         _, loss = model(x, y)
         optimizer.zero_grad(set_to_none=True)
@@ -490,8 +492,9 @@ def main():
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seconds", type=int, default=3600)
+    parser.add_argument("--max-updates", type=int, help="Optional bounded language update count")
     args = parser.parse_args()
-    run_lane(args.lane, args.source, args.out, args.seconds)
+    run_lane(args.lane, args.source, args.out, args.seconds, args.max_updates)
 
 
 if __name__ == "__main__":
