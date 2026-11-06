@@ -179,7 +179,7 @@ def main() -> None:
                 best_torch_rng = last_torch_rng.clone()
                 best_sample_rng = last_sample_rng.clone()
                 save_state(out / "best-checkpoint.pt", parent, model, optimizer,
-                           rng, updates, args.lr, curve, args.sampler_seed)
+                           rng, updates, args.lr, curve, effective_sampler_seed)
                 stale_evals = 0
             else:
                 stale_evals += 1
@@ -196,6 +196,8 @@ def main() -> None:
     # lowest-validation state; if no update beats the parent, select the parent.
     torch.save({
         **parent, "step": PARENT_STEP + updates, "lr": args.lr,
+        "parent_run": PARENT_RUN, "parent_step": PARENT_STEP,
+        "parent_sha256": PARENT_SHA256,
         "sampler_seed": effective_sampler_seed,
         "model": last_model, "optimizer": last_optimizer,
         "torch_rng_state": last_torch_rng, "sample_rng_state": last_sample_rng,
@@ -205,7 +207,9 @@ def main() -> None:
     if best_updates:
         selected = {
             **parent, "step": PARENT_STEP + best_updates, "lr": args.lr,
-            "sampler_seed": args.sampler_seed,
+            "parent_run": PARENT_RUN, "parent_step": PARENT_STEP,
+            "parent_sha256": PARENT_SHA256,
+            "sampler_seed": effective_sampler_seed,
             "model": best_model, "optimizer": best_optimizer,
             "torch_rng_state": best_torch_rng, "sample_rng_state": best_sample_rng,
             "curve": curve,
@@ -242,7 +246,7 @@ def main() -> None:
         "last_independent_test_loss_2048": round(last_test, 8),
         "last_independent_test_delta": round(last_test - parent_test, 8),
         "learning_rate_parent": parent["lr"], "learning_rate_used": args.lr,
-        "sampler_seed": args.sampler_seed,
+        "sampler_seed": effective_sampler_seed,
         "optimizer_moments_resumed": True, "optimizer_moments_reset": False,
         "tokenizer_sha256": tokenizer_hash,
         "train_sha256": manifest["train_sha256"],
