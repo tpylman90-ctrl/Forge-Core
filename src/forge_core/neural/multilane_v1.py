@@ -9,6 +9,7 @@ back to the common checkpoint automatically.
 from __future__ import annotations
 
 import argparse
+import copy
 from html.parser import HTMLParser
 import hashlib
 import json
@@ -45,6 +46,8 @@ SOURCES = {
             "https://docs.blender.org/manual/en/5.4/scene_layout/object/origin.html",
             "https://docs.blender.org/manual/en/5.4/modeling/geometry_nodes/index.html",
             "https://docs.blender.org/manual/en/5.4/addons/scene_gltf2.html",
+            "https://docs.blender.org/manual/en/5.4/scene_layout/object/properties/transforms.html",
+            "https://docs.blender.org/manual/en/5.4/modeling/geometry_nodes/input/index.html",
         ],
     },
     "godot": {
@@ -57,6 +60,8 @@ SOURCES = {
             "https://docs.godotengine.org/en/4.7/tutorials/scripting/nodes_and_scene_instances.html",
             "https://docs.godotengine.org/en/4.7/tutorials/3d/procedural_geometry/arraymesh.html",
             "https://docs.godotengine.org/en/4.7/tutorials/3d/using_transforms.html",
+            "https://docs.godotengine.org/en/4.7/tutorials/best_practices/scene_organization.html",
+            "https://docs.godotengine.org/en/4.7/tutorials/physics/physics_introduction.html",
         ],
     },
 }
@@ -103,42 +108,39 @@ class ManualText(HTMLParser):
 
 def fetch_manual(lane: str, out: Path) -> dict:
     config = SOURCES[lane]
-    pages = []
-    texts = []
+    pages, texts = [], []
     for url in config["urls"]:
         request = urllib.request.Request(url, headers={"User-Agent": "Forge-Core-Research/1.0"})
         with urllib.request.urlopen(request, timeout=45) as response:
-            raw = response.read()
-            final_url = response.geturl()
+            raw, final_url = response.read(), response.geturl()
         parser = ManualText()
         parser.feed(raw.decode("utf-8", errors="replace"))
         text = parser.text()
         if len(text) < 1500:
             raise ValueError(f"Manual page yielded too little prose: {url}")
-        pages.append({
-            "url": url, "resolved_url": final_url, "html_sha256": sha256_bytes(raw),
-            "extracted_characters": len(text),
-        })
+        pages.append({"url": url, "resolved_url": final_url,
+                      "html_sha256": sha256_bytes(raw), "extracted_characters": len(text)})
         texts.append(text)
-    # Hold out the final whole page. No snippets from it enter training.
-    train_text = "\n\n".join(texts[:-1])
-    valid_text = texts[-1]
-    if len(train_text) < 5000 or len(valid_text) < 1500:
-        raise ValueError("Documentation split is too small")
+    train_text = "\n\n".join(texts[:4])
+    valid_text, test_text = texts[4], texts[5]
+    if len(train_text) < 8000 or min(len(valid_text), len(test_text)) < 1500:
+        raise ValueError("Documentation train/validation/test split is too small")
     out.mkdir(parents=True, exist_ok=True)
-    (out / "train.txt").write_text(train_text + "\n", encoding="utf-8")
-    (out / "valid.txt").write_text(valid_text + "\n", encoding="utf-8")
+    for name, text in (("train.txt", train_text), ("valid.txt", valid_text), ("test.txt", test_text)):
+        (out / name).write_text(text + "\n", encoding="utf-8")
     manifest = {
         "schema": 1, "lane": lane, "version": config["version"],
         "license": config["license"], "license_url": config["license_url"],
         "attribution": config["attribution"],
-        "split_policy": "source pages 1-3 train; source page 4 held out in full",
+        "split_policy": "source pages 1-4 train; page 5 validation; page 6 final test; whole-page split",
         "code_samples": "HTML pre/code blocks excluded from extracted prose",
         "pages": pages,
         "train_sha256": sha256_file(out / "train.txt"),
         "valid_sha256": sha256_file(out / "valid.txt"),
+        "test_sha256": sha256_file(out / "test.txt"),
         "train_utf8_bytes": (out / "train.txt").stat().st_size,
         "valid_utf8_bytes": (out / "valid.txt").stat().st_size,
+        "test_utf8_bytes": (out / "test.txt").stat().st_size,
     }
     (out / "source-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     (out / "ATTRIBUTION.txt").write_text(
@@ -150,7 +152,7 @@ def fetch_manual(lane: str, out: Path) -> dict:
     return manifest
 
 
-def load_language_data(source: Path) -> tuple[str, torch.Tensor, torch.Tensor, dict]:
+def load_language_data(source: Path) -> tuple[str, torch.Tensor, torch.Tensor, torch.Tensor, dict]:
     manifest = json.loads((source / "source-manifest.json").read_text())
     ckpt = torch.load(source / "checkpoint.pt", map_location="cpu", weights_only=True)
     for split in ("train", "valid"):
@@ -159,28 +161,32 @@ def load_language_data(source: Path) -> tuple[str, torch.Tensor, torch.Tensor, d
     tokenizer = Tokenizer.from_file(str(source / "tokenizer.json"))
     train = torch.tensor(tokenizer.encode((source / "train.txt").read_text()).ids, dtype=torch.long)
     valid = torch.tensor(tokenizer.encode((source / "valid.txt").read_text()).ids, dtype=torch.long)
-    return sha256_file(source / "tokenizer.json"), train, valid, manifest
+    return sha256_file(source / "tokenizer.json"), train, valid, valid, manifest
 
 
 def load_manual_data(lane: str, folder: Path, tokenizer: Tokenizer):
     manifest = fetch_manual(lane, folder)
     train = torch.tensor(tokenizer.encode((folder / "train.txt").read_text()).ids, dtype=torch.long)
     valid = torch.tensor(tokenizer.encode((folder / "valid.txt").read_text()).ids, dtype=torch.long)
-    if min(train.numel(), valid.numel()) <= SEQ_LEN + 1:
-        raise ValueError("Manual corpus does not support fixed-window evaluation")
-    return train, valid, manifest
+    test = torch.tensor(tokenizer.encode((folder / "test.txt").read_text()).ids, dtype=torch.long)
+    if min(train.numel(), valid.numel(), test.numel()) <= SEQ_LEN + 1:
+        raise ValueError("Manual split does not support fixed-window evaluation")
+    return train, valid, test, manifest
 
 
-def save_checkpoint(out: Path, model, optimizer, lane, parent, updates, seed, data, best_loss):
+def save_checkpoint(out: Path, model, optimizer_state, lane, parent, updates, seed,
+                    data, best_loss, torch_rng_state, sample_rng_state):
     ckpt = {
-        "schema": 1, "lane": lane, "parent_run": 42143390701,
+        "schema": 3, "lane": lane, "parent_run": 42143390701,
         "parent_step": BASE_STEP, "parent_sha256": BASE_SHA256,
         "step": BASE_STEP + updates if lane == "language" else BASE_STEP,
         "lane_updates": updates, "seed": seed, "configuration": model.cfg.__dict__,
-        "tokenizer_sha256": BASE_TOKENIZER_SHA256, "model": model.state_dict(),
-        "optimizer": optimizer.state_dict(), "torch_rng_state": torch.get_rng_state(),
-        "sample_rng_state": data["rng"].get_state(), "source_manifest": data["manifest"],
-        "best_valid_loss": best_loss,
+        "revision": parent["revision"], "tokenizer_sha256": BASE_TOKENIZER_SHA256,
+        "train_sha256": data["manifest"]["train_sha256"],
+        "valid_sha256": data["manifest"]["valid_sha256"],
+        "model": model.state_dict(), "optimizer": optimizer_state,
+        "torch_rng_state": torch_rng_state, "sample_rng_state": sample_rng_state,
+        "source_manifest": data["manifest"], "best_valid_loss": best_loss,
     }
     tmp = out / "checkpoint.pt.tmp"
     torch.save(ckpt, tmp)
