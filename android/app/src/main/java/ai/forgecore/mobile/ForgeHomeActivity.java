@@ -57,7 +57,7 @@ public final class ForgeHomeActivity extends Activity {
     private static final int EMBER = Color.rgb(255, 139, 51);
     private static final int WHITE = Color.rgb(244, 241, 247);
     private static final int MUTED = Color.rgb(157, 151, 167);
-    private static final String[] TABS = {"Chat", "History", "Memory", "Settings", "Diagnostics"};
+    private static final String[] TABS = {"Chat", "Chats & Projects", "Memory", "Settings", "Diagnostics"};
 
     private LocalLanguageBridge model;
     private EncryptedJournal journal;
@@ -303,6 +303,23 @@ public final class ForgeHomeActivity extends Activity {
         content.addView(screen, new FrameLayout.LayoutParams(-1, -1));
 
         ForgeModelAdapter.ModelStatus modelStatus = model.status();
+
+        LinearLayout conversationBar = new LinearLayout(this);
+        conversationBar.setGravity(Gravity.CENTER_VERTICAL);
+        conversationBar.setPadding(dp(20), dp(4), dp(20), dp(4));
+        TextView currentConversation = text("◷  " + activeConversationTitle() + "  ▾", 12, MUTED, true);
+        currentConversation.setSingleLine(true);
+        currentConversation.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        currentConversation.setPadding(dp(12), dp(9), dp(12), dp(9));
+        currentConversation.setBackground(shape(SURFACE, 18));
+        currentConversation.setOnClickListener(v -> showConversationPicker());
+        conversationBar.addView(currentConversation, new LinearLayout.LayoutParams(0, -2, 1f));
+        TextView newConversation = text("＋", 22, ACCENT, true);
+        newConversation.setGravity(Gravity.CENTER);
+        newConversation.setContentDescription("Start a new conversation");
+        newConversation.setOnClickListener(v -> createNewConversation());
+        conversationBar.addView(newConversation, new LinearLayout.LayoutParams(dp(44), dp(42)));
+        screen.addView(conversationBar);
 
         // Keep Forge's presence visible while the conversation itself scrolls.
         LinearLayout presence = column();
@@ -784,19 +801,59 @@ public final class ForgeHomeActivity extends Activity {
 
     private void renderHistory() {
         LinearLayout body = scrollPage();
-        heading(body, "History", "Encrypted entries kept only on this device");
-        JSONArray items = readEntriesOrWarn(body);
-        if (items == null) return;
-        LinearLayout count = panel(body, true);
-        count.addView(text(items.length() + " local entries", 19, WHITE, true));
-        space(count, 5);
-        count.addView(text("Your messages and local helper replies are labeled and stored in the encrypted journal.", 13, MUTED, false));
-        if (items.length() > 0) {
+        heading(body, "Chats & Projects", "Keep separate conversations, then gather related chats into project spaces");
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        TextView newChat = action("＋  New conversation", this::createNewConversation, true);
+        actions.addView(newChat, new LinearLayout.LayoutParams(0, -2, 1f));
+        View gap = new View(this);
+        actions.addView(gap, new LinearLayout.LayoutParams(dp(10), 1));
+        TextView newProject = action("＋  New project", this::createProject, false);
+        actions.addView(newProject, new LinearLayout.LayoutParams(0, -2, 1f));
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, -2);
+        actionsParams.bottomMargin = dp(18);
+        body.addView(actions, actionsParams);
+
+        LinearLayout projectsSection = panel(body, true);
+        projectsSection.addView(text("PROJECT SPACES", 11, ACCENT, true));
+        space(projectsSection, 10);
+        JSONArray projects;
+        try { projects = journal.projects(); }
+        catch (Exception error) { projects = null; }
+        if (projects == null) {
+            projectsSection.addView(text("Encrypted project list unavailable. Existing data has not been deleted.", 13, MUTED, false));
+        } else if (projects.length() == 0) {
+            projectsSection.addView(text("No project spaces yet. Create one to group conversations that belong to the same piece of work.", 13, MUTED, false));
+        } else {
+            for (int i = projects.length() - 1; i >= 0; i--) {
+                JSONObject project = projects.optJSONObject(i);
+                if (project == null) continue;
+                String projectId = project.optString("id");
+                TextView row = text("◈  " + project.optString("title") + "     ›", 15, WHITE, true);
+                row.setPadding(dp(4), dp(10), dp(4), dp(10));
+                row.setOnClickListener(v -> renderProject(projectId));
+                projectsSection.addView(row);
+            }
+        }
+
+        space(body, 5);
+        body.addView(text("CONVERSATIONS", 11, MUTED, true));
+        space(body, 9);
+        JSONArray conversations;
+        try { conversations = journal.conversations(); }
+        catch (Exception error) {
+            LinearLayout warning = panel(body, true);
+            warning.addView(text("Encrypted conversation list unavailable. Existing data has not been deleted.", 13, MUTED, false));
+            return;
+        }
+        LinearLayout count = panel(body, false);
+        count.addView(text(conversations.length() + " conversations · " + safeEntryCount() + " encrypted messages", 13, MUTED, false));
+        if (conversations.length() > 0) {
             addAction(body, "Clear conversation history", () -> new AlertDialog.Builder(this)
-                    .setTitle("Clear local conversation history?")
+                    .setTitle("Clear all local conversation messages?")
                     .setMessage(model.status().available
-                            ? "This deletes all encrypted journal entries and unloads the model to clear its current conversation context. The imported model file and confirmed principles remain."
-                            : "This deletes all journal entries from the encrypted store. Confirmed principles in Memory will remain untouched.")
+                            ? "This deletes messages from every conversation and unloads the model. Conversation and project organization will remain. The imported model file and confirmed principles remain."
+                            : "This deletes messages from every conversation. Conversation and project organization will remain; confirmed principles in Memory are untouched.")
                     .setNegativeButton("Keep history", null)
                     .setPositiveButton("Delete history", (d, w) -> {
                         if (generating) {
@@ -821,15 +878,174 @@ public final class ForgeHomeActivity extends Activity {
                         }
                     }).show(), false);
         }
-        if (items.length() == 0) {
+        if (conversations.length() == 0) {
             LinearLayout empty = panel(body, false);
-            empty.addView(text("No notes yet. Start with Chat.", 14, MUTED, false));
+            empty.addView(text("No conversations yet. Start one above.", 14, MUTED, false));
         } else {
-            for (int i = items.length() - 1; i >= 0; i--) {
-                JSONObject entry = items.optJSONObject(i);
-                if (entry != null) addMessage(body, entry);
+            String activeId = "";
+            try { activeId = journal.activeConversationId(); } catch (Exception ignored) { }
+            for (int i = conversations.length() - 1; i >= 0; i--) {
+                JSONObject conversation = conversations.optJSONObject(i);
+                if (conversation != null) addConversationCard(body, conversation, activeId);
             }
         }
+    }
+
+    private void addConversationCard(LinearLayout parent, JSONObject conversation, String activeId) {
+        String id = conversation.optString("id");
+        String title = conversation.optString("title", "Conversation");
+        JSONArray entries = conversation.optJSONArray("entries");
+        String preview = "No messages yet";
+        long updated = conversation.optLong("updated_at");
+        if (entries != null && entries.length() > 0) {
+            JSONObject last = entries.optJSONObject(entries.length() - 1);
+            if (last != null) preview = last.optString("text", "").replaceAll("\\s+", " ");
+            if (last != null) updated = last.optLong("created_at", updated);
+            if (preview.length() > 90) preview = preview.substring(0, 87) + "…";
+        }
+        LinearLayout card = panel(parent, id.equals(activeId));
+        TextView titleView = text((id.equals(activeId) ? "●  " : "") + title, 16, WHITE, true);
+        titleView.setOnClickListener(v -> openConversation(id));
+        card.addView(titleView);
+        space(card, 5);
+        TextView detail = text(preview + "\n" + formatTime(updated), 12, MUTED, false);
+        detail.setOnClickListener(v -> openConversation(id));
+        card.addView(detail);
+        space(card, 7);
+        TextView organize = text("Add to project  ·  Open conversation", 12, ACCENT, true);
+        organize.setOnClickListener(v -> new AlertDialog.Builder(this)
+                .setTitle("Organize conversation")
+                .setItems(new String[]{"Open conversation", "Add to project"}, (dialog, which) -> {
+                    if (which == 0) openConversation(id); else chooseProjectForConversation(id);
+                }).show());
+        card.addView(organize);
+    }
+
+    private void renderProject(String projectId) {
+        try {
+            JSONObject project = findById(journal.projects(), projectId);
+            if (project == null) { showTab(1); return; }
+            LinearLayout body = scrollPage();
+            heading(body, project.optString("title"), "Project space · related conversations stay linked here");
+            addAction(body, "＋  Add current conversation", () -> {
+                try {
+                    journal.linkActiveConversationToProject(projectId);
+                    notice = "Conversation added to " + project.optString("title") + ".";
+                    renderProject(projectId);
+                } catch (Exception error) {
+                    Toast.makeText(this, "Could not link this conversation", Toast.LENGTH_LONG).show();
+                }
+            }, true);
+            space(body, 8);
+            body.addView(text("LINKED CONVERSATIONS", 11, MUTED, true));
+            space(body, 8);
+            JSONArray conversations = journal.conversations();
+            int linked = 0;
+            for (int i = conversations.length() - 1; i >= 0; i--) {
+                JSONObject conversation = conversations.optJSONObject(i);
+                if (conversation == null || !contains(conversation.optJSONArray("project_ids"), projectId)) continue;
+                linked++;
+                addConversationCard(body, conversation, journal.activeConversationId());
+            }
+            if (linked == 0) {
+                LinearLayout empty = panel(body, false);
+                empty.addView(text("This project has no conversations yet. Add the current chat, or open Chats & Projects to link another conversation.", 13, MUTED, false));
+            }
+            addAction(body, "Back to Chats & Projects", () -> showTab(1), false);
+        } catch (Exception error) {
+            Toast.makeText(this, "Could not open this project space", Toast.LENGTH_LONG).show();
+            showTab(1);
+        }
+    }
+
+    private JSONObject findById(JSONArray items, String id) {
+        if (items == null) return null;
+        for (int i = 0; i < items.length(); i++) {
+            JSONObject item = items.optJSONObject(i);
+            if (item != null && id.equals(item.optString("id"))) return item;
+        }
+        return null;
+    }
+
+    private boolean contains(JSONArray items, String value) {
+        if (items == null) return false;
+        for (int i = 0; i < items.length(); i++) if (value.equals(items.optString(i))) return true;
+        return false;
+    }
+
+    private void chooseProjectForConversation(String conversationId) {
+        try {
+            JSONArray projects = journal.projects();
+            if (projects.length() == 0) {
+                new AlertDialog.Builder(this).setTitle("No project spaces yet")
+                        .setMessage("Create a project space first, then link conversations to it.")
+                        .setNegativeButton("Close", null).setPositiveButton("Create project", (d, w) -> createProject()).show();
+                return;
+            }
+            String[] labels = new String[projects.length()];
+            for (int i = 0; i < projects.length(); i++) labels[i] = projects.optJSONObject(i).optString("title");
+            new AlertDialog.Builder(this).setTitle("Add conversation to project")
+                    .setItems(labels, (d, which) -> {
+                        try {
+                            journal.linkConversationToProject(conversationId, projects.optJSONObject(which).optString("id"));
+                            showTab(1);
+                        } catch (Exception error) { Toast.makeText(this, "Could not link conversation", Toast.LENGTH_LONG).show(); }
+                    }).show();
+        } catch (Exception error) { Toast.makeText(this, "Could not load project spaces", Toast.LENGTH_LONG).show(); }
+    }
+
+    private String activeConversationTitle() {
+        try {
+            String id = journal.activeConversationId();
+            JSONObject conversation = findById(journal.conversations(), id);
+            return conversation == null ? "New conversation" : conversation.optString("title", "New conversation");
+        } catch (Exception error) { return "Conversation"; }
+    }
+
+    private void showConversationPicker() {
+        if (generating) {
+            Toast.makeText(this, "Wait for the reply or cancel it before switching conversations", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            JSONArray items = journal.conversations();
+            String[] labels = new String[items.length()];
+            for (int i = 0; i < items.length(); i++) labels[i] = items.optJSONObject(i).optString("title", "Conversation");
+            new AlertDialog.Builder(this).setTitle("Switch conversation").setItems(labels, (d, which) -> {
+                try { journal.activateConversation(items.optJSONObject(which).optString("id")); showTab(0); }
+                catch (Exception error) { Toast.makeText(this, "Could not open conversation", Toast.LENGTH_LONG).show(); }
+            }).setPositiveButton("Chats & Projects", (d, w) -> showTab(1)).setNegativeButton("Close", null).show();
+        } catch (Exception error) { Toast.makeText(this, "Could not load conversations", Toast.LENGTH_LONG).show(); }
+    }
+
+    private void openConversation(String id) {
+        if (generating) { Toast.makeText(this, "Wait for the reply or cancel it before switching conversations", Toast.LENGTH_LONG).show(); return; }
+        try { journal.activateConversation(id); showTab(0); }
+        catch (Exception error) { Toast.makeText(this, "Could not open conversation", Toast.LENGTH_LONG).show(); }
+    }
+
+    private void createNewConversation() {
+        if (generating) { Toast.makeText(this, "Wait for the reply or cancel it before starting a new conversation", Toast.LENGTH_LONG).show(); return; }
+        try { journal.createConversation(); notice = "New private conversation started."; showTab(0); }
+        catch (Exception error) { Toast.makeText(this, "Could not create conversation", Toast.LENGTH_LONG).show(); }
+    }
+
+    private void createProject() {
+        EditText input = new EditText(this);
+        input.setHint("Project name");
+        input.setTextColor(WHITE);
+        input.setHintTextColor(MUTED);
+        input.setSingleLine(true);
+        input.setFilters(new InputFilter[]{new InputFilter.LengthFilter(60)});
+        new AlertDialog.Builder(this).setTitle("Create project space").setView(input)
+                .setNegativeButton("Cancel", null).setPositiveButton("Create", (d, w) -> {
+                    try { journal.createProject(input.getText().toString()); showTab(1); }
+                    catch (Exception error) { Toast.makeText(this, "Enter a project name (up to 60 characters)", Toast.LENGTH_LONG).show(); }
+                }).show();
+    }
+
+    private int safeEntryCount() {
+        try { return journal.entryCount(); } catch (Exception error) { return 0; }
     }
 
     private void clearConversationHistory() {
@@ -1035,7 +1251,7 @@ public final class ForgeHomeActivity extends Activity {
         storage.addView(text("LOCAL STORAGE", 11, ACCENT, true));
         space(storage, 7);
         try {
-            storage.addView(text("Encrypted journal entries: " + journal.entries().length(),
+            storage.addView(text("Encrypted journal messages: " + journal.entryCount(),
                     13, WHITE, false));
         } catch (Exception error) {
             storage.addView(text("Encrypted journal: unavailable (data retained)",
