@@ -13,3 +13,5 @@ This is a read-only evaluation of the existing research artifacts; no training r
 Retry evaluation after fixing lane-specific artifact names.
 
 Retry the evaluation after correcting the Godot score paths as well.
+
+Retry after adding official documentation rate-limit backoff.
