@@ -11,3 +11,5 @@ Score each checkpoint on fixed-window loss for the four unseen official prose pa
 
 This is a read-only evaluation of the existing research artifacts; no training run is triggered.
 Retry evaluation after fixing lane-specific artifact names.
+
+Retry the evaluation after correcting the Godot score paths as well.
