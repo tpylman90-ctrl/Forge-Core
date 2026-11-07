@@ -10,3 +10,4 @@ Use the new version-pinned official documentation holdouts in `.github/workflows
 Score each checkpoint on fixed-window loss for the four unseen official prose pages and on the balanced answer-keyed four-choice tasks with four answer-position rotations. No holdout material enters training or checkpoint selection. Generated code samples remain ungraded; do not claim practical Blender/Godot competence, merge candidates, or promote any checkpoint.
 
 This is a read-only evaluation of the existing research artifacts; no training run is triggered.
+Retry evaluation after fixing lane-specific artifact names.
