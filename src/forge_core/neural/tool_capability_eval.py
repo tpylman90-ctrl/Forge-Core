@@ -12,6 +12,9 @@ from html.parser import HTMLParser
 import hashlib
 import json
 from pathlib import Path
+import random
+import time
+import urllib.error
 import urllib.request
 
 import torch
@@ -212,9 +215,24 @@ def prepare_data(lane: str, out: Path) -> dict:
     page_texts = []
     for i, url in enumerate(spec["urls"]):
         request = urllib.request.Request(url, headers={"User-Agent": "Forge-Core-Eval/1.0"})
-        with urllib.request.urlopen(request, timeout=60) as response:
-            raw = response.read()
-            resolved = response.geturl()
+        # The two lane jobs can fetch from the official documentation host at once.
+        # Retry temporary rate limits and server errors with exponential backoff.
+        for attempt in range(8):
+            try:
+                with urllib.request.urlopen(request, timeout=60) as response:
+                    raw = response.read()
+                    resolved = response.geturl()
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429 and exc.code < 500:
+                    raise
+                if attempt == 7:
+                    raise
+                time.sleep(min(30, 2 ** attempt) + random.random())
+            except urllib.error.URLError:
+                if attempt == 7:
+                    raise
+                time.sleep(min(30, 2 ** attempt) + random.random())
         parser = ProseHTMLParser()
         parser.feed(raw.decode("utf-8", errors="replace"))
         text = parser.text()
