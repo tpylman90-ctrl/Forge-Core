@@ -15,3 +15,5 @@ Retry evaluation after fixing lane-specific artifact names.
 Retry the evaluation after correcting the Godot score paths as well.
 
 Retry after adding official documentation rate-limit backoff.
+
+The first probe implementation scored only the single next-token answer label and showed strong answer-position bias. Re-evaluate using mean log-probability of the full answer text for each option before interpreting task scores.
