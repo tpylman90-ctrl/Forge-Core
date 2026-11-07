@@ -24,3 +24,5 @@ run 42290966213, artifact `forge-seed-followup-99k-42290966213`.
 The previous 99k-to-101k follow-up improved both validation and a new
 independent test slice. This run checks whether the signal continues at half
 the learning rate; it is not a capability or reasoning claim.
+
+Run a matched 2,000-update replication from the exact 101k parent using sampler seed 101 (the previous run resumed seed 73). Preserve validation/test windows and all hashes; candidate remains research-only.
