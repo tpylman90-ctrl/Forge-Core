@@ -40,7 +40,11 @@ jobs:
           mkdir -p checkpoints
           gh run download "$SOURCE_PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
             --name forge-seed-v07-continuation --dir checkpoints/parent
-          for arm in baseline-seed731 baseline-seed732 low-seed731 low-seed732; do
+          case "${{ matrix.lane }}" in
+            blender) arms=(baseline-seed731 baseline-seed732 low-seed731 low-seed732) ;;
+            godot) arms=(baseline-seed947 baseline-seed948 low-seed947 low-seed948) ;;
+          esac
+          for arm in "${arms[@]}"; do
             artifact="forge-small-${{ matrix.lane }}-${arm}-${SOURCE_SWEEP_RUN}"
             gh run download "$SOURCE_SWEEP_RUN" --repo "$GITHUB_REPOSITORY" \
               --name "$artifact" --dir "checkpoints/$arm"
