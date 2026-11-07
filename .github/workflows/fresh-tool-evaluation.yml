@@ -1,0 +1,146 @@
+name: Forge fresh Blender and Godot benchmark
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/fresh-tool-evaluation-2026-11-07.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  evaluate-lane:
+    name: Fresh ${{ matrix.lane }} evaluation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [blender, godot]
+    env:
+      SOURCE_PARENT_RUN: "42143390701"
+      SOURCE_SWEEP_RUN: "42373188405"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU evaluation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore the verified baseline and four lane candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p checkpoints
+          gh run download "$SOURCE_PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir checkpoints/parent
+          for arm in baseline-seed731 baseline-seed732 low-seed731 low-seed732; do
+            artifact="forge-small-${{ matrix.lane }}-${arm}-${SOURCE_SWEEP_RUN}"
+            gh run download "$SOURCE_SWEEP_RUN" --repo "$GITHUB_REPOSITORY" \
+              --name "$artifact" --dir "checkpoints/$arm"
+          done
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          p=Path("checkpoints/parent/checkpoint.pt")
+          ckpt=torch.load(p,map_location="cpu",weights_only=True)
+          digest=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ckpt["step"] == 95000
+          assert digest == "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a"
+          print({"verified_parent_step":ckpt["step"],"parent_sha256":digest})
+          for d in sorted(Path("checkpoints").iterdir()):
+              if d.name == "parent": continue
+              c=torch.load(d/"checkpoint.pt",map_location="cpu",weights_only=True)
+              assert c["parent_sha256"] == digest
+              print({"candidate":d.name,"lane":c["lane"],"seed":c["seed"],
+                     "updates":c["lane_updates"],"checkpoint_sha256":
+                     hashlib.sha256((d/"checkpoint.pt").read_bytes()).hexdigest()})
+          PY
+      - name: Prepare fresh official-document holdouts
+        run: |
+          python -m forge_core.neural.tool_capability_eval \
+            --lane "${{ matrix.lane }}" \
+            --data-dir "evaldata/${{ matrix.lane }}" \
+            --prepare-data
+      - name: Score parent and all candidates on identical holdouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          for arm in parent baseline-seed731 baseline-seed732 low-seed731 low-seed732; do
+            python -m forge_core.neural.tool_capability_eval \
+              --lane "${{ matrix.lane }}" \
+              --data-dir "evaldata/${{ matrix.lane }}" \
+              --checkpoint-dir "checkpoints/$arm" \
+              --out "results/report_${{ matrix.lane }}_$arm.json"
+          done
+      - name: Upload evaluation, holdout pages, and attribution
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-fresh-eval-${{ matrix.lane }}-${{ github.run_id }}
+          path: |
+            evaldata/${{ matrix.lane }}/
+            results/
+          retention-days: 90
+          if-no-files-found: warn
+
+  archive:
+    name: Summarize and preserve fresh evaluation
+    runs-on: ubuntu-24.04
+    needs: evaluate-lane
+    if: needs.evaluate-lane.result == 'success'
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download both lane evaluations
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+      - name: Write comparison report
+        run: |
+          python - <<'PY'
+          import glob, json, os
+          rows=[]
+          for path in sorted(glob.glob("bundle/**/report_*.json",recursive=True)):
+              with open(path,encoding="utf-8") as f: m=json.load(f)
+              label=os.path.basename(path).removeprefix(f"report_{m['lane']}_").removesuffix(".json")
+              probe=m["capability_probe"]
+              rows.append({"lane":m["lane"],"label":label,
+                           "fresh_loss":m["fresh_document_loss"],
+                           "accuracy":probe["accuracy"],"correct":probe["correct"],
+                           "total":probe["total"],"all_four":probe["all_four_rotations_correct"],
+                           "hash":m["checkpoint_sha256"]})
+          with open("bundle/FRESH-TOOL-EVALUATION.md","w",encoding="utf-8") as out:
+              out.write("# Fresh Blender and Godot benchmark\n\n")
+              out.write("Documentation loss is an average over four new official manual pages per lane. Task accuracy is a four-choice, answer-position-rotated probe; it does not establish practical tool competence.\n\n")
+              out.write("| Lane | Checkpoint | Fresh-page loss | Task score | All rotations right | Checkpoint SHA-256 |\n|---|---|---:|---:|---:|---|\n")
+              for r in rows:
+                  out.write(f"| {r['lane']} | {r['label']} | {r['fresh_loss']:.5f} | {r['correct']}/{r['total']} ({r['accuracy']:.1%}) | {r['all_four']} | {r['hash']} |\n")
+          print("Indexed",len(rows),"checkpoint evaluations")
+          if len(rows)!=10: raise SystemExit(f"Expected parent plus four candidates per lane; found {len(rows)}")
+          PY
+      - name: Preserve evaluation bundle as a draft release
+        run: |
+          set -euo pipefail
+          tag="forge-fresh-tool-eval-${GITHUB_RUN_ID}"
+          tar -czf "${tag}.tar.gz" -C bundle .
+          cat > release-notes.md <<EOF
+          Fresh, evaluation-only Blender and Godot specialist benchmark.
+          Includes four new manual prose holdouts per lane, source hashes and
+          attribution, parent plus eight prior candidate scores, and exact
+          answer-keyed task predictions. Holdout pages are not training inputs.
+          Results are research-only and do not certify practical tool competence
+          or promote any checkpoint.
+          EOF
+          gh release create "$tag" "${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge fresh Blender and Godot evaluation — run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
