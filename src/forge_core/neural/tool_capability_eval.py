@@ -295,6 +295,7 @@ def rotated_tasks(lane: str) -> list[dict]:
                 "base_id": base["id"], "skill": base["skill"],
                 "source_url": HOLDOUTS[lane]["urls"][base["source_index"]],
                 "prompt": prompt, "gold": LABELS[correct_pos],
+                "options": options, "gold_text": correct,
             })
     return records
 
@@ -302,22 +303,37 @@ def rotated_tasks(lane: str) -> list[dict]:
 @torch.no_grad()
 def score_tasks(model: ByteTransformer, tokenizer: Tokenizer, lane: str) -> dict:
     records = rotated_tasks(lane)
-    label_tokens = [tokenizer.encode(label).ids for label in LABELS]
-    if any(len(ids) != 1 for ids in label_tokens) or len({ids[0] for ids in label_tokens}) != 4:
-        raise ValueError("A/B/C/D labels must each map to a distinct single token")
     results = []
     groups: dict[str, dict] = {}
     by_base: dict[str, list[bool]] = {}
+    predicted_labels: dict[str, int] = {label: 0 for label in LABELS}
+
+    def continuation_score(prefix: list[int], text: str) -> float:
+        candidate = tokenizer.encode(" " + text).ids
+        if not candidate:
+            raise ValueError("Choice text tokenized to an empty continuation")
+        max_context = model.cfg.max_seq_len - len(candidate)
+        if max_context < 1:
+            raise ValueError("Choice text exceeds model context")
+        context = prefix[-max_context:]
+        input_ids = context + candidate[:-1]
+        logits, _ = model(torch.tensor([input_ids], dtype=torch.long))
+        target_logits = logits[0, len(context) - 1:len(context) - 1 + len(candidate)]
+        target_ids = torch.tensor(candidate, dtype=torch.long)
+        token_logprobs = torch.log_softmax(target_logits, dim=-1).gather(
+            1, target_ids[:, None]
+        ).squeeze(1)
+        return float(token_logprobs.mean())
+
     for item in records:
         prefix = tokenizer.encode(item["prompt"]).ids
         if not prefix or len(prefix) >= model.cfg.max_seq_len:
             raise ValueError(f"Question exceeds model context: {item['id']}")
-        logits, _ = model(torch.tensor([prefix], dtype=torch.long))
-        last = logits[0, -1, label_tokens[0][0]:label_tokens[0][0]+1]
-        scores = [float(logits[0, -1, ids[0]]) for ids in label_tokens]
+        scores = [continuation_score(prefix, choice) for choice in item["options"]]
         predicted_index = max(range(4), key=lambda i: scores[i])
         predicted = LABELS[predicted_index]
-        correct = predicted == item["gold"]
+        predicted_labels[predicted] += 1
+        correct = item["options"][predicted_index] == item["gold_text"]
         g = groups.setdefault(item["skill"], {"correct": 0, "total": 0})
         g["correct"] += int(correct)
         g["total"] += 1
@@ -325,6 +341,9 @@ def score_tasks(model: ByteTransformer, tokenizer: Tokenizer, lane: str) -> dict
         results.append({
             "id": item["id"], "base_id": item["base_id"], "skill": item["skill"],
             "gold": item["gold"], "predicted": predicted, "correct": bool(correct),
+            "choice_mean_logprobs": {
+                label: round(score, 6) for label, score in zip(LABELS, scores)
+            },
             "source_url": item["source_url"],
         })
     all_four = sum(len(outcomes) == 4 and all(outcomes) for outcomes in by_base.values())
@@ -334,13 +353,14 @@ def score_tasks(model: ByteTransformer, tokenizer: Tokenizer, lane: str) -> dict
         "accuracy": round(ncorrect / len(results), 4),
         "base_question_count": len(by_base),
         "all_four_rotations_correct": all_four,
+        "predicted_label_counts": predicted_labels,
         "by_skill": {
             k: {"correct": v["correct"], "total": v["total"],
                 "accuracy": round(v["correct"] / v["total"], 4)}
             for k, v in sorted(groups.items())
         },
         "chance_baseline": 0.25,
-        "interpretation": "Four-choice documentation-grounded knowledge probe with answer-position rotations; not a practical tool-execution certification.",
+        "interpretation": "Four-choice probe ranking the mean next-token log probability of each full answer text, repeated across four answer positions; this does not certify practical tool competence.",
         "items": results,
     }
 
