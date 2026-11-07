@@ -1,0 +1,164 @@
+name: Forge small Blender and Godot learning-rate sweep
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/specialist-small-sweep-2026-11-07.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  train:
+    name: ${{ matrix.lane }} ${{ matrix.lr_key }} seed ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - lane: blender
+            lr_key: baseline
+            learning_rate: "0.00005"
+            seed: 731
+          - lane: blender
+            lr_key: baseline
+            learning_rate: "0.00005"
+            seed: 732
+          - lane: blender
+            lr_key: low
+            learning_rate: "0.00001"
+            seed: 731
+          - lane: blender
+            lr_key: low
+            learning_rate: "0.00001"
+            seed: 732
+          - lane: godot
+            lr_key: baseline
+            learning_rate: "0.00005"
+            seed: 947
+          - lane: godot
+            lr_key: baseline
+            learning_rate: "0.00005"
+            seed: 948
+          - lane: godot
+            lr_key: low
+            learning_rate: "0.00001"
+            seed: 947
+          - lane: godot
+            lr_key: low
+            learning_rate: "0.00001"
+            seed: 948
+    env:
+      SOURCE_RUN: "42143390701"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the frozen Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          checkpoint = Path("source/checkpoint.pt")
+          state = torch.load(checkpoint, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+          assert state["step"] == 95000
+          assert digest == "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a"
+          tokenizer = hashlib.sha256(Path("source/tokenizer.json").read_bytes()).hexdigest()
+          assert tokenizer == "4ecd7803d4c369e80bda2e74c30cfb769b7e3a942f931df83383eec9f794f04c"
+          print({"verified_parent_step": state["step"], "parent_sha256": digest,
+                 "tokenizer_sha256": tokenizer, "lane": "${{ matrix.lane }}",
+                 "lr": "${{ matrix.learning_rate }}", "seed": "${{ matrix.seed }}"})
+          PY
+      - name: Run bounded trial with frequent validation and early stopping
+        run: |
+          python -m forge_core.neural.multilane_v1 \
+            --lane "${{ matrix.lane }}" \
+            --source source \
+            --out "artifacts/${{ matrix.lane }}-${{ matrix.lr_key }}-seed${{ matrix.seed }}" \
+            --seconds 900 \
+            --max-updates 3000 \
+            --learning-rate "${{ matrix.learning_rate }}" \
+            --seed "${{ matrix.seed }}" \
+            --eval-every 250 \
+            --patience 3
+      - name: Upload research checkpoint and evaluation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-small-${{ matrix.lane }}-${{ matrix.lr_key }}-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}-${{ matrix.lr_key }}-seed${{ matrix.seed }}/
+          retention-days: 90
+          if-no-files-found: warn
+
+  archive:
+    name: Summarize and preserve all small trials
+    runs-on: ubuntu-24.04
+    needs: train
+    if: needs.train.result == 'success'
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download this run's trial artifacts
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+      - name: Write comparison index
+        run: |
+          python - <<'PY'
+          import glob, json
+          rows = []
+          for path in sorted(glob.glob("bundle/**/metrics.json", recursive=True)):
+              with open(path, encoding="utf-8") as stream:
+                  m = json.load(stream)
+              c = m.get("training_config", {})
+              rows.append((m.get("lane"), c.get("learning_rate"), c.get("seed"),
+                           m.get("updates"), c.get("stop_reason"),
+                           m.get("validation_loss_parent"), m.get("validation_loss_selected"),
+                           m.get("test_loss_parent"), m.get("test_loss_candidate"),
+                           m.get("train_sha256"), m.get("valid_sha256"), m.get("test_sha256"),
+                           m.get("candidate_checkpoint_sha256")))
+          with open("bundle/SMALL-TRIALS-INDEX.md", "w", encoding="utf-8") as out:
+              out.write("# Forge specialist small-trial comparison\n\n")
+              out.write("| Lane | LR | Seed | Updates | Stop | Parent valid | Best valid | Parent test | Candidate test | Data hashes match by lane | Checkpoint SHA-256 |\n")
+              out.write("|---|---:|---:|---:|---|---:|---:|---:|---:|---|---|\n")
+              for r in rows:
+                  out.write("| {} | {} | {} | {} | {} | {} | {} | {} | {} | train={} valid={} test={} | {} |\n".format(
+                      *r[:9], r[9], r[10], r[11], r[12]))
+          print("Indexed", len(rows), "trial metrics files")
+          PY
+      - name: Preserve complete trial bundle in a draft release
+        run: |
+          set -euo pipefail
+          tag="forge-specialist-small-sweep-${GITHUB_RUN_ID}"
+          tar -czf "${tag}.tar.gz" -C bundle .
+          cat > release-notes.md <<EOF
+          Eight small, controlled Blender and Godot specialist trials from the
+          verified Forge Seed v0.7 95k parent. Two learning rates and two seeds
+          per lane, capped at 3,000 updates or 15 minutes, with validation every
+          250 updates and patience-three early stopping. Each arm retains its
+          own optimizer and weights. Research-only; ungraded task samples do not
+          certify tool competence and none of these checkpoints are integrated
+          into Android or merged into language weights.
+          EOF
+          gh release create "$tag" "${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge specialist small sweep — run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
