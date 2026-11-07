@@ -76,7 +76,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for arm in parent baseline-seed731 baseline-seed732 low-seed731 low-seed732; do
+          case "${{ matrix.lane }}" in
+            blender) arms=(baseline-seed731 baseline-seed732 low-seed731 low-seed732) ;;
+            godot) arms=(baseline-seed947 baseline-seed948 low-seed947 low-seed948) ;;
+          esac
+          for arm in parent "${arms[@]}"; do
+            echo "Scoring lane ${{ matrix.lane }} checkpoint $arm"
             python -m forge_core.neural.tool_capability_eval \
               --lane "${{ matrix.lane }}" \
               --data-dir "evaldata/${{ matrix.lane }}" \
