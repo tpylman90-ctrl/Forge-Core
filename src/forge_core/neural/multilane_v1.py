@@ -348,13 +348,23 @@ def generate_task_samples(model, tokenizer: Tokenizer, lane: str) -> list[dict]:
     return samples
 
 
-def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int | None = None):
+def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int | None = None,
+             seed_override: int | None = None, learning_rate_override: float | None = None,
+             eval_every: int = 1000, patience: int = 0):
     if lane not in {"language", "blender", "godot"}:
         raise ValueError("Unknown lane")
     if not 60 <= seconds <= MAX_SECONDS:
         raise ValueError("Each isolated lane must run from 60 to 3,600 seconds")
-    if max_updates is not None and (lane != "language" or not 1 <= max_updates <= 40000):
-        raise ValueError("A bounded update count is supported only for language (1–40000)")
+    if max_updates is not None and not 1 <= max_updates <= 40000:
+        raise ValueError("max_updates must be between 1 and 40000")
+    if eval_every < 1 or eval_every > 10000:
+        raise ValueError("eval_every must be between 1 and 10000")
+    if patience < 0 or patience > 20:
+        raise ValueError("patience must be between 0 and 20")
+    if seed_override is not None and not 1 <= seed_override <= 2147483647:
+        raise ValueError("seed must be a positive 32-bit integer")
+    if learning_rate_override is not None and not 0 < learning_rate_override <= 0.01:
+        raise ValueError("learning_rate must be in (0, 0.01]")
     parent_path = source / "checkpoint.pt"
     parent_hash = sha256_file(parent_path)
     if parent_hash != BASE_SHA256:
@@ -370,14 +380,14 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int 
     else:
         train_ids, valid_ids, test_ids, manifest = load_manual_data(lane, out / "source", tokenizer)
 
-    seed = 43 if lane == "language" else (731 if lane == "blender" else 947)
+    seed = seed_override if seed_override is not None else (43 if lane == "language" else (731 if lane == "blender" else 947))
     eval_windows = 2048 if lane == "language" else EVAL_WINDOWS
     torch.set_num_threads(min(2, torch.get_num_threads()))
     torch.manual_seed(seed)
     random.seed(seed)
     model = ByteTransformer(ModelConfig(**parent["configuration"]))
     model.load_state_dict(parent["model"])
-    learning_rate = 3e-4 if lane == "language" else 5e-5
+    learning_rate = learning_rate_override if learning_rate_override is not None else (3e-4 if lane == "language" else 5e-5)
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     if lane == "language":
         optimizer.load_state_dict(parent["optimizer"])
@@ -399,6 +409,8 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int 
     started = time.monotonic()
     updates = 0
     curve = []
+    stale_evaluations = 0
+    stop_reason = "time_budget"
     while time.monotonic() - started < seconds and (max_updates is None or updates < max_updates):
         x, y = make_batch(train_ids, BATCH, SEQ_LEN, rng)
         _, loss = model(x, y)
@@ -407,15 +419,19 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int 
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
         optimizer.step()
         updates += 1
-        if updates % 1000 == 0:
+        if updates % eval_every == 0 or (max_updates is not None and updates == max_updates):
             score = heldout(model, valid_ids, windows=eval_windows, seq_len=SEQ_LEN)
             curve.append({"updates": updates, "valid_token_loss": round(score, 8)})
-            if lane == "language" or score < best_valid:
+            improved = lane == "language" or score < best_valid
+            if improved:
                 best_valid = score
                 best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
                 best_optimizer = copy.deepcopy(optimizer.state_dict())
                 best_torch_rng = torch.get_rng_state().clone()
                 best_sample_rng = rng.get_state().clone()
+                stale_evaluations = 0
+            elif lane != "language":
+                stale_evaluations += 1
             current_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
             selected_optimizer = optimizer.state_dict() if lane == "language" else best_optimizer
             if lane != "language":
@@ -429,8 +445,14 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int 
             print(json.dumps({"lane": lane, "updates": updates,
                               "valid_token_loss": round(score, 8),
                               "selected_valid_loss": round(best_valid, 8),
+                              "stale_evaluations": stale_evaluations,
                               "elapsed_seconds": round(time.monotonic() - started, 1)}),
                   flush=True)
+            if lane != "language" and patience and stale_evaluations >= patience:
+                stop_reason = "early_stopping"
+                break
+    if max_updates is not None and updates >= max_updates:
+        stop_reason = "max_updates"
     if lane == "language":
         best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
         best_optimizer = copy.deepcopy(optimizer.state_dict())
@@ -460,6 +482,9 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int 
         "validation_loss_selected": round(selected_valid, 8),
         "test_loss_parent": round(initial_test, 8), "test_loss_candidate": round(final_test, 8),
         "curve": curve,
+        "training_config": {"learning_rate": learning_rate, "eval_every": eval_every,
+                            "patience": patience, "stop_reason": stop_reason,
+                            "seed": seed},
         "capability_claim": "None. Documentation token loss and ungraded generated samples are not proof of tool competence.",
         "task_samples_human_reviewed": False,
         "android_integrated": False,
@@ -499,9 +524,14 @@ def main():
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seconds", type=int, default=3600)
-    parser.add_argument("--max-updates", type=int, help="Optional bounded language update count")
+    parser.add_argument("--max-updates", type=int, help="Optional bounded update count")
+    parser.add_argument("--seed", type=int, help="Override lane's reproducible seed")
+    parser.add_argument("--learning-rate", type=float, help="Override the fresh optimizer learning rate")
+    parser.add_argument("--eval-every", type=int, default=1000, help="Updates between validation checkpoints")
+    parser.add_argument("--patience", type=int, default=0, help="Specialist validation evaluations without improvement before stopping")
     args = parser.parse_args()
-    run_lane(args.lane, args.source, args.out, args.seconds, args.max_updates)
+    run_lane(args.lane, args.source, args.out, args.seconds, args.max_updates,
+             args.seed, args.learning_rate, args.eval_every, args.patience)
 
 
 if __name__ == "__main__":
