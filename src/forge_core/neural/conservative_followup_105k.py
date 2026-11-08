@@ -247,6 +247,9 @@ def main() -> None:
         "last_independent_test_delta": round(last_test - parent_test, 8),
         "learning_rate_parent": parent["lr"], "learning_rate_used": args.lr,
         "sampler_seed": effective_sampler_seed,
+        "requested_sampler_seed": args.sampler_seed,
+        "sampler_rng_policy": ("resumed_parent_rng" if args.sampler_seed in (0, 43)
+                               else f"manual_seed({args.sampler_seed + 1})"),
         "optimizer_moments_resumed": True, "optimizer_moments_reset": False,
         "tokenizer_sha256": tokenizer_hash,
         "train_sha256": manifest["train_sha256"],
@@ -266,6 +269,9 @@ def main() -> None:
         "selected_step": PARENT_STEP + best_updates,
         "last_step": PARENT_STEP + updates,
         "actual_updates": updates, "sampler_seed": effective_sampler_seed,
+        "requested_sampler_seed": args.sampler_seed,
+        "sampler_rng_policy": ("resumed_parent_rng" if args.sampler_seed in (0, 43)
+                               else f"manual_seed({args.sampler_seed + 1})"),
         "learning_rate_parent": parent["lr"],
         "learning_rate_used": args.lr,
         "optimizer_moments_resumed": True, "source_data_reused_exactly": True,
