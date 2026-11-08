@@ -1,0 +1,161 @@
+name: Forge best-lane continuation
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/best-lane-continuation-2026-11-08.md"]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  continue:
+    name: Continue ${{ matrix.lane }} branch
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - lane: language
+            artifact: forge-night-language-seed131-42445321887
+          - lane: blender
+            artifact: forge-night-blender-seed731-42445321887
+          - lane: godot
+            artifact: forge-night-godot-seed950-42445321887
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore artifacts/parent artifacts/candidate
+          gh run download 42445321887 --repo "$GITHUB_REPOSITORY" --name "${{ matrix.artifact }}" --dir restore
+          if [[ "${{ matrix.lane }}" == language ]]; then
+            cp -a restore/language/. source/
+            cp -a restore/parent/. artifacts/parent/
+            python - <<'PY'
+          import hashlib,torch
+          from pathlib import Path
+          p=Path("source/checkpoint.pt"); c=torch.load(p,map_location="cpu",weights_only=True)
+          d=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert c["step"]==106000 and c["seed"]==43 and d=="b038869062c3b051768b10b1f146aeb8fdde7419cfdd2e8ebdf54acfbc2ea42b"
+          print({"lane":"language","step":c["step"],"sha256":d})
+          PY
+          else
+            python - <<'PY'
+          from pathlib import Path
+          import shutil
+          roots=[p.parent for p in Path("restore").rglob("checkpoint.pt") if (p.parent/"source-manifest.json").exists() and (p.parent/"train.txt").exists() and (p.parent/"tokenizer.json").exists()]
+          if len(roots)!=1: raise SystemExit(f"Expected one specialist source, got {roots}")
+          shutil.copytree(roots[0],"source",dirs_exist_ok=True)
+          PY
+            cp source/checkpoint.pt artifacts/parent/checkpoint.pt
+            cp source/tokenizer.json artifacts/parent/tokenizer.json
+            cp source/source-manifest.json artifacts/parent/source-manifest.json
+            python - <<'PY'
+          import hashlib,json,torch
+          from pathlib import Path
+          p=Path("source/checkpoint.pt"); c=torch.load(p,map_location="cpu",weights_only=True)
+          d=hashlib.sha256(p.read_bytes()).hexdigest()
+          want={"blender":"672db59bfc44d026f26e38d781c84dd24f92882c65b888639ec66a790002ed68","godot":"de7de5052f0a56d821ea3995f1f2e5fbb80d10750e4fb3a564f3c6c4a2a0afdf"}["${{ matrix.lane }}"]
+          assert d==want and c["lane"]=="${{ matrix.lane }}" and c["lane_updates"]==1500
+          assert json.loads(Path("source/source-manifest.json").read_text())["lane"]=="${{ matrix.lane }}"
+          print({"lane":c["lane"],"updates":c["lane_updates"],"sha256":d})
+          PY
+          fi
+      - name: Continue language from its verified 106k checkpoint
+        if: matrix.lane == 'language'
+        run: |
+          python -m forge_core.neural.conservative_followup_106k --source source --out artifacts/candidate --steps 1000 --eval-every 250 --patience 2 --lr 0.0000125 --sampler-seed 0
+      - name: Continue isolated specialist branch
+        if: matrix.lane != 'language'
+        run: |
+          python -m forge_core.neural.specialist_followup --lane "${{ matrix.lane }}" --source source --out artifacts/candidate --steps 1000 --eval-every 250 --patience 2 --learning-rate 0.000025
+      - name: Evaluate language parent and candidate
+        if: matrix.lane == 'language'
+        run: |
+          python -m forge_core.neural.preschool_eval --checkpoint-dir artifacts/parent --out artifacts/parent/capabilities.json
+          python -m forge_core.neural.preschool_eval --checkpoint-dir artifacts/candidate --out artifacts/candidate/capabilities.json
+          python -m forge_core.neural.fresh_language_eval --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-capabilities.json
+          python -m forge_core.neural.fresh_language_eval --checkpoint-dir artifacts/candidate --out artifacts/candidate/fresh-capabilities.json
+      - name: Restore fresh pinned tool holdout
+        if: matrix.lane != 'language'
+        run: |
+          gh run download 42397469893 --repo "$GITHUB_REPOSITORY" --name "forge-fresh-eval-${{ matrix.lane }}-42397469893" --dir fresh-restore
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          ms=list(Path("fresh-restore").rglob("holdout-manifest.json"))
+          if len(ms)!=1: raise SystemExit(f"Expected one manifest, got {ms}")
+          shutil.copytree(ms[0].parent,"freshdata",dirs_exist_ok=True)
+          PY
+      - name: Score same fresh manual/task evaluation
+        if: matrix.lane != 'language'
+        run: |
+          python -m forge_core.neural.tool_capability_eval --lane "${{ matrix.lane }}" --data-dir freshdata --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-evaluation.json
+          python -m forge_core.neural.tool_capability_eval --lane "${{ matrix.lane }}" --data-dir freshdata --checkpoint-dir artifacts/candidate --out artifacts/candidate/fresh-evaluation.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-followup-${{ matrix.lane }}-${{ github.run_id }}
+          path: |
+            artifacts/
+            source/
+            freshdata/
+          retention-days: 90
+          if-no-files-found: warn
+  archive:
+    needs: continue
+    if: always() && needs.continue.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all lane results
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+      - name: Summarize parent-to-candidate changes
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for path in sorted(glob.glob("bundle/**/candidate/metrics.json",recursive=True)):
+              m=json.load(open(path,encoding="utf-8")); lane=m["lane"]; base=os.path.dirname(os.path.dirname(path)); ev={}
+              for role in ("parent","candidate"):
+                  p=os.path.join(base,role,"fresh-evaluation.json")
+                  if os.path.exists(p):
+                      e=json.load(open(p,encoding="utf-8"))
+                      ev[role]=(e.get("fresh_document_loss"),e.get("capability_probe",{}).get("correct"),e.get("capability_probe",{}).get("total"))
+              rows.append((lane,m,ev))
+          if len(rows)!=3: raise SystemExit(f"Expected 3 lane reports, found {len(rows)}")
+          with open("bundle/BEST-LANE-CONTINUATION-2026-11-08.md","w") as f:
+              f.write("# Forge best-lane continuation — 2026-11-08\n\nResearch-only. Each lane resumed its verified parent and optimizer state; weights remained isolated. Token loss and forced-choice probes do not establish practical competence. No Android integration or promotion.\n\n")
+              f.write("| Lane | Updates | Validation parent → selected | Test parent → selected | Fresh docs loss parent → candidate | Fresh task score parent → candidate | Candidate SHA-256 |\n|---|---:|---:|---:|---:|---:|---|\n")
+              for lane,m,ev in rows:
+                  if lane=="language":
+                      vals=(m["actual_updates_completed"],m["parent_validation_loss_2048"],m["selected_validation_loss_2048"],m["parent_independent_test_loss_2048"],m["selected_independent_test_loss_2048"],"n/a","n/a",m["selected_checkpoint_sha256"])
+                  else:
+                      vals=(m["updates_this_run"],m["parent_validation_loss"],m["selected_validation_loss"],m["parent_test_loss"],m["selected_test_loss"],f"{ev.get('parent',(None,None,None))[0]} → {ev.get('candidate',(None,None,None))[0]}",f"{ev.get('parent',(None,None,None))[1:] } → {ev.get('candidate',(None,None,None))[1:]}",m["selected_checkpoint_sha256"])
+                  f.write(f"| {lane} | {vals[0]} | {vals[1]} → {vals[2]} | {vals[3]} → {vals[4]} | {vals[5]} | {vals[6]} | {vals[7]} |\n")
+          PY
+      - name: Archive exact bundles in a draft release
+        run: |
+          set -euo pipefail
+          tag="forge-best-lane-followup-$GITHUB_RUN_ID"
+          tar -czf "$tag.tar.gz" -C bundle .
+          printf '%s\n' "Three bounded continuation runs from the best verified Forge language, Blender, and Godot branches. Checkpoints, optimizer/RNG state, source hashes, and evaluations are archived. Research-only; no Android promotion or capability claim." > notes.md
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" --draft --prerelease --title "Forge best-lane continuation — run $GITHUB_RUN_ID" --notes-file notes.md
