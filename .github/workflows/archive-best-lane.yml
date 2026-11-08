@@ -25,7 +25,7 @@ jobs:
           rows=[]
           for path in sorted(glob.glob("bundle/**/candidate/metrics.json",recursive=True)):
               m=json.load(open(path,encoding="utf-8"))
-              lane="language" if "/language-" in path else m.get("lane")
+              lane="language" if "language-" in path else m.get("lane")
               if not lane: raise SystemExit(f"Cannot determine lane from {path}")
               base=os.path.dirname(os.path.dirname(path)); ev={}
               for role in ("parent","candidate"):
