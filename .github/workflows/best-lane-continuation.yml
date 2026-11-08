@@ -134,7 +134,7 @@ jobs:
           import glob,json,os
           rows=[]
           for path in sorted(glob.glob("bundle/**/candidate/metrics.json",recursive=True)):
-              m=json.load(open(path,encoding="utf-8")); lane=("language" if "/language-" in path else m.get("lane")); base=os.path.dirname(os.path.dirname(path)); ev={}
+              m=json.load(open(path,encoding="utf-8")); lane=("language" if "language-" in path else m.get("lane")); base=os.path.dirname(os.path.dirname(path)); ev={}
               for role in ("parent","candidate"):
                   p=os.path.join(base,role,"fresh-evaluation.json")
                   if os.path.exists(p):
