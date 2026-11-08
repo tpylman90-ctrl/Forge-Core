@@ -213,13 +213,15 @@ jobs:
       - name: Write compact 12-trial comparison
         run: |
           python - <<'PY'
-          import glob, json, os
+          import glob, json, os, re
           rows=[]
           for path in sorted(glob.glob("bundle/**/metrics.json", recursive=True)):
               with open(path, encoding="utf-8") as f: m=json.load(f)
               lane=m.get("lane")
+              seed_match=re.search(r"seed([0-9]+)", path)
+              matrix_seed=int(seed_match.group(1)) if seed_match else None
               if lane == "language":
-                  rows.append({"lane":lane,"seed":m["sampler_seed"],
+                  rows.append({"lane":lane,"seed":matrix_seed,
                     "updates":m["actual_updates_completed"],
                     "parent_step":m["parent_step"],"selected_step":m["selected_global_step"],
                     "valid_parent":m["parent_validation_loss_2048"],
@@ -229,7 +231,7 @@ jobs:
                     "sha":m["selected_checkpoint_sha256"]})
               else:
                   cfg=m.get("training_config",{})
-                  rows.append({"lane":lane,"seed":cfg.get("seed"),
+                  rows.append({"lane":lane,"seed":matrix_seed if matrix_seed is not None else cfg.get("seed"),
                     "updates":m.get("updates"),"parent_step":m.get("parent_step"),
                     "selected_step":None,
                     "valid_parent":m.get("validation_loss_parent"),
