@@ -1,0 +1,266 @@
+name: Forge overnight controlled 12-trial growth batch
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/night-growth-batch-2026-11-07.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  prepare-tool-data:
+    name: Pin ${{ matrix.lane }} training source once
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [blender, godot]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install source preparation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Fetch, pin, and hash the lane source once
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from forge_core.neural.multilane_v1 import fetch_manual
+          lane = "${{ matrix.lane }}"
+          manifest = fetch_manual(lane, Path("source"))
+          print(json.dumps({"lane": lane, "manifest": manifest}, indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-night-manual-${{ matrix.lane }}-${{ github.run_id }}
+          path: source/
+          retention-days: 90
+          if-no-files-found: error
+
+  train-tools:
+    name: ${{ matrix.lane }} seed ${{ matrix.seed }}
+    needs: prepare-tool-data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - lane: blender
+            seed: 731
+          - lane: blender
+            seed: 732
+          - lane: blender
+            seed: 733
+          - lane: blender
+            seed: 734
+          - lane: godot
+            seed: 947
+          - lane: godot
+            seed: 948
+          - lane: godot
+            seed: 949
+          - lane: godot
+            seed: 950
+    env:
+      SOURCE_RUN: "42143390701"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install specialist CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Download the shared immutable lane dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-night-manual-${{ matrix.lane }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}-seed${{ matrix.seed }}/source
+      - name: Restore and verify original Forge 95k parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-v07-continuation --dir source
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          p=Path("source/checkpoint.pt")
+          ckpt=torch.load(p,map_location="cpu",weights_only=True)
+          digest=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ckpt["step"] == 95000
+          assert digest == "a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a"
+          print({"step":ckpt["step"],"sha256":digest,"lane":"${{ matrix.lane }}",
+                 "seed":int("${{ matrix.seed }}")})
+          PY
+      - name: Train one bounded independent specialist branch
+        run: |
+          python -m forge_core.neural.multilane_v1 \
+            --lane "${{ matrix.lane }}" --source source \
+            --out "artifacts/${{ matrix.lane }}-seed${{ matrix.seed }}" \
+            --seconds 900 --max-updates 1500 --learning-rate 0.00005 \
+            --seed "${{ matrix.seed }}" --eval-every 250 --patience 3
+      - name: Upload lane checkpoint and provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-night-${{ matrix.lane }}-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}-seed${{ matrix.seed }}/
+          retention-days: 90
+          if-no-files-found: warn
+
+  train-language:
+    name: language sampler ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        seed: [43, 73, 101, 131]
+    env:
+      SOURCE_RUN: "42428173279"
+      PARENT_ARTIFACT: "forge-seed-followup-103k-42428173279"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install language CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore latest verified Forge 105k parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p study source artifacts/parent artifacts/language
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$PARENT_ARTIFACT" --dir study
+          cp -a study/language/. source/
+          python - <<'PY'
+          import hashlib, torch
+          from pathlib import Path
+          p=Path("source/checkpoint.pt")
+          ckpt=torch.load(p,map_location="cpu",weights_only=True)
+          digest=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ckpt["step"] == 105000
+          assert digest == "379cd45eb95e74c72a91aaa5dd68f5efb266c4626198279d2fb021a019102bf4"
+          assert ckpt["lr"] == 0.0000125
+          print({"step":ckpt["step"],"sha256":digest,"seed":int("${{ matrix.seed }}")})
+          PY
+          cp source/checkpoint.pt artifacts/parent/checkpoint.pt
+          cp source/tokenizer.json artifacts/parent/tokenizer.json
+          cp source/source-manifest.json artifacts/parent/source-manifest.json
+      - name: Run small uniform continuation
+        run: |
+          python -m forge_core.neural.conservative_followup_105k \
+            --source source --out artifacts/language \
+            --steps 1000 --eval-every 250 --patience 2 --lr 0.0000125 \
+            --sampler-seed "${{ matrix.seed }}"
+      - name: Evaluate fixed and fresh language probes
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/capabilities.json
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/fresh-capabilities.json
+      - name: Upload language checkpoint and provenance
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-night-language-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 90
+          if-no-files-found: warn
+
+  archive:
+    name: Compare and preserve all night trials
+    runs-on: ubuntu-24.04
+    needs: [prepare-tool-data, train-tools, train-language]
+    if: always() && needs.prepare-tool-data.result == 'success' && needs.train-tools.result == 'success' && needs.train-language.result == 'success'
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all training artifacts
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+      - name: Write compact 12-trial comparison
+        run: |
+          python - <<'PY'
+          import glob, json, os
+          rows=[]
+          for path in sorted(glob.glob("bundle/**/metrics.json", recursive=True)):
+              with open(path, encoding="utf-8") as f: m=json.load(f)
+              lane=m.get("lane")
+              if lane == "language":
+                  rows.append({"lane":lane,"seed":m["sampler_seed"],
+                    "updates":m["actual_updates_completed"],
+                    "parent_step":m["parent_step"],"selected_step":m["selected_global_step"],
+                    "valid_parent":m["parent_validation_loss_2048"],
+                    "valid_candidate":m["selected_validation_loss_2048"],
+                    "test_parent":m["parent_independent_test_loss_2048"],
+                    "test_candidate":m["selected_independent_test_loss_2048"],
+                    "sha":m["selected_checkpoint_sha256"]})
+              else:
+                  cfg=m.get("training_config",{})
+                  rows.append({"lane":lane,"seed":cfg.get("seed"),
+                    "updates":m.get("updates"),"parent_step":m.get("parent_step"),
+                    "selected_step":None,
+                    "valid_parent":m.get("validation_loss_parent"),
+                    "valid_candidate":m.get("validation_loss_selected"),
+                    "test_parent":m.get("test_loss_parent"),
+                    "test_candidate":m.get("test_loss_candidate"),
+                    "sha":m.get("candidate_checkpoint_sha256")})
+          with open("bundle/NIGHT-GROWTH-BATCH.md","w",encoding="utf-8") as out:
+              out.write("# Forge controlled night growth batch\n\n")
+              out.write("Four sampler-seed trials per lane. Language resumes the verified 105k checkpoint. Blender and Godot are isolated branches from the verified 95k Forge parent and train on one shared, hash-pinned manual split per lane. Tool-lane lesson cards are original CC0 task/answer/why examples. No teacher weights are copied into Forge. Results are research-only.\n\n")
+              out.write("| Lane | Seed | Updates | Parent step | Validation parent → candidate | Test parent → candidate | Candidate SHA-256 |\n|---|---:|---:|---:|---:|---:|---|\n")
+              for r in rows:
+                  out.write(f"| {r['lane']} | {r['seed']} | {r['updates']} | {r['parent_step']} | {r['valid_parent']} → {r['valid_candidate']} | {r['test_parent']} → {r['test_candidate']} | {r['sha']} |\n")
+          print("Indexed",len(rows),"trial reports")
+          if len(rows)!=12: raise SystemExit(f"Expected 12 trials; found {len(rows)}")
+          PY
+      - name: Preserve the complete overnight research bundle
+        run: |
+          set -euo pipefail
+          tag="forge-night-growth-${GITHUB_RUN_ID}"
+          tar -czf "${tag}.tar.gz" -C bundle .
+          cat > release-notes.md <<EOF
+          Twelve bounded research trials: four matched sampler seeds each for
+          language, Blender, and Godot. Language resumes the verified 105k Forge
+          checkpoint; tool-specialist candidates remain separate branches from
+          the verified 95k Forge parent. Original CC0 task/answer/why cards are
+          included in specialist lane training. Teacher model weights are not
+          copied into Forge. No candidate is capability-certified or promoted
+          to Android.
+          EOF
+          gh release create "$tag" "${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge controlled night growth batch — run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
