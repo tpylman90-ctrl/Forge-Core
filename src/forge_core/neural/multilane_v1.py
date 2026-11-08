@@ -17,6 +17,7 @@ import os
 from pathlib import Path
 import random
 import time
+import urllib.error
 import urllib.request
 
 import torch
@@ -161,11 +162,43 @@ class ManualText(HTMLParser):
 
 def fetch_manual(lane: str, out: Path) -> dict:
     config = SOURCES[lane]
+    manifest_path = out / "source-manifest.json"
+    if manifest_path.exists():
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        if manifest.get("lane") != lane or manifest.get("version") != config["version"]:
+            raise ValueError("Cached manual corpus lane/version mismatch")
+        expected_urls = [item["url"] for item in manifest.get("pages", [])]
+        if expected_urls != config["urls"]:
+            raise ValueError("Cached manual corpus URL set mismatch")
+        for split in ("train", "valid", "test"):
+            if sha256_file(out / f"{split}.txt") != manifest.get(f"{split}_sha256"):
+                raise ValueError(f"Cached manual {split} hash mismatch")
+        lesson_text = "\n\n".join(
+            f"Task: {item['task']}\nAnswer:\n{item['answer']}\nWhy:\n{item['why']}"
+            for item in LESSONS[lane]
+        )
+        if sha256_bytes(lesson_text.encode("utf-8")) != manifest.get("lesson_sha256"):
+            raise ValueError("Cached teacher lesson cards differ from the current source")
+        return manifest
+
     pages, texts = [], []
     for url in config["urls"]:
         request = urllib.request.Request(url, headers={"User-Agent": "Forge-Core-Research/1.0"})
-        with urllib.request.urlopen(request, timeout=45) as response:
-            raw, final_url = response.read(), response.geturl()
+        for attempt in range(8):
+            try:
+                with urllib.request.urlopen(request, timeout=45) as response:
+                    raw, final_url = response.read(), response.geturl()
+                break
+            except urllib.error.HTTPError as exc:
+                if exc.code != 429 and exc.code < 500:
+                    raise
+                if attempt == 7:
+                    raise
+                time.sleep(min(30, 2 ** attempt) + random.random())
+            except urllib.error.URLError:
+                if attempt == 7:
+                    raise
+                time.sleep(min(30, 2 ** attempt) + random.random())
         parser = ManualText()
         parser.feed(raw.decode("utf-8", errors="replace"))
         text = parser.text()
@@ -203,7 +236,7 @@ def fetch_manual(lane: str, out: Path) -> dict:
         "valid_utf8_bytes": (out / "valid.txt").stat().st_size,
         "test_utf8_bytes": (out / "test.txt").stat().st_size,
     }
-    (out / "source-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n")
     (out / "ATTRIBUTION.txt").write_text(
         f"{config['attribution']}\n{config['version']}\n"
         f"License: {config['license']}\n{config['license_url']}\n"
@@ -211,7 +244,6 @@ def fetch_manual(lane: str, out: Path) -> dict:
         encoding="utf-8",
     )
     return manifest
-
 
 def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0) -> tuple[str, dict]:
     """Fetch a fixed TinyStories train-stream slice beyond the trained prefix.
