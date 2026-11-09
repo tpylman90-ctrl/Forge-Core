@@ -1,0 +1,108 @@
+name: Forge language three-seed confirmation
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/language-confirmation-2026-11-09.md"]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  train:
+    name: Language confirmation sampler ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        seed: [43, 73, 101]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore the exact shared 106k parent and data
+        run: |
+          set -euo pipefail
+          mkdir -p restore artifacts/parent artifacts/candidate
+          gh run download 42445321887 --repo "$GITHUB_REPOSITORY" --name forge-night-language-seed131-42445321887 --dir restore
+          cp -a restore/language/. source/
+          cp -a restore/parent/. artifacts/parent/
+          python - <<'PY'
+          import hashlib,torch
+          from pathlib import Path
+          p=Path("source/checkpoint.pt"); c=torch.load(p,map_location="cpu",weights_only=True)
+          d=hashlib.sha256(p.read_bytes()).hexdigest()
+          assert c["step"]==106000 and c["seed"]==43
+          assert d=="b038869062c3b051768b10b1f146aeb8fdde7419cfdd2e8ebdf54acfbc2ea42b"
+          print({"parent_step":c["step"],"parent_sha256":d,"optimizer_resumed":bool(c.get("optimizer"))})
+          PY
+      - name: Continue from the shared parent with one explicit sampler seed
+        run: |
+          python -m forge_core.neural.conservative_followup_106k \
+            --source source --out artifacts/candidate --steps 1000 \
+            --eval-every 250 --patience 2 --lr 0.0000125 \
+            --sampler-seed "${{ matrix.seed }}"
+      - name: Compare capability probes on parent and candidate
+        run: |
+          python -m forge_core.neural.preschool_eval --checkpoint-dir artifacts/parent --out artifacts/parent/capabilities.json
+          python -m forge_core.neural.preschool_eval --checkpoint-dir artifacts/candidate --out artifacts/candidate/capabilities.json
+          python -m forge_core.neural.fresh_language_eval --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-capabilities.json
+          python -m forge_core.neural.fresh_language_eval --checkpoint-dir artifacts/candidate --out artifacts/candidate/fresh-capabilities.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-language-confirm-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 90
+          if-no-files-found: warn
+  archive:
+    needs: train
+    if: always() && needs.train.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all confirmation bundles
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+      - name: Summarize all three seeds
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for path in sorted(glob.glob("bundle/**/candidate/metrics.json",recursive=True)):
+              m=json.load(open(path,encoding="utf-8"))
+              rows.append((m,os.path.dirname(os.path.dirname(path))))
+          if len(rows)!=3: raise SystemExit(f"Expected 3 seed reports, found {len(rows)}")
+          rows.sort(key=lambda x:x[0]["requested_sampler_seed"])
+          with open("bundle/LANGUAGE-THREE-SEED-CONFIRMATION.md","w",encoding="utf-8") as f:
+              f.write("# Forge language three-seed confirmation — 2026-11-09\n\n")
+              f.write("All three candidates start from the same verified 106k checkpoint, resume the same optimizer moments, use the same pinned TinyStories source and fixed evaluation slices, and differ only in explicit sampler seed. Parent is retained if validation does not improve. Results are research-only; capability probes are not certification.\n\n")
+              f.write("| Sampler seed | Updates | Selected step | Validation parent → selected | Independent test parent → selected | Forced choice parent → candidate | Mirrored pairs both right | Candidate selected SHA-256 |\n|---:|---:|---:|---:|---:|---:|---:|---|\n")
+              for m,base in rows:
+                  caps=[]
+                  for role in ("parent","candidate"):
+                      p=os.path.join(base,role,"capabilities.json")
+                      x=json.load(open(p,encoding="utf-8")) if os.path.exists(p) else {}
+                      caps.append(x.get("forced_choice",{}).get("correct"))
+                  f.write(f"| {m['requested_sampler_seed']} | {m['actual_updates_completed']} | {m['selected_global_step']} | {m['parent_validation_loss_2048']} → {m['selected_validation_loss_2048']} | {m['parent_independent_test_loss_2048']} → {m['selected_independent_test_loss_2048']} | {caps[0]} → {caps[1]} / 40 | see candidate metrics.json |\n")
+          PY
+      - name: Preserve full bundle as a draft release
+        run: |
+          set -euo pipefail
+          tag="forge-language-confirmation-$GITHUB_RUN_ID"
+          tar -czf "$tag.tar.gz" -C bundle .
+          printf '%s\n' "Three matched 1,000-update language continuations from the verified Forge 106k parent, using sampler seeds 43, 73, and 101. Includes exact parent/candidate/last checkpoints, optimizer state, pinned data, hashes, capability checks, and report. Research-only; no certification or Android promotion." > notes.md
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" --draft --prerelease --title "Forge language three-seed confirmation — run $GITHUB_RUN_ID" --notes-file notes.md
