@@ -1,0 +1,1 @@
+Three matched language continuations from the verified 106k parent using sampler seeds 43, 73, and 101. Keep the 107k candidate separate for comparison.
