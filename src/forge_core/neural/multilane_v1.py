@@ -345,6 +345,11 @@ def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0) -> t
     blocked = {story_hash(item) for item in complete_stories(
         (train_text.rstrip() + "\n\n" + valid_text).encode("utf-8")
     )}
+    for prior_path in exclude_paths:
+        if prior_path.exists():
+            blocked.update(story_hash(item) for item in complete_stories(
+                prior_path.read_bytes()
+            ))
     before = len(complete_stories(complete_range))
     test_text, document_count = clean_prefix(complete_range, blocked=blocked)
     if not test_text.strip():
@@ -365,10 +370,11 @@ def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0) -> t
         "range_start_inclusive": start,
         "range_end_inclusive": end,
         "byte_offset_after_training_prefix": byte_offset,
+        "sample_bytes": sample_bytes,
         "raw_range_sha256": sha256_bytes(raw),
         "complete_records_before_duplicate_filter": before,
         "exact_train_or_validation_duplicates_removed": before - document_count,
-        "policy": "pinned training prefix followed by a separate 4 MiB byte-range reserved for evaluation; byte_offset_after_training_prefix records skipped evaluation ranges",
+        "policy": "pinned training prefix followed by a separate fixed byte-range reserved for evaluation; byte_offset_after_training_prefix records skipped ranges",
     }
     return test_text, enriched
 
