@@ -541,6 +541,9 @@ def main():
         "fresh_document_loss": report["fresh_document_loss"],
         "task_correct": report["capability_probe"]["correct"],
         "task_total": report["capability_probe"]["total"],
+        "label_selection_correct": report["capability_probe"]["label_selection_probe"]["correct"],
+        "label_selection_total": report["capability_probe"]["label_selection_probe"]["total"],
+        "label_all_four_rotations_correct": report["capability_probe"]["label_selection_probe"]["all_four_rotations_correct"],
     }, indent=2))
 
 
