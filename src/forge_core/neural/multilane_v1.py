@@ -67,58 +67,117 @@ SOURCES = {
     },
 }
 
-# Original Forge-Core lesson cards. These are authored for this project (CC0-1.0);
-# they are separate from the licensed manual prose and carry explicit why steps.
+# Original Forge-Core lesson cards. Authored for this project and released as CC0-1.0.
+# Each card asks for an action, provides a worked answer, and explains why it works.
 LESSONS = {
     "blender": [
         {
-            "task": "Create a two-unit cube and add a clean three-segment bevel.",
-            "answer": "import bpy\nbpy.ops.mesh.primitive_cube_add(size=2)\nobj = bpy.context.object\nobj.name = 'Beveled_Block'\nbpy.ops.object.transform_apply(location=False, rotation=False, scale=True)\nbevel = obj.modifiers.new('Edge_Bevel', 'BEVEL')\nbevel.width = 0.08\nbevel.segments = 3\nobj.modifiers.new('Weighted_Normals', 'WEIGHTED_NORMAL')",
-            "why": "Apply non-uniform scale before setting a bevel width so the bevel remains consistent across faces. A weighted normal modifier improves hard-surface shading without changing the silhouette."
+            "task": "Build a tapered low-poly rock mesh from explicit vertices and faces.",
+            "answer": "import bpy\nvertices = [(-1, -0.7, 0), (0.8, -0.8, 0), (1, 0.6, 0), (-0.7, 0.9, 0), (-0.3, -0.2, 1.2), (0.25, 0.35, 1.0)]\nfaces = [(0, 1, 4), (1, 2, 5, 4), (2, 3, 5), (3, 0, 4, 5), (0, 3, 2, 1)]\nmesh = bpy.data.meshes.new('Rock_Mesh')\nmesh.from_pydata(vertices, [], faces)\nmesh.update()\nrock = bpy.data.objects.new('Low_Poly_Rock', mesh)\nbpy.context.collection.objects.link(rock)",
+            "why": "Mesh.from_pydata takes vertex coordinates, optional edges, and face index lists. Creating the object separately keeps mesh data and scene object identity clear; the object must be linked into a collection to appear in the scene."
         },
         {
-            "task": "Move an object's origin to the center of its geometry before export.",
-            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None:\n    raise RuntimeError('Select an object first')\nbpy.context.view_layer.objects.active = obj\nobj.select_set(True)\nbpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')",
-            "why": "A useful origin makes rotation, placement, and engine-side transforms predictable. The operation needs the intended object selected and active."
+            "task": "Create a two-unit cube and add a three-segment bevel modifier.",
+            "answer": "import bpy\nbpy.ops.mesh.primitive_cube_add(size=2)\nobj = bpy.context.object\nobj.name = 'Beveled_Block'\nbpy.ops.object.transform_apply(location=False, rotation=False, scale=True)\nbevel = obj.modifiers.new('Edge_Bevel', 'BEVEL')\nbevel.width = 0.08\nbevel.segments = 3",
+            "why": "Applying scale before setting bevel width helps keep the edge width consistent when the object was non-uniformly scaled. A modifier keeps the edit non-destructive until it is applied."
         },
         {
-            "task": "Export only the selected object as a binary glTF file.",
-            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None:\n    raise RuntimeError('Select an object first')\nbpy.ops.object.select_all(action='DESELECT')\nobj.select_set(True)\nbpy.context.view_layer.objects.active = obj\nbpy.ops.export_scene.gltf(filepath='asset.glb', export_format='GLB', use_selection=True)",
-            "why": "A selection-only export prevents unrelated scene objects from entering the asset package. Check materials and scale again after importing the GLB into the target engine."
-        }
+            "task": "Set the active mesh object's origin to its geometry bounds center.",
+            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None or obj.type != 'MESH':\n    raise RuntimeError('Select a mesh object first')\nbpy.context.view_layer.objects.active = obj\nobj.select_set(True)\nbpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='BOUNDS')",
+            "why": "The origin is the object transform pivot. Checking the active object and type before using an operator makes the script fail clearly when its precondition is missing."
+        },
+        {
+            "task": "Export only the active mesh as a binary GLB file.",
+            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None or obj.type != 'MESH':\n    raise RuntimeError('Select a mesh object first')\nbpy.ops.object.select_all(action='DESELECT')\nobj.select_set(True)\nbpy.context.view_layer.objects.active = obj\nbpy.ops.export_scene.gltf(filepath='asset.glb', export_format='GLB', use_selection=True)",
+            "why": "Restricting the exporter to the intended selection prevents cameras, lights, and unrelated scene objects from entering the asset. Inspect the exported file in the target engine as a separate check."
+        },
+        {
+            "task": "Add a named material and assign a blue viewport color to an active mesh.",
+            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None or obj.type != 'MESH':\n    raise RuntimeError('Select a mesh object first')\nmat = bpy.data.materials.new('Enamel_Blue')\nmat.diffuse_color = (0.08, 0.25, 0.8, 1.0)\nobj.data.materials.append(mat)",
+            "why": "A material datablock can be created independently and assigned through the mesh material slots. The diffuse color is a four-component RGBA value used for viewport display and related material settings."
+        },
+        {
+            "task": "Add a weighted-normal modifier after creating hard-surface bevels.",
+            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None or obj.type != 'MESH':\n    raise RuntimeError('Select a mesh object first')\nobj.modifiers.new('Weighted_Normals', 'WEIGHTED_NORMAL')",
+            "why": "A weighted-normal modifier changes shading normals to influence how the surface is lit; it does not add bevel geometry. Modifier order should be reviewed because the stack is evaluated in order."
+        },
+        {
+            "task": "Create and link a named collection, then move the active object into it.",
+            "answer": "import bpy\nobj = bpy.context.active_object\nif obj is None:\n    raise RuntimeError('Select an object first')\ncollection = bpy.data.collections.new('Generated_Props')\nbpy.context.scene.collection.children.link(collection)\nfor old_collection in list(obj.users_collection):\n    old_collection.objects.unlink(obj)\ncollection.objects.link(obj)",
+            "why": "Collections organize scene objects. An object must be unlinked from its old collections before being moved when the goal is exclusive membership."
+        },
+        {
+            "task": "Make a duplicate object with an independent copy of its mesh data.",
+            "answer": "import bpy\nsource = bpy.context.active_object\nif source is None or source.type != 'MESH':\n    raise RuntimeError('Select a mesh object first')\nduplicate = source.copy()\nduplicate.data = source.data.copy()\nduplicate.name = source.name + '_Independent'\nbpy.context.collection.objects.link(duplicate)",
+            "why": "Copying an object alone can leave it sharing the original mesh datablock. Copying both object and mesh data allows later mesh edits to remain independent."
+        },
     ],
     "godot": [
         {
-            "task": "Load a PackedScene, instantiate it, and add the instance to the current scene.",
-            "answer": "var actor_scene: PackedScene = load('res://actors/actor.tscn')\nif actor_scene == null:\n    push_error('Actor scene could not be loaded')\n    return\nvar actor := actor_scene.instantiate()\nadd_child(actor)",
-            "why": "A PackedScene is a reusable resource; instantiate it to create a live node tree. Add the new root to the intended parent so it enters the active scene."
+            "task": "Load a PackedScene, instantiate it, and add the instance under the current node.",
+            "answer": "var actor_scene: PackedScene = preload('res://actors/actor.tscn')\nvar actor: Node = actor_scene.instantiate()\nadd_child(actor)",
+            "why": "A PackedScene is a reusable scene resource. instantiate() creates a live node hierarchy, and add_child() inserts it into the active tree under the intended parent."
         },
         {
-            "task": "Connect a Button press signal to a method in the current script.",
-            "answer": "func _ready() -> void:\n    $Button.pressed.connect(_on_button_pressed)\n\nfunc _on_button_pressed() -> void:\n    print('Button pressed')",
-            "why": "Signal connections let a node announce an event without owning the receiver's behavior. Connect once during setup and keep the response in a named callback."
+            "task": "Declare and emit a typed health_changed signal when health is updated.",
+            "answer": "signal health_changed(current_health: int)\nvar health: int = 100\n\nfunc set_health(value: int) -> void:\n    health = value\n    health_changed.emit(health)",
+            "why": "A signal reports an event to connected listeners without requiring the emitting node to know which node will respond. A typed argument documents the value passed to listeners."
         },
         {
-            "task": "Create a triangle using ArrayMesh from three vertices.",
+            "task": "Move a CharacterBody3D using input, gravity, and physics-step movement.",
+            "answer": "extends CharacterBody3D\n@export var speed: float = 5.0\n@export var gravity: float = 9.8\n\nfunc _physics_process(delta: float) -> void:\n    var input := Input.get_vector('move_left', 'move_right', 'move_forward', 'move_back')\n    velocity.x = input.x * speed\n    velocity.z = input.y * speed\n    if not is_on_floor():\n        velocity.y -= gravity * delta\n    move_and_slide()",
+            "why": "CharacterBody movement is scripted in the physics callback. Gravity is applied by the script, and move_and_slide() performs collision-aware movement using the body velocity."
+        },
+        {
+            "task": "Build one triangle surface with ArrayMesh from three vertices and indices.",
             "answer": "var arrays := []\narrays.resize(Mesh.ARRAY_MAX)\narrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([Vector3.ZERO, Vector3.RIGHT, Vector3.UP])\narrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])\nvar mesh := ArrayMesh.new()\nmesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)",
-            "why": "ArrayMesh stores vertex attributes in indexed array slots. The vertex and index arrays describe one triangle; normals and UVs can be added when lighting or texturing requires them."
-        }
-    ]
+            "why": "ArrayMesh receives vertex attributes in indexed slots. The index list selects the three vertices that form a triangle; extra arrays can be supplied for normals, UVs, and other attributes."
+        },
+        {
+            "task": "Convert a local point on a Node3D into world coordinates.",
+            "answer": "var world_point: Vector3 = node.to_global(local_point)",
+            "why": "A Node3D transform is relative to its parent. to_global() applies the node's transform hierarchy to convert a local-space point to world space."
+        },
+        {
+            "task": "Connect a button's pressed signal to a named callback.",
+            "answer": "func _ready() -> void:\n    $Button.pressed.connect(_on_button_pressed)\n\nfunc _on_button_pressed() -> void:\n    print('Button pressed')",
+            "why": "Connecting during setup gives the event a clear receiver. A signal lets the button report an event without owning the behavior that responds to it."
+        },
+        {
+            "task": "Load a PackedScene from a runtime path, check the result, and instantiate it.",
+            "answer": "var packed: PackedScene = load(scene_path) as PackedScene\nif packed == null:\n    push_error('Could not load scene: ' + scene_path)\n    return\nvar instance := packed.instantiate()\nadd_child(instance)",
+            "why": "load() is useful when a resource path is selected at runtime. Checking the cast before calling instantiate() handles a missing resource or a path that points to the wrong resource type."
+        },
+        {
+            "task": "Delete a node safely after the current frame's scene operations.",
+            "answer": "queue_free()",
+            "why": "queue_free() schedules a node for deletion at the end of the frame, avoiding immediate destruction while the scene tree may still be processing it."
+        },
+    ],
 }
 
 TASK_PROMPTS = {
     "blender": [
-        "Write a Blender Python script that creates a tapered low-poly rock and gives it smooth shading.",
-        "Explain how to prepare a Blender object for a clean GLB export to a game engine.",
-        "Write a Blender Python script that adds a named bevel modifier to the active mesh and checks for no active object."
+        "Write a Blender Python script that creates a tapered low-poly rock mesh from vertices and faces.",
+        "Create a hard-surface cube with applied scale, a bevel modifier, and a clear object name.",
+        "Explain how object origin placement changes later rotation and placement.",
+        "Write a safe Blender script that exports only the active mesh to a GLB.",
+        "Create and assign a named material to the active mesh, including a viewport color.",
+        "Explain why a modifier stack's order can change the final mesh.",
+        "Write a script that moves the active object into a newly created collection.",
+        "Duplicate a mesh object so the duplicate has independent mesh data.",
     ],
     "godot": [
-        "Write GDScript that moves a CharacterBody3D from input in _physics_process and calls move_and_slide.",
-        "Explain when to use a signal instead of a direct node path dependency in a reusable Godot scene.",
-        "Write GDScript that loads a PackedScene, handles a missing resource, instantiates it, and attaches it to a parent."
+        "Write GDScript that loads and instantiates a PackedScene, reports a missing resource, and adds the node.",
+        "Declare a typed signal and emit it when a health value changes.",
+        "Write CharacterBody3D movement using physics input, gravity, and move_and_slide.",
+        "Create a triangle ArrayMesh from vertex and index arrays.",
+        "Explain local and global coordinates and convert a local Node3D point to world space.",
+        "Connect a Button.pressed signal to a named callback.",
+        "Explain why a signal can make a reusable scene less dependent on its parent.",
+        "Explain when queue_free is safer than immediate node deletion.",
     ],
 }
-
 
 
 def sha256_bytes(data: bytes) -> str:
