@@ -1,0 +1,109 @@
+name: Forge Seed v0.7 — 107k conservative continuation
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/core-language-followup-107k-2026-11-09.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: forge-core-language-followup-107k
+  cancel-in-progress: false
+
+jobs:
+  continue-language:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      SOURCE_RUN: "42539881351"
+      PARENT_ARTIFACT: "forge-language-confirm-seed43-42539881351"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the selected 107k parent and exact data
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore source artifacts/parent artifacts/language
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$PARENT_ARTIFACT" --dir restore
+          python - <<'PY'
+          import hashlib, json, shutil, torch
+          from pathlib import Path
+          roots=[p.parent for p in Path("restore").rglob("checkpoint.pt")
+                 if p.parent.name=="candidate"
+                 and all((p.parent/name).is_file() for name in
+                         ("tokenizer.json","source-manifest.json","train.txt","valid.txt","test.txt"))]
+          if len(roots)!=1: raise SystemExit(f"Expected one language candidate bundle, found {roots}")
+          root=roots[0]
+          checkpoint=root/"checkpoint.pt"
+          state=torch.load(checkpoint,map_location="cpu",weights_only=True)
+          sha=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+          expected="ed2f1395b52c3ae2c674e00f3b86f82ec26685e2d1c631f6eb975ddb3f05fe0f"
+          assert sha==expected,(sha,expected)
+          assert state["step"]==107000 and state["seed"]==43
+          assert state.get("optimizer") and state.get("torch_rng_state") is not None
+          manifest=json.loads((root/"source-manifest.json").read_text())
+          assert manifest["revision"]=="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          assert manifest["license"]=="cdla-sharing-1.0"
+          for split in ("train","valid","test"):
+              actual=hashlib.sha256((root/f"{split}.txt").read_bytes()).hexdigest()
+              if split=="test":
+                  assert actual==manifest.get("test_sha256",actual)
+              else:
+                  assert actual==manifest[f"{split}_sha256"]
+          shutil.copytree(root,"source",dirs_exist_ok=True)
+          shutil.copy2(checkpoint,"artifacts/parent/checkpoint.pt")
+          shutil.copy2(root/"tokenizer.json","artifacts/parent/tokenizer.json")
+          shutil.copy2(root/"source-manifest.json","artifacts/parent/source-manifest.json")
+          print(json.dumps({"parent_run":42539881351,"parent_step":state["step"],
+              "parent_sha256":sha,"seed":state["seed"],"tokenizer_sha256":
+              hashlib.sha256((root/"tokenizer.json").read_bytes()).hexdigest()},indent=2))
+          PY
+      - name: Continue with saved optimizer and sample RNG
+        run: |
+          python -m forge_core.neural.conservative_followup_107k \
+            --source source --out artifacts/language --steps 1000 \
+            --eval-every 250 --patience 2 --lr 0.0000125 --sampler-seed 0
+      - name: Compare parent and selected checkpoint on capability probes
+        run: |
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/capabilities.json
+          python -m forge_core.neural.preschool_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-capabilities.json
+          python -m forge_core.neural.fresh_language_eval \
+            --checkpoint-dir artifacts/language --out artifacts/language/fresh-capabilities.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-language-followup-107k-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Preserve research bundle as a draft release
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -f artifacts/language/metrics.json ]]; then
+            tag="forge-language-followup-107k-${GITHUB_RUN_ID}"
+            tar -czf "artifacts/${tag}.tar.gz" -C artifacts parent language
+            printf '%s\n' "Conservative 1,000-update continuation from the selected verified 107k Forge Seed checkpoint, with saved optimizer and sample RNG. Includes exact parent, candidate/last checkpoints, pinned TinyStories data, hashes, and capability diagnostics. Research-only; no Android promotion or capability certification." > artifacts/release-notes.md
+            gh release create "${tag}" "artifacts/${tag}.tar.gz" \
+              --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+              --title "Forge language follow-up from 107k — run ${GITHUB_RUN_ID}" \
+              --notes-file artifacts/release-notes.md
+          fi
