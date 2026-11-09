@@ -389,7 +389,7 @@ def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0,
         "sample_bytes": sample_bytes,
         "raw_range_sha256": sha256_bytes(raw),
         "complete_records_before_duplicate_filter": before,
-        "exact_train_or_validation_duplicates_removed": before - document_count,
+        "exact_duplicates_removed": before - document_count,
         "prior_test_files_excluded": [p.name for p in exclude_paths if p.exists()],
         "policy": "pinned training prefix followed by a separate fixed byte-range reserved for evaluation; byte_offset_after_training_prefix records skipped ranges",
     }
