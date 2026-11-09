@@ -1,0 +1,1 @@
+Evaluation-only comparison of the verified 107k parent and selected 107250 Forge Seed checkpoint on a new larger, disjoint pinned TinyStories range. No optimizer updates.
