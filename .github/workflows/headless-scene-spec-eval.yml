@@ -1,0 +1,130 @@
+name: Forge headless Blender and Godot scene-spec benchmark
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/headless-scene-spec-eval-2026-11-09.md"]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  evaluate:
+    name: Headless ${{ matrix.lane }} scene-spec audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [blender, godot]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU evaluation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-deps -e .
+      - name: Install pinned headless engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.lane }}" == "blender" ]]; then
+            sudo apt-get update
+            sudo apt-get install -y blender
+            blender --version | head -1
+          else
+            curl -fsSL "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip" -o godot.zip
+            echo "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  godot.zip" | sha256sum --check
+            unzip -q godot.zip -d godot-bin
+            chmod +x godot-bin/Godot_v4.7.2-stable_linux.x86_64
+            echo "$GITHUB_WORKSPACE/godot-bin" >> "$GITHUB_PATH"
+          fi
+      - name: Restore archived parent and selected lane checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p archived
+          gh run download 42541109934 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-tool-curriculum-v2-${{ matrix.lane }}-42541109934" --dir archived
+          python - <<'PY'
+          import shutil, torch
+          from pathlib import Path
+          root=Path("archived")
+          for role in ("parent","candidate"):
+              matches=[p.parent for p in root.rglob("checkpoint.pt")
+                       if p.parent.name==role and (p.parent/"tokenizer.json").is_file()]
+              if len(matches)!=1: raise SystemExit(f"Expected exactly one {role} checkpoint folder, found {matches}")
+              dest=Path("checkpoints")/role
+              dest.parent.mkdir(parents=True,exist_ok=True)
+              shutil.copytree(matches[0],dest)
+              ckpt=torch.load(dest/"checkpoint.pt",map_location="cpu",weights_only=True)
+              if ckpt.get("lane")!="${{ matrix.lane }}": raise SystemExit("Lane lineage mismatch")
+              print({"role":role,"lane":ckpt.get("lane"),"step":ckpt.get("step"),
+                     "lane_updates":ckpt.get("lane_updates"),"checkpoint_sha256":
+                     __import__("hashlib").sha256((dest/"checkpoint.pt").read_bytes()).hexdigest()})
+          PY
+      - name: Generate constrained specs and run fixed structural harnesses
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine=blender
+          if [[ "${{ matrix.lane }}" == "godot" ]]; then engine=Godot_v4.7.2-stable_linux.x86_64; fi
+          for role in parent candidate; do
+            python -m forge_core.neural.scene_spec_tool_eval \
+              --lane "${{ matrix.lane }}" --role "$role" \
+              --checkpoint-dir "checkpoints/$role" --engine "$engine" \
+              --out "results/${{ matrix.lane }}_ROLEVAR__.json"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-headless-scene-spec-${{ matrix.lane }}-${{ github.run_id }}
+          path: |
+            checkpoints/
+            results/
+          retention-days: 90
+          if-no-files-found: error
+  archive:
+    needs: evaluate
+    if: always() && needs.evaluate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download lane reports and write comparison
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for p in sorted(glob.glob("bundle/forge-headless-scene-spec-*/*.json")):
+              r=json.load(open(p,encoding="utf-8"))
+              if "spec_generation" in r: rows.append(r)
+          if len(rows)!=4: raise SystemExit(f"Expected four parent/candidate reports, got {len(rows)}")
+          lines=["# Forge headless Blender/Godot scene-spec evaluation — 2026-11-09","",
+                 "Evaluation-only. The models emitted constrained JSON; fixed, whitelisted harnesses built and inspected scenes. Generated text was never executed. A positive control verified each engine harness. No weights were updated. This tiny diagnostic does not certify practical tool competence.","",
+                 "| Lane | Checkpoint | Step | Spec/schema | Engine structure | Checkpoint SHA-256 |",
+                 "|---|---|---:|---|---|---|"]
+          for r in rows:
+              gen=r["spec_generation"]; forge=r["forge_scene"]; lineage=r["lineage"]
+              scene=("pass" if forge.get("valid") else "fail: "+str(forge.get("failure", "structural_check")))
+              lines.append(f"| {r['lane']} | {r['role']} | {lineage.get('step')} | {gen['parse_status']} | {scene} | {lineage['checkpoint_sha256']} |")
+          open("bundle/HEADLESS-SCENE-SPEC-RESULTS.md","w",encoding="utf-8").write("\n".join(lines)+"\n")
+          PY
+      - name: Preserve evaluation bundle as a draft release
+        run: |
+          set -euo pipefail
+          tag="forge-headless-scene-spec-$GITHUB_RUN_ID"
+          tar -czf "$tag.tar.gz" -C bundle .
+          printf '%s\n' "Evaluation-only Blender/Godot constrained JSON scene-spec audit. Includes archived lane checkpoints, exact prompts and raw outputs, engine versions, positive-control results, and structural reports. No training updates; not a practical competence certification." > notes.md
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --title "Forge headless scene-spec evaluation — run $GITHUB_RUN_ID" \
+            --notes-file notes.md
