@@ -125,7 +125,7 @@ def main() -> None:
         group["lr"] = args.lr
     torch.set_rng_state(parent["torch_rng_state"])
     rng = torch.Generator()
-    if args.sampler_seed == 0 or args.sampler_seed == 43:
+    if args.sampler_seed == 0:
         rng.set_state(parent["sample_rng_state"])
         effective_sampler_seed = int(parent.get("sampler_seed", parent["seed"]))
     else:
