@@ -57,7 +57,7 @@ HOLDOUTS = {
             "https://docs.godotengine.org/en/4.7/tutorials/physics/ray-casting.html",
             "https://docs.godotengine.org/en/4.7/classes/class_packedscene.html",
             "https://docs.godotengine.org/en/4.7/getting_started/step_by_step/signals.html",
-            "https://docs.godotengine.org/en/4.7/tutorials/physics/physics_introduction.html",
+            "https://docs.godotengine.org/en/4.7/classes/class_characterbody2d.html",
             "https://docs.godotengine.org/en/4.7/classes/class_node3d.html",
         ],
     },
