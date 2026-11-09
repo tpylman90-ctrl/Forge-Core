@@ -304,17 +304,22 @@ def fetch_manual(lane: str, out: Path) -> dict:
     )
     return manifest
 
-def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0) -> tuple[str, dict]:
-    """Fetch a fixed TinyStories train-stream slice beyond the trained prefix.
+def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0,
+                        sample_bytes: int = 4 * 1024 * 1024,
+                        exclude_paths: tuple[Path, ...] = ()) -> tuple[str, dict]:
+    """Fetch a fixed TinyStories byte range beyond the trained prefix.
 
-    byte_offset selects a later non-training range for fresh final evaluation.
+    byte_offset selects a later non-training range; sample_bytes must be a
+    positive multiple of 4 MiB. Optional prior test files are excluded exactly.
     """
     from forge_core.neural.pinned_corpus import clean_prefix, complete_stories, story_hash
 
     train_limit = int(manifest["source_train_bytes_requested"])
-    if byte_offset < 0 or byte_offset % (4 * 1024 * 1024):
+    block_size = 4 * 1024 * 1024
+    if byte_offset < 0 or byte_offset % block_size:
         raise ValueError("Test offset must be a nonnegative multiple of 4 MiB")
-    sample_bytes = 4 * 1024 * 1024
+    if sample_bytes < block_size or sample_bytes % block_size:
+        raise ValueError("Test sample size must be a positive multiple of 4 MiB")
     start = train_limit + byte_offset
     end = start + sample_bytes - 1
     request = urllib.request.Request(
@@ -324,10 +329,21 @@ def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0) -> t
             "Range": f"bytes={start}-{end}",
         },
     )
-    with urllib.request.urlopen(request, timeout=90) as response:
-        raw = response.read(sample_bytes)
-        content_range = response.headers.get("Content-Range", "")
-        status = response.status
+    for attempt in range(5):
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                raw = response.read(sample_bytes)
+                content_range = response.headers.get("Content-Range", "")
+                status = response.status
+            break
+        except urllib.error.HTTPError as exc:
+            if (exc.code != 429 and exc.code < 500) or attempt == 4:
+                raise
+            time.sleep(min(16, 2 ** attempt) + random.random())
+        except (urllib.error.URLError, TimeoutError):
+            if attempt == 4:
+                raise
+            time.sleep(min(16, 2 ** attempt) + random.random())
     if status != 206 or not content_range.startswith(f"bytes {start}-"):
         raise ValueError("TinyStories server did not honor the independent byte-range request")
     if len(raw) != sample_bytes:
@@ -374,6 +390,7 @@ def fetch_language_test(source: Path, manifest: dict, byte_offset: int = 0) -> t
         "raw_range_sha256": sha256_bytes(raw),
         "complete_records_before_duplicate_filter": before,
         "exact_train_or_validation_duplicates_removed": before - document_count,
+        "prior_test_files_excluded": [p.name for p in exclude_paths if p.exists()],
         "policy": "pinned training prefix followed by a separate fixed byte-range reserved for evaluation; byte_offset_after_training_prefix records skipped ranges",
     }
     return test_text, enriched
