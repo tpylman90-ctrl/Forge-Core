@@ -96,8 +96,8 @@ jobs:
                   for role in ("parent","candidate"):
                       p=os.path.join(base,role,"capabilities.json")
                       x=json.load(open(p,encoding="utf-8")) if os.path.exists(p) else {}
-                      caps.append(x.get("forced_choice",{}).get("correct"))
-                  f.write(f"| {m['requested_sampler_seed']} | {m['actual_updates_completed']} | {m['selected_global_step']} | {m['parent_validation_loss_2048']} → {m['selected_validation_loss_2048']} | {m['parent_independent_test_loss_2048']} → {m['selected_independent_test_loss_2048']} | {caps[0]} → {caps[1]} / 40 | see candidate metrics.json |\n")
+                      caps.append(x.get("benchmarks",{}).get("forced_choice",{}).get("correct"))
+                  f.write(f"| {m['requested_sampler_seed']} | {m['actual_updates_completed']} | {m['selected_global_step']} | {m['parent_validation_loss_2048']} → {m['selected_validation_loss_2048']} | {m['parent_independent_test_loss_2048']} → {m['selected_independent_test_loss_2048']} | {caps[0]} → {caps[1]} / 40 | {m["selected_checkpoint_sha256"]} |\n")
           PY
       - name: Preserve full bundle as a draft release
         run: |
