@@ -367,6 +367,9 @@ def score_tasks(model: ByteTransformer, tokenizer: Tokenizer, lane: str) -> dict
     groups: dict[str, dict] = {}
     by_base: dict[str, list[bool]] = {}
     predicted_labels: dict[str, int] = {label: 0 for label in LABELS}
+    label_predicted_counts: dict[str, int] = {label: 0 for label in LABELS}
+    label_correct_by_base: dict[str, list[bool]] = {}
+    label_correct = 0
 
     def continuation_score(prefix: list[int], text: str) -> float:
         candidate = tokenizer.encode(" " + text).ids
@@ -394,6 +397,16 @@ def score_tasks(model: ByteTransformer, tokenizer: Tokenizer, lane: str) -> dict
         predicted = LABELS[predicted_index]
         predicted_labels[predicted] += 1
         correct = item["options"][predicted_index] == item["gold_text"]
+        # Separately score the model's next answer label conditioned on the
+        # complete question and option list. This exposes label/position bias
+        # that ranking full answer text alone can hide.
+        label_scores = [continuation_score(prefix, label) for label in LABELS]
+        predicted_label_index = max(range(4), key=lambda i: label_scores[i])
+        predicted_label = LABELS[predicted_label_index]
+        label_is_correct = predicted_label == item["gold"]
+        label_predicted_counts[predicted_label] += 1
+        label_correct += int(label_is_correct)
+        label_correct_by_base.setdefault(item["base_id"], []).append(label_is_correct)
         g = groups.setdefault(item["skill"], {"correct": 0, "total": 0})
         g["correct"] += int(correct)
         g["total"] += 1
@@ -401,12 +414,20 @@ def score_tasks(model: ByteTransformer, tokenizer: Tokenizer, lane: str) -> dict
         results.append({
             "id": item["id"], "base_id": item["base_id"], "skill": item["skill"],
             "gold": item["gold"], "predicted": predicted, "correct": bool(correct),
+            "label_predicted": predicted_label, "label_correct": bool(label_is_correct),
+            "label_mean_logprobs": {
+                label: round(score, 6) for label, score in zip(LABELS, label_scores)
+            },
             "choice_mean_logprobs": {
                 label: round(score, 6) for label, score in zip(LABELS, scores)
             },
             "source_url": item["source_url"],
         })
     all_four = sum(len(outcomes) == 4 and all(outcomes) for outcomes in by_base.values())
+    label_all_four = sum(
+        len(outcomes) == 4 and all(outcomes)
+        for outcomes in label_correct_by_base.values()
+    )
     ncorrect = sum(x["correct"] for x in results)
     return {
         "correct": ncorrect, "total": len(results),
@@ -420,7 +441,16 @@ def score_tasks(model: ByteTransformer, tokenizer: Tokenizer, lane: str) -> dict
             for k, v in sorted(groups.items())
         },
         "chance_baseline": 0.25,
-        "interpretation": "Four-choice probe ranking the mean next-token log probability of each full answer text, repeated across four answer positions; this does not certify practical tool competence.",
+        "label_selection_probe": {
+            "correct": label_correct, "total": len(results),
+            "accuracy": round(label_correct / len(results), 4),
+            "base_question_count": len(label_correct_by_base),
+            "all_four_rotations_correct": label_all_four,
+            "predicted_label_counts": label_predicted_counts,
+            "chance_baseline": 0.25,
+            "scoring": "Rank the next-token log probability of A/B/C/D after the complete question and option list.",
+        },
+        "interpretation": "Full-answer-text ranking and answer-label selection are reported separately across four option rotations. Neither score certifies practical tool competence.",
         "items": results,
     }
 
