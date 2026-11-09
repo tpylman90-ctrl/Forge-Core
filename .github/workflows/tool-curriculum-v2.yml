@@ -1,0 +1,184 @@
+name: Forge isolated tool curriculum v2 trials
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/tool-curriculum-v2-2026-11-09.md"]
+permissions:
+  contents: write
+  actions: read
+jobs:
+  prepare:
+    name: Pin expanded ${{ matrix.lane }} curriculum and holdout
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [blender, godot]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install data-preparation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Fetch and hash isolated training source plus fresh holdout
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import json
+          from forge_core.neural.multilane_v1 import fetch_manual
+          from forge_core.neural.tool_capability_eval import prepare_data
+          lane="${{ matrix.lane }}"
+          training=fetch_manual(lane,Path("source"))
+          heldout=prepare_data(lane,Path("freshdata"))
+          print(json.dumps({"lane":lane,"training_manifest":training,"fresh_holdout_manifest":heldout},indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-tool-curriculum-v2-data-${{ matrix.lane }}-${{ github.run_id }}
+          path: |
+            source/
+            freshdata/
+          retention-days: 90
+          if-no-files-found: error
+  train:
+    name: Continue expanded ${{ matrix.lane }} branch
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - lane: blender
+            parent_artifact: forge-night-blender-seed731-42445321887
+            expected_parent: 672db59bfc44d026f26e38d781c84dd24f92882c65b888639ec66a790002ed68
+          - lane: godot
+            parent_artifact: forge-night-godot-seed950-42445321887
+            expected_parent: de7de5052f0a56d821ea3995f1f2e5fbb80d10750e4fb3a564f3c6c4a2a0afdf
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-tool-curriculum-v2-data-${{ matrix.lane }}-${{ github.run_id }}
+          path: data-bundle
+      - name: Restore exact best specialist parent
+        run: |
+          set -euo pipefail
+          mkdir -p parent-restore source artifacts/parent artifacts/candidate
+          gh run download 42445321887 --repo "$GITHUB_REPOSITORY" --name "${{ matrix.parent_artifact }}" --dir parent-restore
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          roots=[p.parent for p in Path("parent-restore").rglob("checkpoint.pt")
+                 if (p.parent/"source-manifest.json").exists()
+                 and (p.parent/"train.txt").exists()
+                 and (p.parent/"tokenizer.json").exists()]
+          if len(roots)!=1: raise SystemExit(f"Expected one verified specialist folder, got {roots}")
+          p=roots[0]
+          shutil.copy2(p/"checkpoint.pt","source-parent.pt")
+          shutil.copy2(p/"tokenizer.json","source-tokenizer.json")
+          PY
+          cp -a data-bundle/source/. source/
+          cp data-bundle/freshdata/holdout-manifest.json freshdata-manifest.json
+          cp -a data-bundle/freshdata/. freshdata/
+          mv source-parent.pt source/checkpoint.pt
+          cp source/checkpoint.pt artifacts/parent/checkpoint.pt
+          cp source-tokenizer.json source/tokenizer.json
+          cp source/tokenizer.json artifacts/parent/tokenizer.json
+          python - <<'PY'
+          import hashlib,json,torch
+          from pathlib import Path
+          p=Path("source/checkpoint.pt"); c=torch.load(p,map_location="cpu",weights_only=True)
+          d=hashlib.sha256(p.read_bytes()).hexdigest()
+          want="${{ matrix.expected_parent }}"
+          assert d==want,(d,want)
+          assert c["lane"]=="${{ matrix.lane }}" and c["lane_updates"]==1500
+          manifest=json.loads(Path("source/source-manifest.json").read_text())
+          assert manifest["lane"]=="${{ matrix.lane }}" and manifest["lesson_count"]==8
+          print({"lane":c["lane"],"parent_updates":c["lane_updates"],"parent_sha256":d,
+                 "lesson_count":manifest["lesson_count"],"train_sha256":manifest["train_sha256"]})
+          PY
+      - name: Train short, isolated curriculum-v2 continuation
+        run: |
+          python -m forge_core.neural.specialist_curriculum_v2 \
+            --lane "${{ matrix.lane }}" --source source --out artifacts/candidate \
+            --steps 750 --eval-every 250 --patience 2 --learning-rate 0.0000125
+      - name: Score parent and selected candidate on the same expanded fresh holdout
+        run: |
+          python -m forge_core.neural.tool_capability_eval --lane "${{ matrix.lane }}" \
+            --data-dir freshdata --checkpoint-dir artifacts/parent --out artifacts/parent/fresh-evaluation.json
+          python -m forge_core.neural.tool_capability_eval --lane "${{ matrix.lane }}" \
+            --data-dir freshdata --checkpoint-dir artifacts/candidate --out artifacts/candidate/fresh-evaluation.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-tool-curriculum-v2-${{ matrix.lane }}-${{ github.run_id }}
+          path: |
+            artifacts/
+            source/
+            freshdata/
+          retention-days: 90
+          if-no-files-found: warn
+  archive:
+    needs: train
+    if: always() && needs.prepare.result == 'success' && needs.train.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download training and evaluation bundles
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+      - name: Compare parent and selected specialist branches
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for p in sorted(glob.glob("bundle/**/candidate/metrics.json",recursive=True)):
+              m=json.load(open(p,encoding="utf-8")); base=os.path.dirname(os.path.dirname(p))
+              ev={}
+              for role in ("parent","candidate"):
+                  q=os.path.join(base,role,"fresh-evaluation.json")
+                  if os.path.exists(q):
+                      x=json.load(open(q,encoding="utf-8"))
+                      ev[role]={"loss":x.get("fresh_document_loss"),
+                                "correct":x.get("capability_probe",{}).get("correct"),
+                                "total":x.get("capability_probe",{}).get("total")}
+              rows.append((m,ev))
+          if len(rows)!=2: raise SystemExit(f"Expected two specialist reports, found {len(rows)}")
+          with open("bundle/TOOL-CURRICULUM-V2-RESULTS.md","w",encoding="utf-8") as f:
+              f.write("# Blender/Godot expanded curriculum v2 — 2026-11-09\n\n")
+              f.write("Eight original CC0 task/answer/why cards per lane were included alongside version-pinned official manual prose. Each lane continued from its own verified 1,500-update specialist checkpoint. Parent and selected candidate share the same newly pinned eight-page fresh holdout and expanded answer-keyed probe. Reports are research-only; they do not establish practical tool competence.\n\n")
+              f.write("| Lane | Updates | Validation parent → selected | Test parent → selected | Fresh docs loss parent → candidate | Expanded probe correct parent → candidate | Selected checkpoint SHA-256 |\n|---|---:|---:|---:|---:|---:|---|\n")
+              for m,e in rows:
+                  lane=m["lane"]
+                  f.write(f"| {lane} | {m['updates_this_run']} | {m['parent_validation_loss']} → {m['selected_validation_loss']} | {m['parent_test_loss']} → {m['selected_test_loss']} | {e.get('parent',{}).get('loss')} → {e.get('candidate',{}).get('loss')} | {e.get('parent',{}).get('correct')}/{e.get('parent',{}).get('total')} → {e.get('candidate',{}).get('correct')}/{e.get('candidate',{}).get('total')} | {m['selected_checkpoint_sha256']} |\n")
+          PY
+      - name: Preserve complete research bundle
+        run: |
+          set -euo pipefail
+          tag="forge-tool-curriculum-v2-$GITHUB_RUN_ID"
+          tar -czf "$tag.tar.gz" -C bundle .
+          printf '%s\n' "Short isolated Blender and Godot continuation trials with eight original CC0 task/answer/why examples per lane and expanded pinned manual holdouts. Includes parents, last states, candidates, optimizer state, hashes, samples, and evaluations. Research-only; no capability certification or Android promotion." > notes.md
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" --draft --prerelease --title "Forge tool curriculum v2 — run $GITHUB_RUN_ID" --notes-file notes.md
