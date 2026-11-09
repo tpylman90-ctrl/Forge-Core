@@ -105,7 +105,7 @@ jobs:
           python - <<'PY'
           import glob,json,os
           rows=[]
-          for p in sorted(glob.glob("bundle/forge-headless-scene-spec-*/*.json")):
+          for p in sorted(glob.glob("bundle/forge-headless-scene-spec-/**/*.json",recursive=True)):
               r=json.load(open(p,encoding="utf-8"))
               if "spec_generation" in r: rows.append(r)
           if len(rows)!=4: raise SystemExit(f"Expected four parent/candidate reports, got {len(rows)}")
