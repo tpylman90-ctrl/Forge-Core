@@ -1,0 +1,1 @@
+Approved research continuation from the validation-best selected Forge Seed v0.7 107,000-step language checkpoint. Verify exact SHA-256, optimizer state, RNG, pinned TinyStories lineage, and evaluate parent versus selected candidate. Research-only; no Android promotion or capability claim.
