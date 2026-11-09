@@ -31,4 +31,4 @@ Parent and selected candidate both scored 20/40 on the forced-choice probe, with
 
 ## Preservation and status
 
-The selected checkpoint, parent, last checkpoint, optimizer state, tokenizer, data, hashes, and capability evaluations are preserved in the [draft research release](https://github.com/tpylman90-ctrl/Forge-Core/releases/tag/untagged-0f4dcb4f1d4a5d). The candidate is research-only; it was not promoted to Android or merged into Blender/Godot specialist weights.
+The selected checkpoint, parent, last checkpoint, optimizer state, tokenizer, data, hashes, and capability evaluations are preserved in the [draft research release](https://github.com/tpylman90-ctrl/Forge-Core/releases/tag/untagged-977302c3bf7f9f8adc94). The candidate is research-only; it was not promoted to Android or merged into Blender/Godot specialist weights.
