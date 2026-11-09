@@ -9,7 +9,7 @@ class TestToolCapabilityEval(unittest.TestCase):
     def test_fresh_pages_are_disjoint_from_training_pages(self):
         for lane, spec in HOLDOUTS.items():
             self.assertTrue(set(spec["urls"]).isdisjoint(TRAIN_SOURCES[lane]["urls"]))
-            self.assertEqual(len(spec["urls"]), 4)
+            self.assertEqual(len(spec["urls"]), 8)
 
     def test_each_lane_has_balanced_four_position_rotations(self):
         for lane in ("blender", "godot"):
