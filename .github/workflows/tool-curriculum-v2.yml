@@ -138,7 +138,7 @@ jobs:
           retention-days: 90
           if-no-files-found: warn
   archive:
-    needs: train
+    needs: [prepare, train]
     if: always() && needs.prepare.result == 'success' && needs.train.result == 'success'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
