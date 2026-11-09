@@ -1,0 +1,1 @@
+Evaluation-only audit of the archived Blender/Godot v2 parent and selected checkpoints. Preserve old answer-text scoring and add direct A/B/C/D label scoring across rotations. No optimizer updates.
