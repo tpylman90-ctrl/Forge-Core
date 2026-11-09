@@ -12,8 +12,8 @@ import torch
 from forge_core.neural.model import ByteTransformer, ModelConfig
 
 PROMPTS = {
-    "blender": 'JSON only: {"object_name":"Beacon","size":2.0,"bevel_width":0.1,"bevel_segments":3}',
-    "godot": 'JSON only: {"root_name":"World","child_name":"Beacon","mesh_type":"SphereMesh","radius":1.0}',
+    "blender": 'Create a JSON spec for cube Beacon, size 2, bevel width 0.1, 3 segments. JSON only.',
+    "godot": 'Create JSON for scene World with SphereMesh Beacon, radius 1. JSON only.',
 }
 EXPECTED = {
     "blender": {"object_name": "Beacon", "size": 2.0, "bevel_width": 0.1, "bevel_segments": 3},
@@ -149,7 +149,7 @@ def main():
     raw,lineage=generate(ckpt_path,a.lane,a.seed,a.generated_bytes)
     candidate,parse_status=parse_candidate(raw,a.lane)
     result={"schema":1,"status":"evaluation_only_no_training","lane":a.lane,"role":a.role,
-        "lineage":lineage,"spec_generation":{"raw_text":raw,"parse_status":parse_status,
+        "lineage":lineage,"engine_version":version(a.engine,a.lane),"spec_generation":{"raw_text":raw,"parse_status":parse_status,
         "schema_valid":candidate is not None},"positive_control":None,"forge_scene":None,
         "interpretation":"A tiny constrained scene-spec diagnostic; it does not establish general Blender/Godot competence."}
     with tempfile.TemporaryDirectory(prefix=f"forge-{a.lane}-scene-eval-") as tmp:
