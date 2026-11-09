@@ -57,7 +57,7 @@ HOLDOUTS = {
             "https://docs.godotengine.org/en/4.7/tutorials/physics/ray-casting.html",
             "https://docs.godotengine.org/en/4.7/classes/class_packedscene.html",
             "https://docs.godotengine.org/en/4.7/getting_started/step_by_step/signals.html",
-            "https://docs.godotengine.org/en/4.7/tutorials/physics/using_character_body_2d.html",
+            "https://docs.godotengine.org/en/4.7/tutorials/physics/physics_introduction.html",
             "https://docs.godotengine.org/en/4.7/classes/class_node3d.html",
         ],
     },
@@ -289,7 +289,7 @@ def prepare_data(lane: str, out: Path) -> dict:
                 if attempt == 7:
                     raise
                 time.sleep(min(30, 2 ** attempt) + random.random())
-            except urllib.error.URLError:
+            except (urllib.error.URLError, TimeoutError):
                 if attempt == 7:
                     raise
                 time.sleep(min(30, 2 ** attempt) + random.random())
@@ -315,7 +315,7 @@ def prepare_data(lane: str, out: Path) -> dict:
         "attribution": spec["attribution"],
         "code_samples": "HTML pre/code blocks excluded from extracted text",
         "role": "final evaluation only; these pages are excluded from all training and checkpoint selection",
-        "split_policy": "all four version-pinned topic pages are fresh held-out evaluation pages, never optimizer input",
+        "split_policy": "all eight version-pinned topic pages are fresh held-out evaluation pages, never optimizer input",
         "pages": pages, "combined_text_sha256": sha256(combined),
         "question_bank_sha256": sha256(json.dumps(QUESTIONS[lane], sort_keys=True).encode()),
     }
