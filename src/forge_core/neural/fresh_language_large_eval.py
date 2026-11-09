@@ -100,7 +100,7 @@ def evaluate_pair(source: Path, parent_dir: Path, candidate_dir: Path, out: Path
             "utf8_bytes_after_deduplication": test_path.stat().st_size,
             "tokens_after_deduplication": int(test_tokens.numel()),
             "documents_after_deduplication": test_manifest["test_document_count"],
-            "exact_duplicates_removed": test_manifest["test_source"]["exact_train_or_validation_duplicates_removed"],
+            "exact_duplicates_removed": test_manifest["test_source"]["exact_duplicates_removed"],
             "previous_test_files_excluded": test_manifest["test_source"]["prior_test_files_excluded"],
             "tokenizer_sha256": TOKENIZER_SHA256,
         },
