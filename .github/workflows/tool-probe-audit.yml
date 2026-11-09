@@ -1,0 +1,114 @@
+name: Forge Blender Godot probe audit
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/tool-eval-audit-2026-11-09.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  evaluate:
+    name: Audit ${{ matrix.lane }} parent and candidate probes
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        lane: [blender, godot]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install evaluation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore archived checkpoints and exact holdout pages
+        run: |
+          set -euo pipefail
+          mkdir -p job-bundle eval-data
+          gh run download 42541109934 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-tool-curriculum-v2-${{ matrix.lane }}-42541109934" --dir job-bundle
+          gh run download 42541109934 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-tool-curriculum-v2-data-${{ matrix.lane }}-42541109934" --dir eval-data
+          python - <<'PY'
+          import shutil
+          from pathlib import Path
+          for role in ("parent","candidate"):
+              roots=[p.parent for p in Path("job-bundle").rglob("checkpoint.pt")
+                     if p.parent.name==role and (p.parent/"tokenizer.json").exists()]
+              if len(roots)!=1: raise SystemExit(f"Expected one {role} checkpoint directory, got {roots}")
+              shutil.copytree(roots[0],Path("checkpoints")/role,dirs_exist_ok=True)
+          roots=[p.parent for p in Path("eval-data").rglob("holdout-manifest.json")]
+          if len(roots)!=1: raise SystemExit(f"Expected one pinned holdout directory, got {roots}")
+          shutil.copytree(roots[0],Path("freshdata"),dirs_exist_ok=True)
+          print("Restored archived parent, selected candidate, and original pinned holdout.")
+          PY
+      - name: Score answer-text and direct answer-label probes
+        run: |
+          for role in parent candidate; do
+            python -m forge_core.neural.tool_capability_eval \
+              --lane "${{ matrix.lane }}" --data-dir freshdata \
+              --checkpoint-dir "checkpoints/$role" \
+              --out "checkpoints/$role/probe-audit.json"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-tool-probe-audit-${{ matrix.lane }}-${{ github.run_id }}
+          path: |
+            checkpoints/
+            freshdata/
+          retention-days: 90
+          if-no-files-found: error
+  archive:
+    needs: evaluate
+    if: always() && needs.evaluate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download probe audit bundles and summarize
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for root in sorted(glob.glob("bundle/forge-tool-probe-audit-*")):
+              lane=os.path.basename(root).split("-")[4]
+              reports={}
+              for role in ("parent","candidate"):
+                  path=os.path.join(root,"checkpoints",role,"probe-audit.json")
+                  reports[role]=json.load(open(path,encoding="utf-8"))
+              rows.append((lane,reports))
+          if len(rows)!=2: raise SystemExit(f"Expected both lanes; found {len(rows)}")
+          lines=["# Blender/Godot answer-label probe audit — 2026-11-09","",
+                 "This audit re-evaluates the already archived v2 parent and selected checkpoints without training. It reports both full-answer-text ranking and direct next-label scoring. The label metric scores A/B/C/D after the complete question and options, across four answer rotations. These are small diagnostics, not practical competence tests.","",
+                 "| Lane | Metric | Parent | Selected candidate |","|---|---|---:|---:|"]
+          for lane,reports in rows:
+              for name,getter in [
+                  ("Full-answer-text ranking",lambda x:f"{x['capability_probe']['correct']}/{x['capability_probe']['total']}"),
+                  ("Direct answer-label selection",lambda x:f"{x['capability_probe']['label_selection_probe']['correct']}/{x['capability_probe']['label_selection_probe']['total']}"),
+                  ("Label all four rotations correct",lambda x:str(x['capability_probe']['label_selection_probe']['all_four_rotations_correct']))]:
+                  lines.append(f"| {lane} | {name} | {getter(reports['parent'])} | {getter(reports['candidate'])} |")
+          open("bundle/TOOL-PROBE-AUDIT-RESULTS.md","w",encoding="utf-8").write("\n".join(lines)+"\n")
+          PY
+      - name: Preserve evaluation-only audit
+        run: |
+          set -euo pipefail
+          tag="forge-tool-probe-audit-$GITHUB_RUN_ID"
+          tar -czf "$tag.tar.gz" -C bundle .
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --title "Forge tool probe audit — run $GITHUB_RUN_ID" \
+            --notes "Evaluation-only re-scoring of archived Blender/Godot checkpoints; no weight updates. Includes original pinned holdout pages, parent and selected checkpoints, answer-text and direct-label results. Not a capability certification."
