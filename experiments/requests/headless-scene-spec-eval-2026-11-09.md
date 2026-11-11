@@ -10,3 +10,5 @@ Retry on 2026-11-11 after GitHub's Nov 9 Actions and Checks API incident was res
 Evaluator fix: generation uses the checkpoint's tokenizer IDs and decode path, with tokenizer SHA and vocabulary compatibility checks. This is required because specialist model IDs are not raw bytes.
 
 Reporting helper fix: engine version is now obtained from the installed engine binary before scoring. Queue the corrected run.
+
+Output path corrected to retain separate parent and candidate JSON reports. Run the final complete two-lane archive.
