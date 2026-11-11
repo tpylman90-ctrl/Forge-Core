@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse, hashlib, json, math, re, subprocess, tempfile
 from pathlib import Path
 import torch
+from tokenizers import Tokenizer
 from forge_core.neural.model import ByteTransformer, ModelConfig
 
 PROMPTS = {
@@ -26,20 +27,29 @@ def sha256(path: Path) -> str:
         for block in iter(lambda:f.read(1024*1024),b""): h.update(block)
     return h.hexdigest()
 
-def generate(checkpoint: Path, lane: str, seed: int, max_bytes: int):
+def generate(checkpoint: Path, lane: str, seed: int, max_tokens: int):
     ckpt=torch.load(checkpoint,map_location="cpu",weights_only=True)
     cfg=ModelConfig(**ckpt["configuration"])
     if ckpt.get("lane")!=lane: raise ValueError(f"Checkpoint lane mismatch: {lane} vs {ckpt.get('lane')}")
+    tokenizer_path=checkpoint.parent/"tokenizer.json"
+    tokenizer=Tokenizer.from_file(str(tokenizer_path))
+    tokenizer_sha=sha256(tokenizer_path)
+    recorded_sha=ckpt.get("tokenizer_sha256")
+    if recorded_sha and recorded_sha!=tokenizer_sha: raise ValueError("Archived tokenizer hash does not match checkpoint metadata")
+    if tokenizer.get_vocab_size(with_added_tokens=True)!=cfg.vocab_size:
+        raise ValueError("Tokenizer vocabulary size does not match model configuration")
+    prefix_ids=tokenizer.encode(PROMPTS[lane],add_special_tokens=False).ids
+    if not prefix_ids or len(prefix_ids)>=cfg.max_seq_len: raise ValueError("Prompt token length is outside the checkpoint context")
     with torch.random.fork_rng():
         model=ByteTransformer(cfg); model.load_state_dict(ckpt["model"],strict=True); model.eval()
         torch.manual_seed(seed)
-        prefix=torch.tensor([list(PROMPTS[lane].encode("utf-8"))],dtype=torch.long)
-        with torch.no_grad(): out=model.generate(prefix,new_tokens=max_bytes,temperature=0.7)[0].tolist()
-    raw=bytes(out[len(prefix[0]):]).decode("utf-8",errors="replace")
+        prefix=torch.tensor([prefix_ids],dtype=torch.long)
+        with torch.no_grad(): out=model.generate(prefix,new_tokens=max_tokens,temperature=0.7)[0].tolist()
+    raw=tokenizer.decode(out[len(prefix_ids):],skip_special_tokens=True)
     return raw,{"step":ckpt.get("step"),"lane_updates":ckpt.get("lane_updates"),
-                "checkpoint_sha256":sha256(checkpoint),"prompt":PROMPTS[lane],
-                "seed":seed,"temperature":0.7,"generated_bytes":max_bytes}
-
+                "checkpoint_sha256":sha256(checkpoint),"tokenizer_sha256":tokenizer_sha,
+                "prompt":PROMPTS[lane],"seed":seed,"temperature":0.7,
+                "generated_tokens":max_tokens,"prompt_tokens":len(prefix_ids)}
 def parse_candidate(raw: str,lane: str):
     match=re.search(r"\{[^{}]*\}",raw,flags=re.DOTALL)
     if not match: return None,"no_single_level_json_object"
@@ -140,13 +150,13 @@ def main():
     p.add_argument("--checkpoint-dir",type=Path,required=True)
     p.add_argument("--engine",required=True); p.add_argument("--out",type=Path,required=True)
     p.add_argument("--seed",type=int,default=20261109)
-    p.add_argument("--generated-bytes",type=int,default=220)
+    p.add_argument("--generated-tokens",type=int,default=160)
     p.add_argument("--role",choices=("parent","candidate"),required=True)
     a=p.parse_args()
     ckpt_path=a.checkpoint_dir/"checkpoint.pt"
     if not ckpt_path.is_file() or not (a.checkpoint_dir/"tokenizer.json").is_file():
         raise FileNotFoundError("Expected checkpoint.pt and tokenizer.json")
-    raw,lineage=generate(ckpt_path,a.lane,a.seed,a.generated_bytes)
+    raw,lineage=generate(ckpt_path,a.lane,a.seed,a.generated_tokens)
     candidate,parse_status=parse_candidate(raw,a.lane)
     result={"schema":1,"status":"evaluation_only_no_training","lane":a.lane,"role":a.role,
         "lineage":lineage,"engine_version":version(a.engine,a.lane),"spec_generation":{"raw_text":raw,"parse_status":parse_status,
