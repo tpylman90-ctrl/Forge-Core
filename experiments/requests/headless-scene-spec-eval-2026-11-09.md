@@ -12,3 +12,5 @@ Evaluator fix: generation uses the checkpoint's tokenizer IDs and decode path, w
 Reporting helper fix: engine version is now obtained from the installed engine binary before scoring. Queue the corrected run.
 
 Output path corrected to retain separate parent and candidate JSON reports. Run the final complete two-lane archive.
+
+Archive fix: download both named lane artifacts into deterministic directories and select only report_*.json recursively.
