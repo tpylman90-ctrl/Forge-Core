@@ -101,12 +101,15 @@ jobs:
       - uses: actions/checkout@v4
       - name: Download lane reports and write comparison
         run: |
-          mkdir -p bundle
-          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+          mkdir -p bundle/blender bundle/godot
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "forge-headless-scene-spec-blender-$GITHUB_RUN_ID" --dir bundle/blender
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --name "forge-headless-scene-spec-godot-$GITHUB_RUN_ID" --dir bundle/godot
           python - <<'PY'
           import glob,json,os
           rows=[]
-          for p in sorted(glob.glob("bundle/forge-headless-scene-spec-/**/*.json",recursive=True)):
+          for p in sorted(glob.glob("bundle/**/report_*.json",recursive=True)):
               r=json.load(open(p,encoding="utf-8"))
               if "spec_generation" in r: rows.append(r)
           if len(rows)!=4: raise SystemExit(f"Expected four parent/candidate reports, got {len(rows)}")
