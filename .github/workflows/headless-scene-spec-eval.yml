@@ -79,7 +79,7 @@ jobs:
             python -m forge_core.neural.scene_spec_tool_eval \
               --lane "${{ matrix.lane }}" --role "$role" \
               --checkpoint-dir "checkpoints/$role" --engine "$engine" \
-              --out "results/${{ matrix.lane }}_ROLEVAR__.json"
+              --out "results/${{ matrix.lane }}_ROLEVAR.json"
           done
       - uses: actions/upload-artifact@v4
         if: always()
