@@ -4,3 +4,5 @@ Run the constrained, evaluation-only Blender/Godot structural scene benchmark on
 
 
 Retry after harness corrections: record engine versions, use instruction-based prompts, and retain nested result files in the comparison bundle.
+
+Retry on 2026-11-11 after GitHub's Nov 9 Actions and Checks API incident was resolved. Use current corrected harness and collect the complete results.
