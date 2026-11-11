@@ -141,6 +141,11 @@ func _initialize() -> void:
         "mesh_type":spec["mesh_type"],"radius":spec["radius"],"valid":valid,
         "returncode":run.returncode,"log_tail":run.stdout[-3000:] if not valid else ""}
 
+def version(binary: str,lane: str) -> str:
+    p=subprocess.run([binary,"--version"],text=True,stdout=subprocess.PIPE,
+                     stderr=subprocess.STDOUT,timeout=30)
+    return p.stdout.strip()[:500]
+
 def evaluate_one(binary,lane,spec,work):
     return blender_build_and_verify(binary,spec,work) if lane=="blender" else godot_build_and_verify(binary,spec,work)
 
