@@ -1,0 +1,66 @@
+name: Archive Forge scene-spec SFT run
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/archive-scene-spec-sft-43152253937.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the eight completed run bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_id=43152253937
+          for lane in blender godot; do
+            for seed in 741 742 743 744; do
+              dest="bundle/$lane/seed$seed"
+              mkdir -p "$dest"
+              gh run download "$run_id" --repo "$GITHUB_REPOSITORY" \
+                --name "forge-scene-spec-sft-$lane-seed$seed-$run_id" --dir "$dest"
+            done
+          done
+      - name: Build the report from saved training artifacts
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for path in sorted(glob.glob("bundle/**/checkpoints/candidate/metrics.json",recursive=True)):
+              m=json.load(open(path,encoding="utf-8"))
+              seedroot=os.path.dirname(os.path.dirname(os.path.dirname(path)))
+              pe=json.load(open(os.path.join(seedroot,"results","parent-engine.json"),encoding="utf-8"))
+              ce=json.load(open(os.path.join(seedroot,"results","candidate-engine.json"),encoding="utf-8"))
+              rows.append((m["lane"],m["seed"],m,pe,ce))
+          if len(rows)!=8: raise SystemExit(f"Expected eight completed training reports, found {len(rows)}")
+          lines=["# Forge isolated Blender/Godot answer-only SFT — overnight run 43152253937","",
+                 "Eight independent CPU SFT arms (four seeds per lane) resumed from verified Forge specialist checkpoints. Prompt tokens were masked from loss; only output JSON plus the short why field received next-token training. The task examples are original and CC0-1.0. Blender and Godot data and optimizer states were lane-local; the language checkpoint was not loaded or changed. Held-out loss, generation exactness and the headless scene check are narrow diagnostics, not broad tool-competence certification. Candidates are research-only and not Android upgrades.","",
+                 "| Lane | Seed | Updates attempted / selected | Validation answer loss parent → selected | Test answer loss parent → selected | Test exact task matches | Engine parent → candidate | Candidate SHA-256 |",
+                 "|---|---:|---:|---:|---:|---:|---|---|"]
+          for lane,seed,m,pe,ce in rows:
+              tg=m["test_generation_selected"]
+              pg=m["test_generation_parent"]
+              matches=f"{tg['exact_field_match']}/{tg['count']} (parent {pg['exact_field_match']}/{pg['count']})"
+              engine=f"{'pass' if pe.get('forge_scene',{}).get('valid') else 'fail'} → {'pass' if ce.get('forge_scene',{}).get('valid') else 'fail'}"
+              lines.append(f"| {lane} | {seed} | {m['updates_attempted']} / {m['updates_selected']} | {m['parent_valid_answer_loss']:.6f} → {m['selected_valid_answer_loss']:.6f} | {m['parent_test_answer_loss']:.6f} → {m['selected_test_answer_loss']:.6f} | {matches} | {engine} | {m['selected_checkpoint_sha256']} |")
+          lines += ["","Selection used validation answer loss only. Test loss, held-out task generation, and engine checks were evaluated separately and did not select checkpoints.","",
+                    "The downloaded bundle retains all eight parent/candidate checkpoints, final optimizer and RNG states, exact generated train/validation/test splits, data manifests and hashes, per-run metrics, and raw parent/candidate headless evaluation reports."]
+          open("bundle/OVERNIGHT-RESULTS.md","w",encoding="utf-8").write("\n".join(lines)+"\n")
+          PY
+      - name: Publish the complete draft research archive
+        run: |
+          set -euo pipefail
+          tag="forge-scene-spec-sft-overnight-43152253937"
+          tar -czf "$tag.tar.gz" -C bundle .
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --title "Forge scene-spec SFT overnight — run 43152253937" \
+            --notes "Completed eight-arm Blender/Godot answer-only SFT. Includes original CC0 datasets, exact parent lineage, per-seed checkpoints and optimizer/RNG states, held-out metrics, and headless engine evaluations. Research-only; no Android promotion."
