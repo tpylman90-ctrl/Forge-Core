@@ -13,8 +13,8 @@ from tokenizers import Tokenizer
 from forge_core.neural.model import ByteTransformer, ModelConfig
 
 PROMPTS = {
-    "blender": 'Create a JSON spec for cube Beacon, size 2, bevel width 0.1, 3 segments. JSON only.',
-    "godot": 'Create JSON for scene World with SphereMesh Beacon, radius 1. JSON only.',
+    "blender": 'Blender cube Beacon, size 2.0, bevel width 0.1, 3 segments. Return JSON and a short why.',
+    "godot": 'Godot scene root World with SphereMesh child Beacon, radius 1.0. Return JSON and a short why.',
 }
 EXPECTED = {
     "blender": {"object_name": "Beacon", "size": 2.0, "bevel_width": 0.1, "bevel_segments": 3},
@@ -55,7 +55,10 @@ def parse_candidate(raw: str,lane: str):
     if not match: return None,"no_single_level_json_object"
     try: obj=json.loads(match.group(0))
     except json.JSONDecodeError: return None,"invalid_json"
-    if not isinstance(obj,dict) or set(obj)!=set(EXPECTED[lane]): return None,"wrong_schema_keys"
+    if (not isinstance(obj,dict) or set(obj)!=(set(EXPECTED[lane])|{"why"})
+        or not isinstance(obj.get("why"),str) or not obj["why"].strip()):
+        return None,"wrong_schema_or_missing_why"
+    obj={k:v for k,v in obj.items() if k!="why"}
     if lane=="blender":
         ok=(obj["object_name"]=="Beacon" and type(obj["size"]) in (int,float)
             and math.isclose(float(obj["size"]),2.0,abs_tol=1e-5)
