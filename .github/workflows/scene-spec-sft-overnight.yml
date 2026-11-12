@@ -1,0 +1,167 @@
+name: Forge isolated Blender and Godot scene-spec SFT
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/scene-spec-sft-overnight-2026-11-12.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  train:
+    name: ${{ matrix.lane }} answer-only SFT seed ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        lane: [blender, godot]
+        seed: [741, 742, 743, 744]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the exact specialist parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore checkpoints/parent data
+          gh run download 42541109934 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-tool-curriculum-v2-${{ matrix.lane }}-42541109934" --dir restore
+          python - <<'PY'
+          import hashlib,shutil,torch
+          from pathlib import Path
+          roots={}
+          for role in ("parent","candidate"):
+              found=[p.parent for p in Path("restore").rglob("checkpoint.pt")
+                     if p.parent.name==role and (p.parent/"tokenizer.json").is_file()]
+              if len(found)!=1: raise SystemExit(f"Expected one {role} checkpoint directory, got {found}")
+              roots[role]=found[0]
+          shutil.copytree(roots["parent"],"checkpoints/parent",dirs_exist_ok=True)
+          p=Path("checkpoints/parent/checkpoint.pt")
+          ck=torch.load(p,map_location="cpu",weights_only=True)
+          digest=hashlib.sha256(p.read_bytes()).hexdigest()
+          expected={"blender":"672db59bfc44d026f26e38d781c84dd24f92882c65b888639ec66a790002ed68",
+                    "godot":"de7de5052f0a56d821ea3995f1f2e5fbb80d10750e4fb3a564f3c6c4a2a0afdf"}["${{ matrix.lane }}"]
+          assert digest==expected, (digest,expected)
+          assert ck.get("lane")=="${{ matrix.lane }}" and ck.get("lane_updates")==1500
+          assert ck.get("parent_sha256")=="a7bcdb996e440f44d7496b887b54d19324927b4296fe9ed2f0f0293c88c63a0a"
+          shutil.copy2(roots["parent"]/"tokenizer.json","checkpoints/parent/tokenizer.json")
+          print({"lane":ck["lane"],"updates":ck["lane_updates"],"parent_sha256":digest})
+          PY
+      - name: Train from the lane-local Forge parent
+        run: |
+          python -m forge_core.neural.scene_spec_sft_v1 \
+            --lane "${{ matrix.lane }}" --seed "${{ matrix.seed }}" \
+            --parent-dir checkpoints/parent --data-dir data \
+            --out checkpoints/candidate --steps 15000 --eval-every 500 \
+            --patience 12 --learning-rate 0.00001 --batch-size 4
+      - name: Install pinned headless engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.lane }}" == blender ]]; then
+            sudo apt-get update
+            sudo apt-get install -y blender
+            blender --version | head -1
+          else
+            curl -fsSL "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip" -o godot.zip
+            echo "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  godot.zip" | sha256sum --check
+            unzip -q godot.zip -d godot-bin
+            chmod +x godot-bin/Godot_v4.7.2-stable_linux.x86_64
+            echo "$GITHUB_WORKSPACE/godot-bin" >> "$GITHUB_PATH"
+          fi
+      - name: Run same headless structural checks on parent and selected candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine=blender
+          if [[ "${{ matrix.lane }}" == godot ]]; then engine=Godot_v4.7.2-stable_linux.x86_64; fi
+          mkdir -p results
+          for role in parent candidate; do
+            python -m forge_core.neural.scene_spec_tool_eval \
+              --lane "${{ matrix.lane }}" --role "$role" \
+              --checkpoint-dir "checkpoints/$role" --engine "$engine" \
+              --seed 20261112 --out "results/$role-engine.json"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-scene-spec-sft-${{ matrix.lane }}-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: |
+            checkpoints/
+            data/
+            results/
+          retention-days: 90
+          if-no-files-found: warn
+
+  archive:
+    needs: train
+    if: always() && needs.train.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all eight isolated training bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for lane in blender godot; do
+            for seed in 741 742 743 744; do
+              dest="bundle/$lane/seed$seed"
+              mkdir -p "$dest"
+              gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                --name "forge-scene-spec-sft-$lane-seed$seed-$GITHUB_RUN_ID" --dir "$dest"
+            done
+          done
+      - name: Summarize seeds, held-out loss, generation, and engine checks
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for path in sorted(glob.glob("bundle/**/candidate/metrics.json",recursive=True)):
+              m=json.load(open(path,encoding="utf-8"))
+              root=os.path.dirname(os.path.dirname(path))
+              lane=m["lane"]; seed=m["seed"]
+              for role in ("parent","candidate"):
+                  p=os.path.join(root,"results",f"{role}-engine.json")
+                  mrole=json.load(open(p,encoding="utf-8"))
+                  if role=="parent": parent_engine=mrole
+                  else: candidate_engine=mrole
+              rows.append((lane,seed,m,parent_engine,candidate_engine))
+          if len(rows)!=8: raise SystemExit(f"Expected 8 training reports, found {len(rows)}")
+          lines=["# Forge isolated Blender/Godot answer-only SFT — overnight run","",
+                 "Eight independent CPU SFT arms (four seeds per lane) resumed from the verified Forge specialist weights. Prompt tokens were masked from loss; only output JSON plus the short why field received next-token training. Original generated examples are CC0-1.0 and lane-isolated. The language checkpoint was not loaded or changed. Every held-out task and headless engine result is a narrow diagnostic; this does not certify tool competence. Candidates are research-only and not Android upgrades.","",
+                 "| Lane | Seed | Updates attempted / selected | Valid answer loss parent → selected | Test answer loss parent → selected | Test exact task matches | Engine parent → candidate | Candidate SHA-256 |",
+                 "|---|---:|---:|---:|---:|---:|---|---|"]
+          for lane,seed,m,pe,ce in rows:
+              tg=m["test_generation_selected"]
+              matches=f"{tg['exact_field_match']}/{tg['count']} (parent {m['test_generation_parent']['exact_field_match']}/{m['test_generation_parent']['count']})"
+              engine=f"{'pass' if pe.get('forge_scene',{}).get('valid') else 'fail'} → {'pass' if ce.get('forge_scene',{}).get('valid') else 'fail'}"
+              lines.append(f"| {lane} | {seed} | {m['updates_attempted']} / {m['updates_selected']} | {m['parent_valid_answer_loss']:.6f} → {m['selected_valid_answer_loss']:.6f} | {m['parent_test_answer_loss']:.6f} → {m['selected_test_answer_loss']:.6f} | {matches} | {engine} | {m['selected_checkpoint_sha256']} |")
+          lines += ["","All eight checkpoints, optimizer/RNG state, original split data, manifests and hashes, raw engine-evaluation outputs, and per-seed metrics are retained in this bundle. Selection uses validation answer loss only; test/generation/engine scores are reported separately and were not used to pick checkpoints."]
+          open("bundle/OVERNIGHT-RESULTS.md","w",encoding="utf-8").write("\n".join(lines)+"\n")
+          PY
+      - name: Archive complete research bundle as a draft release
+        run: |
+          set -euo pipefail
+          tag="forge-scene-spec-sft-overnight-$GITHUB_RUN_ID"
+          tar -czf "$tag.tar.gz" -C bundle .
+          printf '%s\n' "Eight independent CC0 scene-spec answer-only SFT runs on Forge Blender/Godot lane weights. Contains parent and candidate checkpoints, optimizer/RNG states, exact generated data and hashes, evaluation reports, and per-seed results. Research-only, no Android promotion." > notes.md
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --title "Forge scene-spec SFT overnight — run $GITHUB_RUN_ID" \
+            --notes-file notes.md
