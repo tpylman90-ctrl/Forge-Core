@@ -1,0 +1,162 @@
+name: Evaluate Forge scene-spec SFT v2 checkpoints
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/evaluate-scene-spec-sft-v2-43340793375.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  evaluate:
+    name: ${{ matrix.lane }} eval seed ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        lane: [blender, godot]
+        seed: [861, 862, 863]
+    env:
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install free evaluation dependencies and check Python syntax
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+          python -m py_compile src/forge_core/neural/scene_spec_sft_v2.py src/forge_core/neural/scene_spec_v2_engine_eval.py
+      - name: Restore the saved training checkpoint and dataset
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore
+          gh run download 43340793375 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-scene-spec-sft-v2-${{ matrix.lane }}-seed${{ matrix.seed }}-43340793375" --dir restore
+          python - <<'PY'
+          import shutil,torch
+          from pathlib import Path
+          lane="${{ matrix.lane }}"
+          roots=[p.parent.parent for p in Path("restore").rglob("candidate/metrics.json")
+                 if (p.parent/"checkpoint.pt").is_file() and (p.parent/"tokenizer.json").is_file()]
+          if len(roots)!=1: raise SystemExit(f"Expected one completed candidate artifact, found {roots}")
+          root=roots[0]
+          if not (root/"data"/lane/"test.jsonl").is_file():
+              raise SystemExit(f"Missing held-out task data under {root/'data'/lane}")
+          shutil.copytree(root/"checkpoints","checkpoints",dirs_exist_ok=True)
+          shutil.copytree(root/"data"/lane,Path("data")/lane,dirs_exist_ok=True)
+          ck=torch.load(Path("checkpoints/candidate/checkpoint.pt"),map_location="cpu",weights_only=True)
+          if ck.get("lane")!=lane: raise SystemExit("Candidate lane mismatch")
+          print({"lane":lane,"selected_sha256":__import__("hashlib").sha256(Path("checkpoints/candidate/checkpoint.pt").read_bytes()).hexdigest(),
+                 "selected_lane_updates":ck.get("lane_updates"),"data":str(root/"data"/lane)})
+          PY
+          mkdir -p results
+          cp checkpoints/candidate/metrics.json results/training-metrics.json
+      - name: Install pinned free headless engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.lane }}" == blender ]]; then
+            sudo apt-get update
+            sudo apt-get install -y blender
+            blender --version | head -1
+          else
+            curl -fsSL "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip" -o godot.zip
+            echo "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  godot.zip" | sha256sum --check
+            unzip -q godot.zip -d godot-bin
+            chmod +x godot-bin/Godot_v4.7.2-stable_linux.x86_64
+            echo "$GITHUB_WORKSPACE/godot-bin" >> "$GITHUB_PATH"
+          fi
+      - name: Evaluate original, v1, and selected checkpoints in engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          engine=blender
+          if [[ "${{ matrix.lane }}" == godot ]]; then engine=Godot_v4.7.2-stable_linux.x86_64; fi
+          for role in original_parent v1_candidate selected; do
+            dir="checkpoints/$role"
+            if [[ "$role" == selected ]]; then dir=checkpoints/candidate; fi
+            python -m forge_core.neural.scene_spec_v2_engine_eval \
+              --lane "${{ matrix.lane }}" --role "$role" \
+              --checkpoint-dir "$dir" --data-dir "data/${{ matrix.lane }}" \
+              --engine "$engine" --out "results/$role-engine.json"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-scene-spec-v2-eval-${{ matrix.lane }}-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: results/
+          retention-days: 90
+          if-no-files-found: warn
+
+  archive:
+    needs: evaluate
+    if: always() && needs.evaluate.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download six training and six testing bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for lane in blender godot; do
+            for seed in 861 862 863; do
+              mkdir -p "bundle/training/$lane/seed$seed" "bundle/evaluation/$lane/seed$seed"
+              gh run download 43340793375 --repo "$GITHUB_REPOSITORY" \
+                --name "forge-scene-spec-sft-v2-$lane-seed$seed-43340793375" \
+                --dir "bundle/training/$lane/seed$seed"
+              gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+                --name "forge-scene-spec-v2-eval-$lane-seed$seed-$GITHUB_RUN_ID" \
+                --dir "bundle/evaluation/$lane/seed$seed"
+            done
+          done
+      - name: Summarize held-out transfer and engine results
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for path in sorted(glob.glob("bundle/evaluation/**/training-metrics.json",recursive=True)):
+              # training-metrics is in the evaluation artifact's source result tree
+              m=json.load(open(path,encoding="utf-8"))
+              root=os.path.dirname(path)
+              lane=m["lane"]; seed=m["seed"]
+              engines={role:json.load(open(os.path.join(root,f"{role}-engine.json"),encoding="utf-8"))
+                       for role in ("original_parent","v1_candidate","selected")}
+              rows.append((lane,seed,m,engines))
+          if len(rows)!=6: raise SystemExit(f"Expected six completed summaries, got {len(rows)}")
+          lines=["# Forge scene-spec SFT v2 — transfer and engine results","",
+          "Six independent answer-only SFT runs, three seeds per lane, resumed from verified Forge weights. Task examples are original CC0-1.0. Each model was scored on 102 held-out task/prompt combinations; a fixed subset was also sent through whitelisted headless engine builders. Generated text was never executed. This measures constrained scene-spec behavior, not general Blender/Godot competence. No language checkpoint was changed, no teacher-model weights were used, and no candidate was promoted to Android.","",
+          "| Lane | Seed | Updates | Validation loss: original → v1 → selected | Test loss: original → v1 → selected | Exact JSON tasks / 102: original → v1 → selected | Selected engine: positive controls / generated exact builds | Candidate SHA-256 |",
+          "|---|---:|---:|---|---|---|---|---|"]
+          for lane,seed,m,e in rows:
+              losses=m["losses"]; generated=m["generated"]["by_role"]
+              val=" → ".join(f"{losses[k]['valid']:.6f}" for k in ("original_parent","v1_candidate","selected"))
+              test=" → ".join(f"{losses[k]['test']:.6f}" for k in ("original_parent","v1_candidate","selected"))
+              exact=" → ".join(f"{generated[k]['exact_field_match']}/{generated[k]['count']}" for k in ("original_parent","v1_candidate","selected"))
+              scene=e["selected"]["headless_scene_build"]
+              ctr=scene["positive_controls"]
+              built=scene["generated_exact_scenes"]
+              engine=f"{ctr['count']} controls pass={ctr['valid']}; generated {built['count']} pass={built['valid']}"
+              lines.append(f"| {lane} | {seed} | {m['updates_attempted']} / {m['selected_updates']} | {val} | {test} | {exact} | {engine} | {m['selected_checkpoint_sha256']} |")
+          lines += ["","Checkpoints, optimizer/RNG state, exact data splits and hashes, per-seed metrics, raw generated outputs, and all engine logs are included under the training/ and evaluation/ folders. Checkpoint selection used validation answer loss only; the held-out metrics and engine results were not used to select candidates."]
+          open("bundle/SCENE-SPEC-SFT-V2-RESULTS.md","w",encoding="utf-8").write("\n".join(lines)+"\n")
+          PY
+      - name: Preserve complete research series in a draft release
+        run: |
+          set -euo pipefail
+          tag="forge-scene-spec-sft-v2-evaluated-43340793375"
+          tar -czf "$tag.tar.gz" -C bundle .
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --title "Forge scene-spec SFT v2 evaluated — run 43340793375" \
+            --notes "Six completed training runs with repaired evaluation. Includes CC0 data, checkpoints, exact lineage, optimizer/RNG state, held-out task metrics, and pinned Blender/Godot engine checks. Research-only, not an Android upgrade."
