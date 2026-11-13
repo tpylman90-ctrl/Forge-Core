@@ -84,7 +84,7 @@ def evaluate_generation(model,tokenizer,rows:list[dict])->tuple[dict,list[dict]]
     samples=[]; exact_specs=[]
     model.eval()
     for row in rows:
-        raw=greedy_answer(model,tokenizer,row["prompt"],max_new=96)
+        raw=greedy_answer(model,tokenizer,row["prompt"],max_new=160)
         parsed=parse_compact(raw,row["kind"])
         per_field=field_match(parsed,row["expected"])
         exact=all(per_field.values())
@@ -113,7 +113,6 @@ def engine_check(binary:str,rows:list[dict],specs:list[dict])->dict:
     generated=items[len(controls):]
     result["generated_exact_scenes"]={"count":len(specs),
       "valid":all(x.get("valid",False) for x in generated) if generated else None}
-    result["engine_version"]=torch.__version__ if False else result.get("engine_version")
     return result
 
 def train(a):
