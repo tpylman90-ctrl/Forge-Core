@@ -45,7 +45,7 @@ jobs:
           import shutil,torch
           from pathlib import Path
           lane="${{ matrix.lane }}"
-          roots=[p.parent.parent for p in Path("restore").rglob("candidate/metrics.json")
+          roots=[p.parent.parent.parent for p in Path("restore").rglob("candidate/metrics.json")
                  if (p.parent/"checkpoint.pt").is_file() and (p.parent/"tokenizer.json").is_file()]
           if len(roots)!=1: raise SystemExit(f"Expected one completed candidate artifact, found {roots}")
           root=roots[0]
