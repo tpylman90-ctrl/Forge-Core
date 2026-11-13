@@ -1,0 +1,133 @@
+name: Forge isolated three-lane training from verified 107250 parent
+
+on:
+  workflow_dispatch:
+    inputs:
+      duration_seconds:
+        type: number
+        description: "Maximum training time per isolated lane (60–10800 seconds)"
+        required: true
+        default: 10800
+  push:
+    branches: [main]
+    paths: ["experiments/requests/multilane-night-training-v2-2026-11-13.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  train-lane:
+    name: Train ${{ matrix.lane }} lane
+    runs-on: ubuntu-24.04
+    timeout-minutes: 195
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        lane: [language, blender, godot]
+    env:
+      SOURCE_RUN: "42552572467"
+      SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+      DURATION_SECONDS: ${{ github.event_name == 'push' && '10800' || inputs.duration_seconds || '10800' }}
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Validate budget and Python syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DURATION_SECONDS" =~ ^[0-9]+$ ]]
+          (( DURATION_SECONDS >= 60 && DURATION_SECONDS <= 10800 ))
+          python -m py_compile src/forge_core/neural/multilane_v2.py
+      - name: Restore and verify selected Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" --dir restore
+          python - <<'PY'
+          import hashlib, json, shutil, torch
+          from pathlib import Path
+          root = Path("restore/language")
+          candidate = root / "best-checkpoint.pt"
+          digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
+          state = torch.load(candidate, map_location="cpu", weights_only=True)
+          assert state["step"] == 107250, state["step"]
+          assert state.get("seed") == 43
+          assert digest == "848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99", digest
+          assert state.get("optimizer") and state.get("torch_rng_state") is not None
+          assert state.get("sample_rng_state") is not None
+          manifest = json.loads((root / "source-manifest.json").read_text())
+          assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          assert manifest["license"] == "cdla-sharing-1.0"
+          tokenizer_sha = hashlib.sha256((root / "tokenizer.json").read_bytes()).hexdigest()
+          assert tokenizer_sha == state["tokenizer_sha256"] == "4ecd7803d4c369e80bda2e74c30cfb769b7e3a942f931df83383eec9f794f04c"
+          for split in ("train", "valid"):
+              actual = hashlib.sha256((root / f"{split}.txt").read_bytes()).hexdigest()
+              assert actual == manifest[f"{split}_sha256"] == state[f"{split}_sha256"]
+          for name in ("tokenizer.json", "source-manifest.json", "train.txt", "valid.txt", "test.txt", "ATTRIBUTION.txt"):
+              shutil.copy2(root / name, Path("source") / name)
+          shutil.copy2(candidate, Path("source/checkpoint.pt"))
+          print({"parent_run": 42552572467, "parent_step": state["step"],
+                 "parent_sha256": digest, "tokenizer_sha256": tokenizer_sha})
+          PY
+      - name: Train isolated lane for its bounded time budget
+        run: |
+          python -m forge_core.neural.multilane_v2 \
+            --lane "${{ matrix.lane }}" \
+            --source source \
+            --out "artifacts/${{ matrix.lane }}" \
+            --seconds "$DURATION_SECONDS"
+      - name: Preserve common parent beside this isolated candidate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          lane="${{ matrix.lane }}"
+          mkdir -p "artifacts/${lane}/parent"
+          cp source/checkpoint.pt "artifacts/${lane}/parent/checkpoint.pt"
+          cp source/tokenizer.json "artifacts/${lane}/parent/tokenizer.json"
+          cp source/source-manifest.json "artifacts/${lane}/parent/source-manifest.json"
+          cp source/train.txt "artifacts/${lane}/parent/train.txt"
+          cp source/valid.txt "artifacts/${lane}/parent/valid.txt"
+          cp source/test.txt "artifacts/${lane}/parent/test.txt"
+          cp source/ATTRIBUTION.txt "artifacts/${lane}/parent/ATTRIBUTION.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-multilane-v2-${{ matrix.lane }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/
+          retention-days: 90
+          if-no-files-found: warn
+      - name: Preserve a durable research draft for this lane
+        if: success()
+        shell: bash
+        run: |
+          set -euo pipefail
+          lane="${{ matrix.lane }}"
+          tag="forge-multilane-v2-${lane}-${GITHUB_RUN_ID}"
+          mkdir -p release
+          tar -czf "release/${tag}.tar.gz" -C "artifacts/${lane}" .
+          cat > release-notes.md <<EOF
+          Forge isolated ${lane} lane research checkpoint, initialized from the
+          verified Forge Seed v0.7 107250-step checkpoint from run 42552572467.
+          The language lane resumes its optimizer and sampling RNG; Blender and
+          Godot use separate fresh optimizers and their licensed documentation
+          corpora. Core-language retention is measured for every lane.
+          Research only; no capability certification or Android integration.
+          EOF
+          gh release create "${tag}" "release/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge isolated ${lane} lane — research run ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
