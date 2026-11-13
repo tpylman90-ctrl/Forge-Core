@@ -16,3 +16,5 @@ Restart after manifest syntax fix.
 Restart after held-out prompt selection fix.
 
 Restart after adding the fixed Blender probe value.
+
+Restart after fixing the generated Godot project string in the multi-family evaluator.
