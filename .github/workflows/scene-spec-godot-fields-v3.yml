@@ -1,4 +1,4 @@
-name: Forge Godot compact exact-field SFT v3
+name: Forge Godot exact-field SFT v3b prompt-preserving
 
 on:
   push:
@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   train:
-    name: Godot compact-field SFT seed ${{ matrix.seed }}
+    name: Godot exact-field SFT v3b seed ${{ matrix.seed }}
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     strategy:
@@ -109,7 +109,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: forge-godot-fields-v3-seed${{ matrix.seed }}-${{ github.run_id }}
+          name: forge-godot-fields-v3b-seed${{ matrix.seed }}-${{ github.run_id }}
           path: |
             checkpoints/
             data/
@@ -133,7 +133,7 @@ jobs:
             dest="bundle/seed$seed"
             mkdir -p "$dest"
             gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
-              --name "forge-godot-fields-v3-seed$seed-$GITHUB_RUN_ID" --dir "$dest"
+              --name "forge-godot-fields-v3b-seed$seed-$GITHUB_RUN_ID" --dir "$dest"
           done
       - name: Summarize exact fields, parameters, and headless checks
         run: |
@@ -145,8 +145,8 @@ jobs:
               rows.append(m)
           if len(rows)!=3: raise SystemExit(f"Expected 3 reports, got {len(rows)}")
           fields=rows[0]["generated"]["selected"]["field_correct_counts"]
-          lines=["# Godot compact exact-field SFT v3","",
-          "Three independently seeded CPU fine-tunes from the selected v2 Godot checkpoint. Targets contain seven fixed fields and no prose. Original, v1, v2-start, and selected outputs were scored on the same held-out composition/prompt split and passed through pinned headless Godot. Research-only; no promotion or Android integration.","",
+          lines=["# Godot exact-field SFT v3b — prompt-preserving","",
+          "Three independently seeded CPU fine-tunes from the selected v2 Godot checkpoint. Targets contain seven fixed fields and no prose; source prompt wording is preserved except for replacing explanation requests with JSON-only instructions. Original, v1, v2-start, and selected outputs were scored on the same held-out composition/prompt split and passed through pinned headless Godot. Research-only; no promotion or Android integration.","",
           "| Seed | Updates attempted / selected | Exact outputs / 102: original → v1 → v2 start → selected | Selected field matches / 102 | Exact generated scenes | Clean single-JSON outputs |",
           "|---:|---:|---|---|---:|---:|"]
           for m in rows:
@@ -160,8 +160,8 @@ jobs:
       - name: Archive research-only checkpoints and evaluations
         run: |
           set -euo pipefail
-          tag="forge-godot-fields-v3-$GITHUB_RUN_ID"
+          tag="forge-godot-fields-v3b-$GITHUB_RUN_ID"
           tar -czf "$tag.tar.gz" -C bundle .
           gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" \
-            --draft --prerelease --title "Forge Godot exact-field SFT v3 — run $GITHUB_RUN_ID" \
-            --notes "Three seed-controlled Godot-only CPU fine-tunes with compact fixed-field JSON targets. Includes pinned parents, held-out exact-field/parameter metrics, raw outputs, and headless engine checks. Research-only; no Android promotion."
+            --draft --prerelease --title "Forge Godot exact-field SFT v3b — run $GITHUB_RUN_ID" \
+            --notes "Three seed-controlled Godot-only CPU fine-tunes with compact fixed-field JSON targets and prompt-preserving inputs. Includes pinned parents, held-out exact-field/parameter metrics, raw outputs, and headless engine checks. Research-only; no Android promotion."
