@@ -55,15 +55,21 @@ TRAIN_TEMPLATES={
 }
 TEST_TEMPLATES={
  "blender":{
-  "cube":"Task for Blender: set up a cube called {name}; size {size}; edge bevel width {bevel_width}; bevel segments {bevel_segments}. Output JSON and a short why.",
-  "uv_sphere":"Task for Blender: set up a UV sphere called {name}; radius {radius}; mesh segments {segments}; rings {rings}. Output JSON and a short why.",
-  "cylinder":"Task for Blender: set up a cylinder called {name}; radius {radius}; depth {depth}; vertices {vertices}; bevel width {bevel_width}; bevel segments {bevel_segments}. Output JSON and a short why.",
+  "cube":("Blender task: create a cube called {name}, size {size}, edge bevel width {bevel_width}, bevel segment count {bevel_segments}. JSON and short why.",
+          "For Blender, produce a cube spec named {name}: side length {size}, bevel width {bevel_width}, with {bevel_segments} bevel segments. Respond in JSON with a short why."),
+  "uv_sphere":("Blender task: create a UV sphere called {name}, radius {radius}, mesh segments {segments}, ring count {rings}. JSON and short why.",
+               "For Blender, produce a UV sphere spec named {name}: radius {radius}, {segments} segments, {rings} rings. Respond in JSON with a short why."),
+  "cylinder":("Blender task: create a cylinder called {name}, radius {radius}, depth {depth}, vertices {vertices}, bevel width {bevel_width}, bevel segment count {bevel_segments}. JSON and short why.",
+              "For Blender, produce a cylinder spec named {name}: radius {radius}, depth {depth}, {vertices} vertices, bevel width {bevel_width}, {bevel_segments} bevel segments. Respond in JSON with a short why."),
  },
  "godot":{
-  "sphere":"Task for Godot: scene root {root_name}; add SphereMesh node {child_name}; radius {radius}. Output JSON and a short why.",
-  "box":"Task for Godot: scene root {root_name}; add BoxMesh node {child_name}; equal size axes {extent}. Output JSON and a short why.",
-  "capsule":"Task for Godot: scene root {root_name}; add CapsuleMesh node {child_name}; radius {radius}; height {height}. Output JSON and a short why.",
- },
+  "sphere":("Godot task: create root {root_name} and child mesh node {child_name} using SphereMesh, radius {radius}. JSON and short why.",
+            "For Godot, specify a scene rooted at {root_name} with {child_name} as a SphereMesh node, radius {radius}. Respond in JSON with a short why."),
+  "box":("Godot task: create root {root_name} and child mesh node {child_name} using BoxMesh, uniform axis size {extent}. JSON and short why.",
+         "For Godot, specify a scene rooted at {root_name} with {child_name} as a BoxMesh node, all size axes {extent}. Respond in JSON with a short why."),
+  "capsule":("Godot task: create root {root_name} and child mesh node {child_name} using CapsuleMesh, radius {radius}, height {height}. JSON and short why.",
+             "For Godot, specify a scene rooted at {root_name} with {child_name} as a CapsuleMesh node, radius {radius} and height {height}. Respond in JSON with a short why."),
+ }
 }
 
 def _fmt(v): return str(v)
@@ -148,7 +154,9 @@ def make_records(lane:str)->dict[str,list[dict]]:
         for r in splits[split]:
             r["prompt"]=TRAIN_TEMPLATES[lane][r["kind"]][int(hashlib.sha256(r["id"].encode()).hexdigest()[-2:],16)%2].format(**r["expected"])
     for r in splits["test"]:
-        r["prompt"]=TEST_TEMPLATES[lane][r["kind"]].format(**r["expected"])
+        templates=TEST_TEMPLATES[lane][r["kind"]]
+        idx=int(hashlib.sha256((r["id"]+":test-template").encode()).hexdigest()[:2],16)%len(templates)
+        r["prompt"]=templates[idx].format(**r["expected"])
     for group in splits.values(): group.sort(key=lambda r:r["id"])
     return splits
 
