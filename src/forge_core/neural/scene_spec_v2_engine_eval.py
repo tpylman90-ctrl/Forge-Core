@@ -132,9 +132,11 @@ func _initialize() -> void:
         cwd=work,text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=180)
     (work/"godot.log").write_text(p.stdout,encoding="utf-8")
     marker=next((x for x in p.stdout.splitlines() if x.startswith("FORGE_V2_CHECKS=")),None)
-    if p.returncode or marker is None: return {"valid":False,"count":0,"log_tail":p.stdout[-3000:]}
-    checks=json.loads(marker.split("=",1)[1])
-    return {"valid":all(checks),"count":len(checks),"items":[{"valid":x} for x in checks],"log_tail":""}
+     if marker is None: return {"valid":False,"count":0,"log_tail":p.stdout[-3000:]}
+     checks=json.loads(marker.split("=",1)[1])
+     return {"valid":p.returncode==0 and all(checks),"count":len(checks),
+             "items":[{"valid":x} for x in checks],
+             "log_tail":p.stdout[-3000:] if p.returncode else ""}
 
 def main():
     p=argparse.ArgumentParser(description=__doc__)
