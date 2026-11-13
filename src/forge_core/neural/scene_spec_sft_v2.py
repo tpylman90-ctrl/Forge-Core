@@ -25,14 +25,14 @@ ROOTS=("World","Room","TestScene","PropSet","Workshop","Arena","Level","RootNode
 CHILDREN=("Beacon","Marker","Orb","Item","Prop","Sphere","Pickup","Actor")
 WHY={
  "blender":{
-  "cube":"The size sets the cube dimensions; bevel width and segments shape its edges.",
-  "uv_sphere":"Radius sets the sphere size; segments and rings control mesh resolution.",
-  "cylinder":"Radius and depth set the cylinder size; vertices control radial resolution.",
+  "cube":"Size sets dimensions; bevel width and segments shape the edges.",
+  "uv_sphere":"Radius sets size; segments and rings set mesh detail.",
+  "cylinder":"Radius and depth set size; vertices set radial detail.",
  },
  "godot":{
-  "sphere":"SphereMesh radius sets its size and the mesh instance displays it as a scene node.",
-  "box":"BoxMesh size sets its three dimensions and the mesh instance displays it as a scene node.",
-  "capsule":"CapsuleMesh radius and height set its shape inside the mesh instance.",
+  "sphere":"Radius sets size; the mesh instance displays the sphere.",
+  "box":"Uniform size sets dimensions; the mesh instance displays the box.",
+  "capsule":"Radius and height define the capsule dimensions.",
  },
 }
 TRAIN_TEMPLATES={
@@ -140,6 +140,8 @@ def make_records(lane:str)->dict[str,list[dict]]:
         splits[split].append(row)
     # Keep three fixed probes and their task compositions in the test split.
     probe_ids={p[0] for p in probes}
+    for row in rows:
+        if row["id"] in probe_ids: row["fixed_probe"]=True
     for probe_id in probe_ids:
         found=next((r for group in splits.values() for r in group if r["id"]==probe_id),None)
         if found is None: raise AssertionError(f"Missing probe {probe_id}")
@@ -166,7 +168,7 @@ def prepare_data(lane:str,out:Path)->dict:
       "license":"CC0-1.0","generator":"scene_spec_sft_v2.py","generator_version":2,
       "source_references":[],"examples_original":True,"reference_prose_copied":False,
       "split_policy":"hash split by full task composition; train/valid prompt templates are disjoint from two held-out test templates; three fixed probes forced into test",
-      "families":sorted({r["kind"] for r in splits["train"]}),"probe_compositions_held_out":True,
+      "families":sorted({r["kind"] for r in splits["train"]}),"probe_compositions_held_out":True,\n      "probe_ids":[r["id"] for r in splits["test"] if r.get("fixed_probe")],
       "splits":{}}
     for split,rows in splits.items():
         data=jsonl(rows); (out/f"{split}.jsonl").write_bytes(data)
@@ -185,7 +187,11 @@ def sample_test_rows(rows:list[dict],per_family:int=34)->list[dict]:
     for family in sorted({r["kind"] for r in rows}):
         pool=[r for r in rows if r["kind"]==family]
         pool.sort(key=lambda r:hashlib.sha256((r["id"]+":v2eval").encode()).hexdigest())
-        chosen.extend(pool[:per_family])
+        selected=pool[:per_family]
+        for probe in (r for r in pool if r.get("fixed_probe")):
+            if probe not in selected:
+                selected[-1]=probe
+        chosen.extend(selected)
     return chosen
 
 def parse_answer(text:str,lane:str,kind:str)->dict|None:
