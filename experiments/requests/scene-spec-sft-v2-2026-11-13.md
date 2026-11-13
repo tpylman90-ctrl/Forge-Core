@@ -9,3 +9,6 @@ Execute six independent answer-masked CPU SFT runs from the v2 workflow.
 - Split by task composition. Keep prompt forms disjoint, with two unseen held-out prompt forms per family. Include fixed probes in held-out data.
 - Evaluate 102 stratified held-out task prompts per run, plus multi-family headless engine checks. Compare original parent, v1 candidate, training start, and selected checkpoint on the same held-out set.
 - Preserve exact checkpoint lineage, data and split hashes, optimizer/RNG state, metrics, and raw engine output. No teacher-model weights, language checkpoint, promotion, or Android integration.
+
+
+Restart after manifest syntax fix.
