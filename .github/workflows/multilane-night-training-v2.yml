@@ -10,7 +10,7 @@ on:
         default: 10800
   push:
     branches: [main]
-    paths: ["experiments/requests/multilane-night-training-v2-2026-11-13.md"]
+    paths: ["experiments/requests/multilane-night-training-v2-2026-11-13.md", "experiments/requests/multilane-night-training-v2-retry-2026-11-13.md"]
 
 permissions:
   contents: write
@@ -60,7 +60,7 @@ jobs:
           import hashlib, json, shutil, torch
           from pathlib import Path
           root = Path("restore/language")
-          candidate = root / "best-checkpoint.pt"
+          candidate = root / "checkpoint.pt"
           digest = hashlib.sha256(candidate.read_bytes()).hexdigest()
           state = torch.load(candidate, map_location="cpu", weights_only=True)
           assert state["step"] == 107250, state["step"]
