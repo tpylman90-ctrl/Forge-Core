@@ -135,7 +135,7 @@ def make_records(lane:str)->dict[str,list[dict]]:
     for row in rows:
         bucket=int(hashlib.sha256(row["id"].encode()).hexdigest()[:8],16)%10
         row["prompt"]= (TRAIN_TEMPLATES[lane][row["kind"]][bucket%2].format(**row["expected"])
-                        if bucket<8 else TEST_TEMPLATES[lane][row["kind"]].format(**row["expected"]))
+                        if bucket<8 else TEST_TEMPLATES[lane][row["kind"]][bucket%2].format(**row["expected"]))
         split="train" if bucket<7 else ("valid" if bucket==7 else "test")
         splits[split].append(row)
     # Keep three fixed probes and their task compositions in the test split.
