@@ -168,7 +168,8 @@ def prepare_data(lane:str,out:Path)->dict:
       "license":"CC0-1.0","generator":"scene_spec_sft_v2.py","generator_version":2,
       "source_references":[],"examples_original":True,"reference_prose_copied":False,
       "split_policy":"hash split by full task composition; train/valid prompt templates are disjoint from two held-out test templates; three fixed probes forced into test",
-      "families":sorted({r["kind"] for r in splits["train"]}),"probe_compositions_held_out":True,\n      "probe_ids":[r["id"] for r in splits["test"] if r.get("fixed_probe")],
+      "families":sorted({r["kind"] for r in splits["train"]}),"probe_compositions_held_out":True,
+      "probe_ids":[r["id"] for r in splits["test"] if r.get("fixed_probe")],
       "splits":{}}
     for split,rows in splits.items():
         data=jsonl(rows); (out/f"{split}.jsonl").write_bytes(data)
