@@ -14,19 +14,15 @@ from forge_core.neural.scene_spec_v2_engine_eval import build_godot
 
 FIELDS=("kind","root_name","child_name","mesh_type","radius","extent","height")
 EXPECTED_START="f3dbfb896c1e525a2aef97a9fc2aaf06a1fc0b12b822acbd31bbd2f52e5d40dc"
-PROMPT_PREFIX=("Return exactly one compact JSON object with keys in this order: "
-               "kind, root_name, child_name, mesh_type, radius, extent, height. "
-               "Use null for numeric fields that do not apply. No explanation. ")
-
 def canonical_expected(values:dict)->dict:
     return {key:values.get(key,None) for key in FIELDS}
 
 def prepare_data(out:Path)->dict:
     splits=make_records("godot")
     out.mkdir(parents=True,exist_ok=True)
-    manifest={"schema":3,"lane":"godot","dataset":"Godot compact exact-field scene specs v3",
+    manifest={"schema":4,"lane":"godot","dataset":"Godot compact exact-field scene specs v3b prompt-preserving",
       "license":"CC0-1.0","source":"Forge-Core-authored procedural task grid",
-      "policy":"reuse v2 composition split; remove prose targets; fixed seven-key output schema; two held-out prompt forms",
+      "policy":"reuse v2 composition split; preserve source prompt wording; replace only explanation request; fixed seven-key output schema",
       "fields":list(FIELDS),"families":sorted({r["kind"] for r in splits["train"]}),
       "splits":{}}
     for split,source_rows in splits.items():
@@ -34,7 +30,7 @@ def prepare_data(out:Path)->dict:
         for source in source_rows:
             prompt=source["prompt"]
             prompt=re.sub(r"(?i)(?:(?:return|output)\s+)?json\s+(?:(?:and|plus)\s+)?(?:a\s+)?(?:short\s+)?why\.?|respond\s+in\s+json\s+with\s+a\s+short\s+why\.?","Return JSON only.",prompt)
-            prompt=PROMPT_PREFIX+prompt
+            prompt=prompt.strip()
             expected=canonical_expected(source["expected"])
             target=json.dumps(expected,ensure_ascii=False,separators=(",",":"))
             rows.append({"id":source["id"],"lane":"godot","kind":source["kind"],
@@ -200,7 +196,7 @@ def train(a):
                       "test":round(masked_loss(m,encoded["test"]),8)}
     losses["selected"]={"valid":round(masked_loss(selected,encoded["valid"]),8),
                         "test":round(masked_loss(selected,encoded["test"]),8)}
-    report={"schema":3,"status":"research_only_no_promotion","lane":"godot","seed":a.seed,
+    report={"schema":4,"status":"research_only_no_promotion","lane":"godot","seed":a.seed,
       "original_parent_sha256":sha_file(a.original_dir/"checkpoint.pt"),
       "v1_comparison_sha256":sha_file(a.v1_dir/"checkpoint.pt"),
       "v2_training_start_sha256":start_sha,"selected_checkpoint_sha256":sha_file(a.out/"checkpoint.pt"),
