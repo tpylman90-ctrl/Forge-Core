@@ -1,0 +1,52 @@
+name: Recheck saved Godot v3b generations
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/godot-v3b-engine-recheck-2026-11-13.md"]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  recheck:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SOURCE_RUN: "43430665839"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install evaluation dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Download the three completed training bundles
+        run: |
+          set -euo pipefail
+          for seed in 871 872 873; do
+            mkdir -p "recheck/seed$seed"
+            gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+              --name "forge-godot-fields-v3b-seed$seed-$SOURCE_RUN" --dir "recheck/seed$seed"
+          done
+      - name: Install pinned headless Godot
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip" -o godot.zip
+          echo "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  godot.zip" | sha256sum --check
+          unzip -q godot.zip -d godot-bin
+          chmod +x godot-bin/Godot_v4.7.2-stable_linux.x86_64
+      - name: Recheck all saved exact outputs
+        run: |
+          python -m forge_core.neural.godot_field_sft_v3b_recheck \
+            --artifacts-root recheck \
+            --engine "$GITHUB_WORKSPACE/godot-bin/Godot_v4.7.2-stable_linux.x86_64" \
+            --out reports/godot-v3b-engine-recheck.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-godot-v3b-engine-recheck-${{ github.run_id }}
+          path: reports/godot-v3b-engine-recheck.json
+          retention-days: 90
+          if-no-files-found: error
