@@ -1,0 +1,3 @@
+# Three isolated Forge branches from the verified 107250-step parent
+
+Run language, Blender, and Godot as three independent full-weight branches from the hash-verified Forge Seed checkpoint selected at global step 107250 from run 42552572467. Allow up to 10800 CPU seconds per lane in parallel. The language branch resumes its optimizer and sampler RNG on the pinned TinyStories revision; Blender and Godot use separately fetched and attributed manual prose with fresh lane-local optimizers. Save the exact parent alongside every candidate. Compare each lane's pinned held-out split and measure TinyStories language retention for all three candidates. Keep checkpoints research-only: no merge across lanes and no Android promotion.
