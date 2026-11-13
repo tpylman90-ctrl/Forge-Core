@@ -1,0 +1,164 @@
+name: Forge Godot compact exact-field SFT v3
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/godot-field-v3-2026-11-13.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  train:
+    name: Godot compact-field SFT seed \${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        seed: [871, 872, 873]
+    env:
+      GH_TOKEN: \${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install free CPU training tools
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Preflight compact seven-field data and unchanged held-out split
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from forge_core.neural.godot_field_sft_v3 import FIELDS,prepare_data
+          from forge_core.neural.scene_spec_sft_v2 import read_rows,sample_test_rows
+          root=Path("preflight")
+          m=prepare_data(root)
+          train=read_rows(root/"train.jsonl")
+          valid=read_rows(root/"valid.jsonl")
+          test=read_rows(root/"test.jsonl")
+          assert len(m["families"])==3
+          assert len(sample_test_rows(test,34))==102
+          assert len(train)>500 and len(valid)>100 and len(test)>100
+          for row in train+valid+test:
+              target=json.loads(row["target"])
+              assert list(target)==list(FIELDS)
+              assert set(row["expected"])==set(FIELDS)
+              assert "why" not in target and "short why" not in row["prompt"]
+          print({"families":m["families"],"splits":m["splits"],"manifest":m["manifest_sha256"]})
+          PY
+      - name: Restore and hash-verify the original, v1, and selected v2 checkpoints
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore/original restore/v1 restore/v2 checkpoints/original_parent checkpoints/v1_candidate checkpoints/v2_start
+          gh run download 42541109934 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-tool-curriculum-v2-godot-42541109934" --dir restore/original
+          gh run download 43152253937 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-scene-spec-sft-godot-seed741-43152253937" --dir restore/v1
+          gh run download 43356675899 --repo "$GITHUB_REPOSITORY" \
+            --name "forge-scene-spec-sft-v2-godot-seed861-43356675899" --dir restore/v2
+          python - <<'PY'
+          import hashlib,shutil
+          from pathlib import Path
+          expected={
+            "original_parent":"de7de5052f0a56d821ea3995f1f2e5fbb80d10750e4fb3a564f3c6c4a2a0afdf",
+            "v1_candidate":"43f5d8df4e3c6fea3986766cc51186bd4e75874b0f23fbd06668e07706fc9c26",
+            "v2_start":"f3dbfb896c1e525a2aef97a9fc2aaf06a1fc0b12b822acbd31bbd2f52e5d40dc",
+          }
+          sources={"original_parent":Path("restore/original"),"v1_candidate":Path("restore/v1"),"v2_start":Path("restore/v2")}
+          for role,root in sources.items():
+              matches=[]
+              for ckpt in root.rglob("checkpoint.pt"):
+                  digest=hashlib.sha256(ckpt.read_bytes()).hexdigest()
+                  if digest==expected[role]: matches.append(ckpt.parent)
+              if len(matches)!=1: raise SystemExit(f"{role}: expected one hash-matched checkpoint, found {matches}")
+              dst=Path("checkpoints")/role
+              shutil.copytree(matches[0],dst,dirs_exist_ok=True)
+              print({"role":role,"sha256":expected[role],"dir":str(dst)})
+          PY
+      - name: Install pinned headless Godot
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/godotengine/godot/releases/download/4.7.2-stable/Godot_v4.7.2-stable_linux.x86_64.zip" -o godot.zip
+          echo "cadd3204e728a35d3f13adb7fd0d7902636b79f6b95c40c265eb73b6c35329e4  godot.zip" | sha256sum --check
+          unzip -q godot.zip -d godot-bin
+          chmod +x godot-bin/Godot_v4.7.2-stable_linux.x86_64
+      - name: Train and evaluate compact exact-field targets
+        run: |
+          python -m forge_core.neural.godot_field_sft_v3 \
+            --start-dir checkpoints/v2_start \
+            --original-dir checkpoints/original_parent \
+            --v1-dir checkpoints/v1_candidate \
+            --data-dir data \
+            --out checkpoints/candidate \
+            --engine "$GITHUB_WORKSPACE/godot-bin/Godot_v4.7.2-stable_linux.x86_64" \
+            --seed "\${{ matrix.seed }}" --steps 5000 --eval-every 250 \
+            --patience 8 --lr 0.00001 --batch-size 4
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-godot-fields-v3-seed\${{ matrix.seed }}-\${{ github.run_id }}
+          path: |
+            checkpoints/
+            data/
+          retention-days: 90
+          if-no-files-found: warn
+
+  archive:
+    needs: train
+    if: always() && needs.train.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: \${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download all three training bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          for seed in 871 872 873; do
+            dest="bundle/seed$seed"
+            mkdir -p "$dest"
+            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "forge-godot-fields-v3-seed$seed-$GITHUB_RUN_ID" --dir "$dest"
+          done
+      - name: Summarize exact fields, parameters, and headless checks
+        run: |
+          python - <<'PY'
+          import glob,json,os
+          rows=[]
+          for path in sorted(glob.glob("bundle/**/candidate/metrics.json",recursive=True)):
+              m=json.load(open(path,encoding="utf-8"))
+              rows.append(m)
+          if len(rows)!=3: raise SystemExit(f"Expected 3 reports, got {len(rows)}")
+          fields=rows[0]["generated"]["selected"]["field_correct_counts"]
+          lines=["# Godot compact exact-field SFT v3","",
+          "Three independently seeded CPU fine-tunes from the selected v2 Godot checkpoint. Targets contain seven fixed fields and no prose. Original, v1, v2-start, and selected outputs were scored on the same held-out composition/prompt split and passed through pinned headless Godot. Research-only; no promotion or Android integration.","",
+          "| Seed | Updates attempted / selected | Exact outputs / 102: original → v1 → v2 start → selected | Selected field matches / 102 | Exact generated scenes | Clean single-JSON outputs |",
+          "|---:|---:|---|---|---:|---:|"]
+          for m in rows:
+              g=m["generated"]; e=m["engine"]["selected"]["generated_exact_scenes"]
+              exact=" → ".join(f"{g[k]['exact_field_match']}/102" for k in ("original_parent","v1_candidate","v2_start","selected"))
+              fields=", ".join(f"{k} {g['selected']['field_correct_counts'][k]}/102" for k in g["selected"]["field_correct_counts"])
+              lines.append(f"| {m['seed']} | {m['updates_attempted']} / {m['selected_updates']} | {exact} | {fields} | {e['count']} | {g['selected']['clean_single_json']} |")
+          lines += ["","All checkpoints, optimizer/RNG state, data hashes, per-field counts, raw generations, and engine reports are retained. Selection uses validation loss; held-out results do not select checkpoints."]
+          open("bundle/GODOT-FIELD-V3-RESULTS.md","w",encoding="utf-8").write("\n".join(lines)+"\n")
+          PY
+      - name: Archive research-only checkpoints and evaluations
+        run: |
+          set -euo pipefail
+          tag="forge-godot-fields-v3-$GITHUB_RUN_ID"
+          tar -czf "$tag.tar.gz" -C bundle .
+          gh release create "$tag" "$tag.tar.gz" --repo "$GITHUB_REPOSITORY" \
+            --draft --prerelease --title "Forge Godot exact-field SFT v3 — run $GITHUB_RUN_ID" \
+            --notes "Three seed-controlled Godot-only CPU fine-tunes with compact fixed-field JSON targets. Includes pinned parents, held-out exact-field/parameter metrics, raw outputs, and headless engine checks. Research-only; no Android promotion."
