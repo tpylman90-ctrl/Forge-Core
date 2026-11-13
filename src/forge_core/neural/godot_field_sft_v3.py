@@ -107,8 +107,10 @@ def engine_check(binary:str,rows:list[dict],specs:list[dict])->dict:
     result["positive_controls"]={"count":len(controls),
       "valid":len(items)>=len(controls) and all(x.get("valid",False) for x in items[:len(controls)])}
     generated=items[len(controls):]
-    result["generated_exact_scenes"]={"count":len(specs),
-      "valid":all(x.get("valid",False) for x in generated) if generated else None}
+    generated_valid=sum(bool(x.get("valid",False)) for x in generated)
+    result["generated_exact_scenes"]={"count":len(specs),"checked":len(generated),
+      "valid_count":generated_valid,"failed_count":len(generated)-generated_valid,
+      "valid":all(x.get("valid",False) for x in generated) if len(generated)==len(specs) and generated else None}
     return result
 
 def train(a):
