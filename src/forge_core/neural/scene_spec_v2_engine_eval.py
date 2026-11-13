@@ -149,8 +149,11 @@ def main():
     with tempfile.TemporaryDirectory(prefix=f"forge-v2-{a.lane}-") as tmp:
         result=build_blender(a.engine,specs,Path(tmp)) if a.lane=="blender" else build_godot(a.engine,specs,Path(tmp))
         # The first three inputs are positive controls; remaining scenes came from exact model outputs.
-        result["positive_controls"]={"count":len(controls),"valid":bool(result.get("valid"))}
-        result["generated_exact_scenes"]={"count":len(matched),"valid":bool(result.get("valid")) if matched else None}
+        items=result.get("items",[])
+        control_items=items[:len(controls)]
+        generated_items=items[len(controls):]
+        result["positive_controls"]={"count":len(controls),"valid":len(control_items)==len(controls) and all(x.get("valid",False) for x in control_items)}
+        result["generated_exact_scenes"]={"count":len(matched),"valid":all(x.get("valid",False) for x in generated_items) if generated_items else None}
         result["engine_version"]=subprocess.run([a.engine,"--version"],text=True,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,timeout=30).stdout.strip()[:300]
     report={"schema":1,"status":"evaluation_only","lane":a.lane,"role":a.role,
       "checkpoint_sha256":sha_file(a.checkpoint_dir/"checkpoint.pt"),
