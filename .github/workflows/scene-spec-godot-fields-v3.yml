@@ -79,9 +79,12 @@ jobs:
               for ckpt in root.rglob("checkpoint.pt"):
                   digest=hashlib.sha256(ckpt.read_bytes()).hexdigest()
                   if digest==expected[role]: matches.append(ckpt.parent)
-              if len(matches)!=1: raise SystemExit(f"{role}: expected one hash-matched checkpoint, found {matches}")
+              if not matches: raise SystemExit(f"{role}: no checkpoint matched {expected[role]}")
+              matches.sort(key=lambda p:(p.name!="source",len(p.parts),str(p)))
+              selected=matches[0]
               dst=Path("checkpoints")/role
-              shutil.copytree(matches[0],dst,dirs_exist_ok=True)
+              shutil.copytree(selected,dst,dirs_exist_ok=True)
+              print({"role":role,"sha256":expected[role],"matching_copies":len(matches),"selected":str(selected),"dir":str(dst)})
               print({"role":role,"sha256":expected[role],"dir":str(dst)})
           PY
       - name: Install pinned headless Godot
