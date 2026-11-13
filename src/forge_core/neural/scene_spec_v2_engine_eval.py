@@ -73,8 +73,7 @@ if not all(x["valid"] for x in items): raise SystemExit("Blender structural chec
 
 def build_godot(binary:str,specs:list[dict],work:Path)->dict:
     project=work/"project"; project.mkdir()
-    (project/"project.godot").write_text('config_version=5\n[application]\nconfig/name="ForgeSceneSpecV2"
-',encoding="utf-8")
+    (project/"project.godot").write_text("config_version=5\\n[application]\\nconfig/name=\\"ForgeSceneSpecV2\\"\\n",encoding="utf-8")
     (project/"specs.json").write_text(json.dumps(specs),encoding="utf-8")
     (project/"validate.gd").write_text(r'''
 extends SceneTree
