@@ -33,7 +33,7 @@ def prepare_data(out:Path)->dict:
         rows=[]
         for source in source_rows:
             prompt=source["prompt"]
-            prompt=re.sub(r"(?i)(?:Return JSON and a short why|JSON plus why|Respond in JSON with a short why|Output JSON and a short why)\.","Return JSON only.",prompt)
+            prompt=re.sub(r"(?i)(?:(?:return|output)\s+)?json\s+(?:(?:and|plus)\s+)?(?:a\s+)?(?:short\s+)?why\.?|respond\s+in\s+json\s+with\s+a\s+short\s+why\.?","Return JSON only.",prompt)
             prompt=PROMPT_PREFIX+prompt
             expected=canonical_expected(source["expected"])
             target=json.dumps(expected,ensure_ascii=False,separators=(",",":"))
