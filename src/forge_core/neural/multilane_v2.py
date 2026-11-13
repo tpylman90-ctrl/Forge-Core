@@ -243,7 +243,7 @@ def fetch_manual(lane: str, out: Path) -> dict:
 
     pages, texts = [], []
     for url in config["urls"]:
-        request = urllib.request.Request(url, headers={"User-Agent": "Forge-Core-Research/1.0"})
+        request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36 Forge-Core-Research/1.0"})
         for attempt in range(8):
             try:
                 with urllib.request.urlopen(request, timeout=45) as response:
