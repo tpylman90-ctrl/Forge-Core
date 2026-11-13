@@ -129,7 +129,7 @@ def make_records(lane:str)->dict[str,list[dict]]:
     for row in rows:
         bucket=int(hashlib.sha256(row["id"].encode()).hexdigest()[:8],16)%10
         row["prompt"]= (TRAIN_TEMPLATES[lane][row["kind"]][bucket%2].format(**row["expected"])
-                        if bucket<8 else TEST_TEMPLATES[lane][row["kind"]].format(**row["expected"],**row["expected"]))
+                        if bucket<8 else TEST_TEMPLATES[lane][row["kind"]].format(**row["expected"]))
         split="train" if bucket<7 else ("valid" if bucket==7 else "test")
         splits[split].append(row)
     # Keep three fixed probes and their task compositions in the test split.
@@ -148,7 +148,7 @@ def make_records(lane:str)->dict[str,list[dict]]:
         for r in splits[split]:
             r["prompt"]=TRAIN_TEMPLATES[lane][r["kind"]][int(hashlib.sha256(r["id"].encode()).hexdigest()[-2:],16)%2].format(**r["expected"])
     for r in splits["test"]:
-        r["prompt"]=TEST_TEMPLATES[lane][r["kind"]].format(**r["expected"],**r["expected"])
+        r["prompt"]=TEST_TEMPLATES[lane][r["kind"]].format(**r["expected"])
     for group in splits.values(): group.sort(key=lambda r:r["id"])
     return splits
 
@@ -158,7 +158,7 @@ def prepare_data(lane:str,out:Path)->dict:
       "license":"CC0-1.0","generator":"scene_spec_sft_v2.py","generator_version":2,
       "source_references":[],"examples_original":True,"reference_prose_copied":False,
       "split_policy":"hash split by full task composition; train/valid prompt templates are disjoint from two held-out test templates; three fixed probes forced into test",
-      "families":sorted({r["kind"] for r in splits["train"]}),"probe_ids":[r["id"] for r in splits["test"] if r["id"].endswith("probe")],
+      "families":sorted({r["kind"] for r in splits["train"]}),"probe_compositions_held_out":True,
       "splits":{}}
     for split,rows in splits.items():
         data=jsonl(rows); (out/f"{split}.jsonl").write_bytes(data)
@@ -242,6 +242,7 @@ def train(a):
         raw=(a.data_dir/f"{split}.jsonl").read_bytes()
         if sha(raw)!=data["splits"][split]["sha256"]: raise ValueError(f"{split} data hash mismatch")
     parent,model,tokenizer,cfg=load_model(a.parent_dir,a.lane)
+    initial_model=ByteTransformer(cfg); initial_model.load_state_dict(parent["model"],strict=True); initial_model.eval()
     base,baseline,_,_=load_model(a.baseline_dir,a.lane)
     compare,comparison,_,_=load_model(a.comparison_dir,a.lane)
     if parent.get("parent_sha256")!=ROOT: raise ValueError("Wrong Forge root ancestry")
@@ -295,13 +296,11 @@ def train(a):
         save(best_state,best_opt,a.out/"checkpoint.pt",best_step)
         selected=ByteTransformer(cfg); selected.load_state_dict(best_state,strict=True)
     test_rows=read_rows(a.data_dir/"test.jsonl"); eval_rows=sample_test_rows(test_rows,34)
-    roles={"original_parent":(baseline,base),"v1_candidate":(comparison,compare),"selected":(selected,parent)}
+    roles={"original_parent":(baseline,base),"v1_candidate":(comparison,compare),
+           "training_start":(initial_model,parent),"selected":(selected,parent)}
     gen={name:generation_metrics(m,tokenizer,eval_rows,a.lane) for name,(m,_) in roles.items()}
-    # The specific training start can differ from the comparison baseline.
-    gen["training_start"]=generation_metrics(model,tokenizer,eval_rows,a.lane)
     losses={name:{"valid":round(masked_loss(m,encoded["valid"]),8),
                   "test":round(masked_loss(m,encoded["test"]),8)} for name,(m,_) in roles.items()}
-    losses["training_start"]={"valid":round(start_loss,8),"test":round(masked_loss(model,encoded["test"]),8)}
     report={"schema":2,"status":"research_only_no_promotion","lane":a.lane,"seed":a.seed,
       "root_parent_sha256":ROOT,"training_start_sha256":sha_file(a.parent_dir/"checkpoint.pt"),
       "original_parent_sha256":sha_file(a.baseline_dir/"checkpoint.pt"),
