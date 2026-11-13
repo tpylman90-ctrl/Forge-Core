@@ -92,7 +92,7 @@ def make_records(lane:str)->dict[str,list[dict]]:
     if lane=="blender":
         for name in NAMES:
             for size in (0.8,1.0,1.5,2.0,2.5,3.0):
-                for width in (0.03,0.08,0.12,0.2):
+                for width in (0.03,0.08,0.1,0.12,0.2):
                     for seg in (1,2,3):
                         v={"name":name,"size":size,"bevel_width":width,"bevel_segments":seg}
                         rows.append(_row(lane,"cube",v,f"b-cube-{name}-{size}-{width}-{seg}",0))
