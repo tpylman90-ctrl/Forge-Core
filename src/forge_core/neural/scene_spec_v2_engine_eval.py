@@ -93,20 +93,20 @@ func _initialize() -> void:
         var mesh: PrimitiveMesh
         match str(spec["kind"]):
             "sphere":
-                var m := SphereMesh.new()
-                m.radius = float(spec["radius"])
-                m.height = float(spec["radius"]) * 2.0
-                mesh = m
+                var sphere := SphereMesh.new()
+                sphere.radius = float(spec["radius"])
+                sphere.height = float(spec["radius"]) * 2.0
+                mesh = sphere
             "box":
-                var m := BoxMesh.new()
+                var box := BoxMesh.new()
                 var extent := float(spec["extent"])
-                m.size = Vector3(extent, extent, extent)
-                mesh = m
+                box.size = Vector3(extent, extent, extent)
+                mesh = box
             "capsule":
-                var m := CapsuleMesh.new()
-                m.radius = float(spec["radius"])
-                m.height = float(spec["height"])
-                mesh = m
+                var capsule := CapsuleMesh.new()
+                capsule.radius = float(spec["radius"])
+                capsule.height = float(spec["height"])
+                mesh = capsule
             _:
                 printerr("disallowed_kind")
                 quit(3)
