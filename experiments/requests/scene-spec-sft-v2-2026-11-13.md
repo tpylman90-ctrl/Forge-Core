@@ -12,3 +12,5 @@ Execute six independent answer-masked CPU SFT runs from the v2 workflow.
 
 
 Restart after manifest syntax fix.
+
+Restart after held-out prompt selection fix.
