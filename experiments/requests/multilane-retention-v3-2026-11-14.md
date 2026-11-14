@@ -1,0 +1,3 @@
+# Retention-controlled three-branch pilot
+
+Train language, Blender, and Godot as isolated branches from the verified 107250-step parent. Bound each lane to 5000 updates and 30 minutes. Use 1e-5 LR, 25% shared TinyStories replay, a maximum +0.05 shared-language validation-loss delta, and patience 6 for Blender and Godot; use 1.25e-5 LR and no replay for the language lane. Use verified cached Blender and Godot documentation corpora. Select and record the actual best checkpoint update separately from attempted updates. Preserve candidates as research-only artifacts; do not promote weights or integrate Android.
