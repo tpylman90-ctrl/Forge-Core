@@ -222,8 +222,9 @@ def run(lane: str, source: Path, out: Path, seed: int,
     model.eval()
     selected_test = heldout(model, test_ids, windows=eval_windows, seq_len=SEQ_LEN)
     selected_core = heldout(model, core_valid_ids, windows=2048, seq_len=SEQ_LEN)
-    final_optimizer = optimizer
     optimizer.load_state_dict(best_optimizer)
+    torch.set_rng_state(best_torch_rng)
+    rng.set_state(best_sample_rng)
     write_checkpoint(out, lane, parent, parent_sha, model, optimizer, rng,
                      seed, total_updates, best_valid, manifest)
     task_samples = generate_task_samples(model, tokenizer, lane) if lane in TASK_PROMPTS else []
