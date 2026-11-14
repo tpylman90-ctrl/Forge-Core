@@ -1,0 +1,101 @@
+name: Forge blender guided progressive micro-runs v3
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/guided-blender-v3-2026-11-13.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+env:
+  LANE: "blender"
+  SOURCE_RUN: "42552572467"
+  SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  prepare-source:
+    name: Pin Forge parent and blender data
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify exact selected parent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir restore
+          python - <<'PY'
+          import hashlib, json, shutil, torch
+          from pathlib import Path
+          root=Path("restore/language"); ck=root/"checkpoint.pt"
+          state=torch.load(ck,map_location="cpu",weights_only=True)
+          assert state['step']==107250 and state.get('seed')==43
+          assert hashlib.sha256(ck.read_bytes()).hexdigest()=='848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99'
+          m=json.loads((root/"source-manifest.json").read_text())
+          assert m['revision']=='f54c09fd23315a6f9c86f9dc80f725de7d8f9c64' and m['license']=='cdla-sharing-1.0'
+          for n in ('tokenizer.json','source-manifest.json','train.txt','valid.txt','test.txt','ATTRIBUTION.txt'): shutil.copy2(root/n,Path('source')/n)
+          assert hashlib.sha256((root/'tokenizer.json').read_bytes()).hexdigest()=='4ecd7803d4c369e80bda2e74c30cfb769b7e3a942f931df83383eec9f794f04c'
+          shutil.copy2(ck,Path('source/checkpoint.pt')); print('verified parent',state['step'])
+          PY
+      - name: Pin and license-check blender documentation
+        if: env.LANE != 'language'
+        run: |
+          python -c "from pathlib import Path; from forge_core.neural.multilane_v2 import fetch_manual; print(fetch_manual('$LANE',Path('source/manual')))"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-guided-source-${{ github.run_id }}
+          path: source/
+          retention-days: 90
+          if-no-files-found: error
+
+  micro-runs:
+    name: blender curriculum seed ${{ matrix.seed }}
+    needs: prepare-source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        seed: [43, 53, 73]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-guided-source-${{ github.run_id }}
+          path: source
+      - name: Validate trainer and input lineage
+        run: |
+          python -m py_compile src/forge_core/neural/guided_curriculum_v3.py
+          python -c "import hashlib; from pathlib import Path; assert hashlib.sha256(Path('source/checkpoint.pt').read_bytes()).hexdigest()=='848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99'"
+      - name: Run progressive stages with validation every 100 updates
+        run: |
+          python -m forge_core.neural.guided_curriculum_v3 --lane "$LANE" --source source --out "artifacts/seed-${{ matrix.seed }}" --seed "${{ matrix.seed }}" --stage-updates 500 --eval-every 100
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-guided-v3-blender-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/seed-${{ matrix.seed }}/
+          retention-days: 90
+          if-no-files-found: warn
