@@ -1,0 +1,101 @@
+name: Forge retention-controlled three-branch pilot v3
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/multilane-retention-v3-2026-11-14.md"]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  train-lane:
+    name: Retention-controlled ${{ matrix.lane }} pilot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        lane: [language, blender, godot]
+    env:
+      SOURCE_RUN: "42552572467"
+      SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Validate trainer syntax and bounded pilot policy
+        run: |
+          python -m py_compile src/forge_core/neural/multilane_v3.py
+          python - <<'PY'
+          from forge_core.neural.multilane_v3 import MAX_SECONDS
+          assert MAX_SECONDS >= 1800
+          print({"max_seconds_per_lane": 1800, "max_updates": 5000, "specialist_core_replay": 0.25, "max_core_regression": 0.05})
+          PY
+      - name: Restore and hash-verify the shared Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$SOURCE_ARTIFACT" --dir restore
+          python - <<'PY'
+          import hashlib,json,shutil,torch
+          from pathlib import Path
+          root=Path("restore/language")
+          checkpoint=root/"checkpoint.pt"
+          state=torch.load(checkpoint,map_location="cpu",weights_only=True)
+          digest=hashlib.sha256(checkpoint.read_bytes()).hexdigest()
+          assert state["step"]==107250 and state.get("seed")==43
+          assert digest=="848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99"
+          manifest=json.loads((root/"source-manifest.json").read_text())
+          assert manifest["revision"]=="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          for name in ("tokenizer.json","source-manifest.json","train.txt","valid.txt","test.txt","ATTRIBUTION.txt"): shutil.copy2(root/name,Path("source")/name)
+          shutil.copy2(checkpoint,Path("source/checkpoint.pt"))
+          print({"parent_step":state["step"],"sha256":digest,"tokenizer_sha256":state["tokenizer_sha256"]})
+          PY
+      - name: Restore verified documentation corpora for specialist lanes
+        if: matrix.lane != 'language'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ matrix.lane }}" == "blender" ]]; then run_id=43427749752; else run_id=43427334016; fi
+          gh run download "$run_id" --repo "$GITHUB_REPOSITORY" --name "forge-multilane-v2-${{ matrix.lane }}-$run_id" --dir "restore/${{ matrix.lane }}"
+          mkdir -p "artifacts/${{ matrix.lane }}"
+          cp -a "restore/${{ matrix.lane }}/source" "artifacts/${{ matrix.lane }}/source"
+      - name: Train the bounded retention-controlled pilot
+        shell: bash
+        run: |
+          set -euo pipefail
+          lane="${{ matrix.lane }}"
+          case "$lane" in
+            language) learning_rate=0.0000125; replay=0.0; retention=0.05 ;;
+            blender|godot) learning_rate=0.00001; replay=0.25; retention=0.05 ;;
+            *) exit 2 ;;
+          esac
+          python -m forge_core.neural.multilane_v3 \
+            --lane "$lane" --source source --out "artifacts/$lane" \
+            --seconds 1800 --max-updates 5000 --learning-rate "$learning_rate" \
+            --core-replay-probability "$replay" --max-core-regression "$retention" \
+            --eval-every 500 --patience 6
+      - name: Preserve the verified parent with the candidate
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          lane="${{ matrix.lane }}"
+          mkdir -p "artifacts/$lane/parent"
+          for f in checkpoint.pt tokenizer.json source-manifest.json train.txt valid.txt test.txt ATTRIBUTION.txt; do cp "source/$f" "artifacts/$lane/parent/$f"; done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-retention-v3-${{ matrix.lane }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/
+          retention-days: 90
+          if-no-files-found: warn
