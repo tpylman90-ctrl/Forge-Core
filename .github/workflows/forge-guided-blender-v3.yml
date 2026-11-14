@@ -4,10 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ["experiments/requests/guided-blender-v3-2026-11-13.md"]
+    paths: ["experiments/requests/guided-blender-v3-2026-11-13.md", "experiments/requests/guided-blender-v3-retry-2026-11-13.md"]
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 env:
@@ -99,3 +99,76 @@ jobs:
           path: artifacts/seed-${{ matrix.seed }}/
           retention-days: 90
           if-no-files-found: warn
+  summarize:
+    name: Compare blender seeds and archive the research result
+    needs: [prepare-source, micro-runs]
+    if: always() && needs.prepare-source.result == 'success' && needs.micro-runs.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-guided-source-${{ github.run_id }}
+          path: source
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-guided-v3-blender-seed*-${{ github.run_id }}
+          path: results
+      - name: Compare the three fixed-seed reports
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          files = sorted(Path("results").glob("**/metrics.json"))
+          if len(files) != 3:
+              raise SystemExit(f"Expected 3 seed reports, got {len(files)}")
+          rows = sorted((json.loads(p.read_text()) for p in files), key=lambda x: x["seed"])
+          lines = [
+              "# Forge blender guided curriculum v3",
+              "",
+              "Three seeds; 25% → 60% → 100% progressive content stages; 500 updates per stage;",
+              "fixed validation every 100 updates. The held-out test split did not select weights.",
+              "",
+              "| Seed | Updates | Val parent → candidate | Test parent → candidate | Core language Δ | Guard | Stop |",
+              "|---:|---:|---:|---:|---:|:---:|---|",
+          ]
+          for r in rows:
+              lines.append(
+                  f'| {r["seed"]} | {r["updates"]} | {r["domain_validation_loss_parent"]:.4f} → '
+                  f'{r["domain_validation_loss_candidate"]:.4f} | {r["domain_test_loss_parent"]:.4f} → '
+                  f'{r["domain_test_loss_candidate"]:.4f} | {r["core_language_delta_candidate_minus_parent"]:+.4f} | '
+                  f'{"pass" if r["core_language_guard_passed"] else "fail"} | {r["stop_reason"]} |'
+              )
+          lines += ["", "Lower loss means better next-token prediction on this fixed split. It does not establish language understanding or Blender/Godot application competence."]
+          Path("summary.md").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-guided-v3-blender-summary-${{ github.run_id }}
+          path: summary.md
+          retention-days: 90
+      - name: Create draft archive for the three isolated candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          LANE: "blender"
+        run: |
+          set -euo pipefail
+          tag="forge-guided-v3-${LANE}-${GITHUB_RUN_ID}"
+          mkdir -p "release/${tag}/parent"
+          cp source/checkpoint.pt source/tokenizer.json source/source-manifest.json \
+             source/train.txt source/valid.txt source/test.txt source/ATTRIBUTION.txt \
+             "release/${tag}/parent/"
+          if [[ -d source/manual ]]; then cp -R source/manual "release/${tag}/parent/"; fi
+          cp summary.md "release/${tag}/"
+          cp -R results "release/${tag}/"
+          tar -czf "release/${tag}.tar.gz" -C release "${tag}"
+          cat > release-notes.md <<EOF
+          Three-seed isolated blender curriculum research. Each candidate retains
+          the verified Forge Seed parent lineage. These are draft research artifacts;
+          no weights are merged, promoted to Android, or claimed as application-ready.
+          EOF
+          gh release create "${tag}" "release/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge guided blender micro-runs ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md
