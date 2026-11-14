@@ -52,26 +52,29 @@ def progressive_pool(ids: torch.Tensor, fraction: float) -> torch.Tensor:
 
 
 def batch_for_lane(lane: str, domain_ids: torch.Tensor, core_ids: torch.Tensor,
-                   rng: torch.Generator) -> tuple[torch.Tensor, torch.Tensor]:
+                   rng: torch.Generator, replay_fraction: float = 0.5) -> tuple[torch.Tensor, torch.Tensor]:
     if lane == "language":
         return make_batch(domain_ids, BATCH, SEQ_LEN, rng)
-    # Balanced replay: two domain windows plus two pinned TinyStories windows.
-    dx, dy = make_batch(domain_ids, BATCH // 2, SEQ_LEN, rng)
-    cx, cy = make_batch(core_ids, BATCH // 2, SEQ_LEN, rng)
+    # Mix lane-specific manual tokens with the pinned TinyStories retention corpus.
+    domain_count = min(BATCH - 1, max(1, round(BATCH * (1.0 - replay_fraction))))
+    core_count = BATCH - domain_count
+    dx, dy = make_batch(domain_ids, domain_count, SEQ_LEN, rng)
+    cx, cy = make_batch(core_ids, core_count, SEQ_LEN, rng)
     return torch.cat((dx, cx), dim=0), torch.cat((dy, cy), dim=0)
 
 
 def write_checkpoint(out: Path, lane: str, parent: dict, parent_sha: str,
+                     parent_run: str, parent_step: int,
                      model: ByteTransformer, optimizer: torch.optim.Optimizer,
                      rng: torch.Generator, seed: int, updates: int,
                      best_loss: float, manifest: dict) -> None:
     ckpt = {
         "schema": 3,
         "lane": lane,
-        "parent_run": BASE_RUN,
-        "parent_step": BASE_STEP,
+        "parent_run": parent_run,
+        "parent_step": parent_step,
         "parent_sha256": parent_sha,
-        "step": BASE_STEP + updates if lane == "language" else BASE_STEP,
+        "step": parent_step + updates if lane == "language" else parent_step,
         "lane_updates": updates,
         "seed": seed,
         "configuration": model.cfg.__dict__,
@@ -92,21 +95,33 @@ def write_checkpoint(out: Path, lane: str, parent: dict, parent_sha: str,
 
 
 def run(lane: str, source: Path, out: Path, seed: int,
-        stage_updates: int = STAGE_UPDATES, eval_every: int = EVAL_EVERY) -> dict:
+        stage_updates: int = STAGE_UPDATES, eval_every: int = EVAL_EVERY,
+        parent_sha256: str | None = None, parent_run: str | None = None,
+        expected_parent_seed: int | None = None, replay_fraction: float = 0.5) -> dict:
     if lane not in {"language", "blender", "godot"}:
         raise ValueError("Unknown lane")
     if seed not in SEEDS:
         raise ValueError(f"Seed must be one of {SEEDS}")
     if not 100 <= stage_updates <= 2000 or not 25 <= eval_every <= 500:
         raise ValueError("Invalid bounded micro-run configuration")
+    if not 0.1 <= replay_fraction <= 0.9:
+        raise ValueError("replay_fraction must be between 0.1 and 0.9")
 
     parent_path = source / "checkpoint.pt"
     parent_sha = sha256_file(parent_path)
-    if parent_sha != BASE_SHA256:
-        raise ValueError(f"Parent SHA256 mismatch: {parent_sha}")
+    expected_sha = parent_sha256 or BASE_SHA256
+    if parent_sha != expected_sha:
+        raise ValueError(f"Parent SHA256 mismatch: expected {expected_sha}, got {parent_sha}")
     parent = torch.load(parent_path, map_location="cpu", weights_only=True)
-    if parent.get("step") != BASE_STEP or parent.get("seed") != 43:
-        raise ValueError("Expected the selected verified Forge 107250 parent")
+    parent_step = int(parent.get("step", -1))
+    parent_seed = int(parent.get("seed", -1))
+    if parent_step < BASE_STEP or parent_seed not in SEEDS:
+        raise ValueError("Parent checkpoint is not a recognized Forge Seed lineage")
+    if parent_sha256 is None and (parent_step != BASE_STEP or parent_seed != 43):
+        raise ValueError("Default parent must be the verified Forge 107250 seed-43 checkpoint")
+    if expected_parent_seed is not None and parent_seed != expected_parent_seed:
+        raise ValueError(f"Expected parent seed {expected_parent_seed}, got {parent_seed}")
+    parent_run = parent_run or BASE_RUN
     tokenizer_path = source / "tokenizer.json"
     if sha256_file(tokenizer_path) != BASE_TOKENIZER_SHA256:
         raise ValueError("Tokenizer SHA256 mismatch")
@@ -167,7 +182,7 @@ def run(lane: str, source: Path, out: Path, seed: int,
         phase_start = total_updates
         stage_hash = digest_ids(pool)
         for local_update in range(1, stage_updates + 1):
-            x, y = batch_for_lane(lane, pool, core_train_ids, rng)
+            x, y = batch_for_lane(lane, pool, core_train_ids, rng, replay_fraction)
             _, loss = model(x, y)
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
@@ -230,8 +245,8 @@ def run(lane: str, source: Path, out: Path, seed: int,
     optimizer.load_state_dict(best_optimizer)
     torch.set_rng_state(best_torch_rng)
     rng.set_state(best_sample_rng)
-    write_checkpoint(out, lane, parent, parent_sha, model, optimizer, rng,
-                     seed, total_updates, best_valid, manifest)
+    write_checkpoint(out, lane, parent, parent_sha, parent_run, parent_step,
+                     model, optimizer, rng, seed, total_updates, best_valid, manifest)
     task_samples = generate_task_samples(model, tokenizer, lane) if lane in TASK_PROMPTS else []
     if task_samples:
         (out / "task-samples.json").write_text(json.dumps(task_samples, indent=2) + "\n", encoding="utf-8")
@@ -241,9 +256,10 @@ def run(lane: str, source: Path, out: Path, seed: int,
         "status": "research_only_not_promoted",
         "lane": lane,
         "seed": seed,
-        "parent_run": BASE_RUN,
+        "parent_run": parent_run,
         "parent_checkpoint_sha256": parent_sha,
-        "parent_step": BASE_STEP,
+        "parent_step": parent_step,
+        "parent_seed": parent_seed,
         "candidate_checkpoint_sha256": sha256_file(out / "checkpoint.pt"),
         "updates": total_updates,
         "elapsed_seconds": round(time.monotonic() - started, 2),
@@ -266,15 +282,16 @@ def run(lane: str, source: Path, out: Path, seed: int,
         "core_language_guard_passed": lane == "language" or selected_core <= parent_core + CORE_REGRESSION_LIMIT,
         "stop_reason": stop_reason,
         "learning_rate": learning_rate,
-        "balanced_replay": lane != "language",
+        "balanced_replay": lane != "language" and abs(replay_fraction - 0.5) < 1e-8,
+        "replay_fraction_core": replay_fraction if lane != "language" else None,
         "task_samples_human_reviewed": False,
         "android_integrated": False,
         "promotion": "none; repeatable multi-seed and human task evaluation required",
     }
     (out / "metrics.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (out / "lineage.json").write_text(json.dumps({
-        "lane": lane, "seed": seed, "parent_run": BASE_RUN,
-        "parent_step": BASE_STEP, "parent_sha256": parent_sha,
+        "lane": lane, "seed": seed, "parent_run": parent_run,
+        "parent_step": parent_step, "parent_seed": parent_seed, "parent_sha256": parent_sha,
         "candidate_sha256": report["candidate_checkpoint_sha256"],
         "updates": total_updates, "isolated_lane_weights": True,
         "personal_memory_in_weights": False, "android_integrated": False,
@@ -293,8 +310,13 @@ def main() -> None:
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--stage-updates", type=int, default=STAGE_UPDATES)
     parser.add_argument("--eval-every", type=int, default=EVAL_EVERY)
+    parser.add_argument("--parent-sha256")
+    parser.add_argument("--parent-run")
+    parser.add_argument("--expected-parent-seed", type=int, choices=SEEDS)
+    parser.add_argument("--replay-fraction", type=float, default=0.5)
     args = parser.parse_args()
-    run(args.lane, args.source, args.out, args.seed, args.stage_updates, args.eval_every)
+    run(args.lane, args.source, args.out, args.seed, args.stage_updates, args.eval_every,
+        args.parent_sha256, args.parent_run, args.expected_parent_seed, args.replay_fraction)
 
 
 if __name__ == "__main__":
