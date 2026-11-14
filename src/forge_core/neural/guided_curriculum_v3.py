@@ -36,7 +36,12 @@ SEEDS = (43, 53, 73)
 
 
 def digest_ids(ids: torch.Tensor) -> str:
-    return hashlib.sha256(ids.cpu().numpy().tobytes()).hexdigest()
+    raw = ids.detach().to("cpu").contiguous().view(torch.uint8)
+    digest = hashlib.sha256()
+    chunk_size = 1 << 20
+    for offset in range(0, raw.numel(), chunk_size):
+        digest.update(bytes(raw[offset:offset + chunk_size].tolist()))
+    return digest.hexdigest()
 
 
 def progressive_pool(ids: torch.Tensor, fraction: float) -> torch.Tensor:
