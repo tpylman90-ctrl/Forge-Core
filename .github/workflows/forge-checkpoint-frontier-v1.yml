@@ -1,0 +1,174 @@
+name: Forge checkpoint frontier v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/checkpoint-frontier-v1.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    name: ${{ matrix.lane }} ${{ matrix.experiment }} seed ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        lane: [language, blender, godot]
+        seed: [43, 53, 73]
+        experiment: [low, control, high]
+    env:
+      PYTHONUNBUFFERED: "1"
+      LANE: ${{ matrix.lane }}
+      SEED: ${{ matrix.seed }}
+      EXPERIMENT: ${{ matrix.experiment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Pin exact parent run, seed checkpoint, and experiment settings
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          case "$LANE" in
+            language) PARENT_RUN=43553138349 ;;
+            blender) PARENT_RUN=43553140852 ;;
+            godot) PARENT_RUN=43553141871 ;;
+            *) echo "Unknown lane $LANE" >&2; exit 1 ;;
+          esac
+          case "$LANE-$SEED" in
+            language-43) PARENT_SHA=9b335d23f37aaad0360a991041d51c1aa87f75ebc70fd0948568fc55a658c009 ;;
+            language-53) PARENT_SHA=d680787071eb487408a012e641503d186d75cd0d018c441238238a6875c278fe ;;
+            language-73) PARENT_SHA=82f5c8713e212e319b00aa10b9b85db8b9262e6984c1b0d31333963276596e84 ;;
+            blender-43) PARENT_SHA=728996798c5cffcd93920b89b359da40a91c3182b9ab3807f5b879624c87ea39 ;;
+            blender-53) PARENT_SHA=17883e5df6c46e73c0aca4d4cb664bbdcf457478fa10cdf3b6611d0d5568685d ;;
+            blender-73) PARENT_SHA=b9ff0faf3b620210648c89dbeb8297d5f8d7533583718a3924c17ea16c3088c1 ;;
+            godot-43) PARENT_SHA=aef34d5ee226923d6ffc64e53f2d9ac6c939f4ffd0cd3f5592bb52b33256cb58 ;;
+            godot-53) PARENT_SHA=fe36dcbbca5fc147aca4a7b8cfd8fb09f017e165e2772424380576b05efaaa5f ;;
+            godot-73) PARENT_SHA=2195679ae59cbd72407729ad54a16e2f584c4acf87057e53b945ab0d298d90c0 ;;
+            *) echo "No pinned parent for $LANE seed $SEED" >&2; exit 1 ;;
+          esac
+          LR_SCALE=1.0
+          REPLAY=0.50
+          if [[ "$LANE" == "language" ]]; then
+            case "$EXPERIMENT" in
+              low) LR_SCALE=0.5 ;;
+              control) LR_SCALE=1.0 ;;
+              high) LR_SCALE=2.0 ;;
+              *) echo "Unknown language experiment $EXPERIMENT" >&2; exit 1 ;;
+            esac
+          else
+            case "$EXPERIMENT" in
+              low) REPLAY=0.25 ;;
+              control) REPLAY=0.50 ;;
+              high) REPLAY=0.75 ;;
+              *) echo "Unknown specialist experiment $EXPERIMENT" >&2; exit 1 ;;
+            esac
+          fi
+          echo "PARENT_RUN=$PARENT_RUN" >> "$GITHUB_ENV"
+          echo "PARENT_SHA=$PARENT_SHA" >> "$GITHUB_ENV"
+          echo "LR_SCALE=$LR_SCALE" >> "$GITHUB_ENV"
+          echo "REPLAY=$REPLAY" >> "$GITHUB_ENV"
+          mkdir -p source parent-artifact
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "forge-guided-source-$PARENT_RUN" --dir source
+          gh run download "$PARENT_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "forge-guided-v3-$LANE-seed$SEED-$PARENT_RUN" --dir parent-artifact
+          printf '%s  %s\n' "$PARENT_SHA" parent-artifact/checkpoint.pt | sha256sum --check -
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+          import torch
+          p=Path("parent-artifact/checkpoint.pt")
+          ck=torch.load(p,map_location="cpu",weights_only=True)
+          assert ck.get("seed")==int(os.environ["SEED"])
+          assert ck.get("step",0)>=107250
+          manifest=json.loads(Path("source/source-manifest.json").read_text())
+          assert manifest["revision"]=="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          assert hashlib.sha256(Path("source/tokenizer.json").read_bytes()).hexdigest()=="4ecd7803d4c369e80bda2e74c30cfb769b7e3a942f931df83383eec9f794f04c"
+          print("verified parent",ck["step"],"seed",ck["seed"],"source",manifest["revision"])
+          PY
+          cp parent-artifact/checkpoint.pt source/checkpoint.pt
+      - name: Verify trainer and run progressive 1,500-update branch
+        run: |
+          set -euo pipefail
+          python -m py_compile src/forge_core/neural/guided_curriculum_v3.py
+          mkdir -p "artifacts/$LANE/$EXPERIMENT/seed-$SEED"
+          python -m forge_core.neural.guided_curriculum_v3 \
+            --lane "$LANE" --source source \
+            --out "artifacts/$LANE/$EXPERIMENT/seed-$SEED" \
+            --seed "$SEED" --stage-updates 500 --eval-every 100 \
+            --parent-sha256 "$PARENT_SHA" --parent-run "$PARENT_RUN" \
+            --expected-parent-seed "$SEED" \
+            --replay-fraction "$REPLAY" --learning-rate-scale "$LR_SCALE"
+          cp parent-artifact/checkpoint.pt \
+            "artifacts/$LANE/$EXPERIMENT/seed-$SEED/parent-checkpoint.pt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-frontier-v1-${{ matrix.lane }}-${{ matrix.experiment }}-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/${{ matrix.experiment }}/seed-${{ matrix.seed }}/
+          retention-days: 90
+          if-no-files-found: warn
+
+  summarize:
+    name: Compare matched frontier experiments
+    needs: train
+    if: always() && needs.train.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-frontier-v1-*-${{ github.run_id }}
+          path: results
+          merge-multiple: false
+      - name: Build per-seed comparison and hashes
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          files=sorted(Path("results").glob("**/metrics.json"))
+          if len(files)!=27:
+              raise SystemExit(f"Expected 27 completed reports; found {len(files)}")
+          rows=[json.loads(p.read_text()) for p in files]
+          rows.sort(key=lambda r:(r["lane"],r.get("learning_rate_scale",1),r.get("replay_fraction_core") or 0,r["seed"]))
+          lines=[
+            "# Forge checkpoint frontier v1 results",
+            "",
+            "Each candidate continues from the matching seed's verified checkpoint from the 2026-11-14 guided v3 run.",
+            "Each seed received 1,500 updates (three 500-update progressive stages), with validation every 100 updates.",
+            "Language compares 0.5x/1x/2x inherited learning rate. Blender and Godot compare 25%/50%/75% TinyStories replay (the rest of each batch is lane text).",
+            "",
+            "| Lane | Arm | Seed | Updates | Validation parent → candidate | Test parent → candidate | Core-language Δ | Guard | Candidate SHA-256 |",
+            "|---|---:|---:|---:|---:|---:|---:|:---:|---|",
+          ]
+          for r in rows:
+            arm=(f'{r["learning_rate_scale"]:g}x LR' if r["lane"]=="language" else f'{100*r["replay_fraction_core"]:.0f}% replay')
+            lines.append(f'| {r["lane"]} | {arm} | {r["seed"]} | {r["updates"]} | {r["domain_validation_loss_parent"]:.5f} → {r["domain_validation_loss_candidate"]:.5f} | {r["domain_test_loss_parent"]:.5f} → {r["domain_test_loss_candidate"]:.5f} | {r["core_language_delta_candidate_minus_parent"]:+.5f} | {"pass" if r["core_language_guard_passed"] else "fail"} | `{r["candidate_checkpoint_sha256"]}` |')
+          lines += [
+            "",
+            "Interpretation: lower loss is better on these fixed text splits. These results measure next-token prediction only; they do not establish reasoning or working Blender/Godot ability. No candidate is automatically promoted. Review across all three seeds and the task evaluations before selecting a continuation.",
+            "",
+            f"Actions run: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+          ]
+          Path("frontier-results.md").write_text("\n".join(lines)+"\n")
+          print("\n".join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-frontier-v1-results-${{ github.run_id }}
+          path: frontier-results.md
+          retention-days: 90
