@@ -33,4 +33,4 @@ The Blender and Godot paths use a balanced batch: two domain windows plus two Ti
 
 Reports include per-seed parent/candidate domain validation and test losses, the common language-retention delta, stage hashes, learning settings, checkpoint hashes, and stop reasons. Specialist task samples are ungraded. Documentation next-token loss can show text-pattern learning, but cannot establish that Forge can operate Blender or Godot. Human review and executable application tasks are separate future gates.
 
-Action artifacts retain each seed candidate and source lineage for 90 days. Each lane workflow also creates one draft release containing that lane's three candidates and comparison report. Drafts are research archives only, not Android releases.
+Action artifacts retain each seed candidate and source lineage for 90 days. Each seed report includes its evaluation curve and checkpoint hash; compare the three seed reports before any follow-up or promotion decision. No Android release is created.
