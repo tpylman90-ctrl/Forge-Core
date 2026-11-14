@@ -97,7 +97,8 @@ def write_checkpoint(out: Path, lane: str, parent: dict, parent_sha: str,
 def run(lane: str, source: Path, out: Path, seed: int,
         stage_updates: int = STAGE_UPDATES, eval_every: int = EVAL_EVERY,
         parent_sha256: str | None = None, parent_run: str | None = None,
-        expected_parent_seed: int | None = None, replay_fraction: float = 0.5) -> dict:
+        expected_parent_seed: int | None = None, replay_fraction: float = 0.5,
+        learning_rate_scale: float = 1.0) -> dict:
     if lane not in {"language", "blender", "godot"}:
         raise ValueError("Unknown lane")
     if seed not in SEEDS:
@@ -106,6 +107,8 @@ def run(lane: str, source: Path, out: Path, seed: int,
         raise ValueError("Invalid bounded micro-run configuration")
     if not 0.1 <= replay_fraction <= 0.9:
         raise ValueError("replay_fraction must be between 0.1 and 0.9")
+    if not 0.25 <= learning_rate_scale <= 2.0:
+        raise ValueError("learning_rate_scale must be between 0.25 and 2.0")
 
     parent_path = source / "checkpoint.pt"
     parent_sha = sha256_file(parent_path)
@@ -150,7 +153,7 @@ def run(lane: str, source: Path, out: Path, seed: int,
     model = ByteTransformer(ModelConfig(**parent["configuration"]))
     model.load_state_dict(parent["model"], strict=True)
     language_lr = float(parent.get("lr", 1.25e-5))
-    learning_rate = language_lr if lane == "language" else 1.0e-5
+    learning_rate = (language_lr if lane == "language" else 1.0e-5) * learning_rate_scale
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
     if lane == "language":
         optimizer.load_state_dict(parent["optimizer"])
@@ -282,6 +285,7 @@ def run(lane: str, source: Path, out: Path, seed: int,
         "core_language_guard_passed": lane == "language" or selected_core <= parent_core + CORE_REGRESSION_LIMIT,
         "stop_reason": stop_reason,
         "learning_rate": learning_rate,
+        "learning_rate_scale": learning_rate_scale,
         "balanced_replay": lane != "language" and abs(replay_fraction - 0.5) < 1e-8,
         "replay_fraction_core": replay_fraction if lane != "language" else None,
         "task_samples_human_reviewed": False,
@@ -314,9 +318,11 @@ def main() -> None:
     parser.add_argument("--parent-run")
     parser.add_argument("--expected-parent-seed", type=int, choices=SEEDS)
     parser.add_argument("--replay-fraction", type=float, default=0.5)
+    parser.add_argument("--learning-rate-scale", type=float, default=1.0)
     args = parser.parse_args()
     run(args.lane, args.source, args.out, args.seed, args.stage_updates, args.eval_every,
-        args.parent_sha256, args.parent_run, args.expected_parent_seed, args.replay_fraction)
+        args.parent_sha256, args.parent_run, args.expected_parent_seed, args.replay_fraction,
+        args.learning_rate_scale)
 
 
 if __name__ == "__main__":
