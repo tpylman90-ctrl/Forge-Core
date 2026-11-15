@@ -22,9 +22,22 @@ Inference runtime: **llama.cpp** (MIT), with its official Android bindings consi
 
 No model file is bundled in the small debug APK; no online model download occurs automatically. During model-loading/inference, show memory and battery expectations and allow cancellation.
 
-## First code-level integration
+## Current Android integration
 
-The optional Python module \`forge_core.language.local_teacher\` invokes a **local** installed llama.cpp CLI binary with a **local** GGUF file. It is suitable for desktop experiments with pretrained conversational ability and unit-tested command construction. This is a prototype adapter **not yet connected to the Android app**, and its tests do not claim actual model quality.
+Forge Core Android now includes an optional, user-imported local GGUF chat
+bridge using the pinned official llama.cpp Android sample. The APK contains the
+runtime but **not** model weights; the user selects a local `.gguf` file, the
+app checks its header and digest, and the user explicitly loads or unloads it.
+Its responses are labeled as a separate pretrained helper in the encrypted
+journal. They are not Forge Seed output and are not used to train the scratch
+model. No internet permission or automatic download is used.
+
+This bridge has not been verified on the user's phone. Actual compatibility,
+RAM use, speed, heat, and battery draw depend on the selected GGUF and device.
+
+## First Python code-level integration
+
+The optional Python module \`forge_core.language.local_teacher\` invokes a **local** installed llama.cpp CLI binary with a **local** GGUF file. It is suitable for desktop experiments with pretrained conversational ability and unit-tested command construction. Its tests do not claim actual model quality.
 
 Example after obtaining a locally licensed GGUF and llama-cli:
 

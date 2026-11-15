@@ -7,3 +7,4 @@
 *.key
 *signing-secrets*
 *Signing_Secrets*
+vendor/

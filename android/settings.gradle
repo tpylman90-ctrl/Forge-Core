@@ -14,3 +14,6 @@ dependencyResolutionManagement {
 }
 rootProject.name = "ForgeCore"
 include(":app")
+// Prepared from pinned upstream llama.cpp sources by scripts/setup-llama.sh.
+include(":llamaAndroid")
+project(":llamaAndroid").projectDir = file("vendor/llama.cpp/examples/llama.android/lib")

@@ -1,71 +1,68 @@
-# Forge Core Android — Native Model Adapter Contract (draft v1)
+# Forge Core Android — Model Adapter Contract v2
 
-**Owner:** Android workstream. **Status:** UI-side interface only; no neural inference integrated.
-**Implementation:** android/app/src/main/java/ai/forgecore/mobile/ForgeModelAdapter.java
+## Scope and model identity
 
-## Purpose
+The app has two strictly separate model identities:
 
-The Android shell must never impersonate the independently trained Forge neural model.
-The current adapter is ForgeModelAdapter.Unavailable; its available=false state
-means all Chat input is saved as local notes only. No generated response is
-fabricated. The model training/reasoning workstream remains independent.
+- **Local language bridge:** optional, user-imported pretrained GGUF used for
+  conversation while Forge Seed develops. It runs offline and its messages use
+  the `teacher` journal role. The app must never call its responses Forge Seed
+  output or treat chat messages as training data.
+- **Forge Seed:** the independently trained Forge model. It remains unavailable
+  to this Android build until a checkpoint, tokenizer, runtime and provenance
+  pass the native integration gates below. Its future replies use the `forge`
+  journal role.
 
-## Java interface
+The user can continue saving encrypted notes when no model is loaded. A missing
+or invalid model never creates a generated placeholder response.
 
-- status() returns ModelStatus(available, name, version, provenance, detail).
-  available means inference is genuinely installed, validated and ready.
-  provenance must identify Forge-native checkpoint lineage and verification,
-  not a pretrained teacher or unnamed replacement.
-- generate(String prompt, Listener listener) starts bounded local inference.
-  Listener.onToken(String) streams model-generated tokens; onComplete() marks
-  completion; onError(String) reports failure. Only one terminal callback.
-- cancel() requests cooperative cancellation and stops further token delivery.
-- Callbacks may arrive on a worker thread; UI marshals them to the main thread.
-  A production adapter must not block the UI thread.
+## Current implementation
 
-## Integration gates
+`LocalLanguageBridge.kt` wraps the pinned official llama.cpp Android sample.
+The user selects a `.gguf` file through Android's Storage Access Framework;
+the app copies it into app-private storage, checks its GGUF header, records its
+SHA-256 and waits for an explicit **Load** action. Model weights are not
+bundled, downloaded, or uploaded. The native library runs offline.
 
-1. A tested Forge-owned checkpoint, tokenizer, compatible runtime and full
-   weights provenance must exist. Research metrics alone do not authorize
-   activating the adapter.
-2. Inference is offline and runs only locally. The Android package must
-   remain without INTERNET permission. No hosted completions.
-3. Bound inputs, token output, context, memory, time and resource use. Expose
-   failure, exhaustion and cancellation without losing user journal entries.
-4. User-controlled confirmed principles and journal entries are separate stores.
-   Do not silently ingest, train on, or promote personal history into model
-   memory. Request explicit consent for future retrieval or memory writing.
-5. No actions are implemented here. Future external actions require a separate
-   user-facing proposal, clear scope, explicit approval and verification.
-6. Test on hardware: RAM, startup time, battery, heat, token speed, cancellation.
-7. Version adapter contract when implementing it. Coordinate through PRs;
-   do not edit neural-training code from the Android branch.
+The bridge system prompt identifies it as a separate pretrained helper. The
+encrypted journal records its replies under `teacher`; history shows that label
+on every such message. The independent encrypted confirmed-principles vault is
+not read or modified by bridge inference.
 
-## Journal and memory separation
+## Adapter API
 
-- EncryptedJournal: forge-core-journal.enc, schema 1, dedicated Keystore
-  AES-256-GCM alias forge_core_journal_v1, AtomicFile writes, ciphertext cap
-  1 MiB, message limit 8000 characters. Roles: user and forge. Only actual,
-  completed native-model output should be marked forge.
-- Existing EncryptedMemory: forge-core-memory.enc, original schema and alias
-  remain unchanged, for observed-app allowlist and confirmed principles.
-- Manual teaching still requires the existing Confirm & remember dialog.
-  Simply writing into Chat does not confirm a principle.
-- Backups are disabled. A differently signed debug APK might need uninstall,
-  which deletes local data; avoid destructive uninstall without a safe export.
+- `status()` reports whether inference is genuinely loaded and ready, the local
+  model name, bridge version, digest prefix and current operation state.
+- `generate(prompt, listener)` streams at most 256 generated tokens from the
+  local engine. Inputs are bounded to 5,000 characters.
+- `cancel()` cooperatively stops generation. Unfinished output is not written
+  into the journal.
+- `importModel`, `loadModel` and `unloadModel` are explicit user initiated
+  operations. Load and import report failures without deleting prior journal
+  entries or confirmed principles.
 
-## On-device UI semantics
+## Privacy and limits
 
-Chat: local journal and honest adapter state.
-History: encrypted entries with explicit deletion confirmation.
-Memory: confirmed principles with explicit deletion confirmation.
-Settings: existing optional observation controls and stop action.
-Diagnostics: model provenance/availability, storage and permission state;
-private texts do not appear in diagnostics.
+- The Android manifest keeps no `INTERNET` permission. Inference and imported
+  files stay on device; the app does not fetch model weights.
+- The user must obtain a compatible model from a source they trust and follow
+  that model's license. GGUF header validation does not establish model quality
+  or licensing.
+- The bridge can consume substantial storage, RAM, battery and time. The app
+  supports explicit unload; actual performance needs phone verification.
+- The journal is not silently replayed as model context after an app restart.
+  The user can inspect the encrypted history without sending it to the model.
+- Chat history is encrypted separately from confirmed principles. The app does
+  not automatically retrieve personal principles, write memory or train on
+  conversations.
+- The pretrained helper is not Forge's original neural model. Training and
+  evaluation remain in the Forge Core research workstream.
 
-## Training workstream handoff
+## Forge Seed native integration gates
 
-When integration-ready, supply checkpoint format, tokenizer/vocabulary and
-special-token behavior, Android runtime needs, RAM estimate, token streaming
-and cancellation semantics, generation limits, and digest/provenance manifest.
-No modifications to src/forge_core/neural/ by the Android workstream.
+Forge Seed can replace the unavailable native-model path only after the
+training workstream supplies a tested checkpoint, tokenizer and special-token
+rules, runtime requirements, memory estimate, generation and cancellation
+semantics, output limits, and a digest/provenance manifest. Then verify offline
+inference, bounded resources, cancellation and app behavior on real hardware.
+Do not modify neural-training code from this Android workstream.

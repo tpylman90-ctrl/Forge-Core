@@ -1,6 +1,6 @@
-# Forge Core Android v0.3.1 — Communication Shell & Release Signing
+# Forge Core Android v0.4.0 — Local Language Bridge & Release Signing
 
-> **Android release signing:** Version 0.3.1 (code 4) adds a permanent
+> **Android release signing:** Version 0.4.0 (code 5) keeps the permanent
 > signing workflow using four GitHub Actions repository secrets.
 > See [Release signing and upgrade instructions](docs/RELEASE-SIGNING.md).
 > The release APK is produced only after the secrets are configured;
@@ -8,10 +8,11 @@
 > erases local encrypted data.
 
 
-The launcher opens a new five-tab interface: **Chat, History, Memory, Settings,
-Diagnostics**. Chat is an **encrypted offline note journal**, not yet an
-AI-generated conversation. The model-unavailable banner is explicit.
-No fake AI answers or hidden third-party teacher are included.
+The launcher opens **Chat, History, Memory, Settings, and Diagnostics**. Chat
+uses an encrypted on-device journal. An optional **local language bridge** can
+reply using a GGUF model selected on the device. Its replies are clearly marked
+as a separate pretrained helper; they are not Forge Seed and do not train or
+alter Forge Seed weights.
 
 - The previous v0.2 MainActivity and ObserveService remain operational inside
   **Settings > Observation & permission controls**. Observation is optional
@@ -21,11 +22,19 @@ No fake AI answers or hidden third-party teacher are included.
   alias; no reset, migration or automatic conversion of journal notes.
 - History and Memory have separately confirmed deletion; neither silently
   modifies the other encrypted store.
-- Diagnostics identifies missing inference, app and permission state.
-  No INTERNET permission or screen-reading accessibility service.
-- Native integration handoff: [Model Adapter Contract](docs/MODEL-ADAPTER.md).
-- Application ID remains ai.forgecore.mobile. Version 0.3.1 (code 4).
-  Build command and existing free GitHub Actions workflow are unchanged.
+- Diagnostics identifies model provenance, app and permission state. No
+  INTERNET permission or screen-reading accessibility service is added.
+- In **Settings > Local Language Bridge**, choose a `.gguf` file you have
+  permission to use. The app checks the GGUF header and SHA-256, copies the
+  file into app-private storage, and waits for you to tap **Load**.
+- The inference runtime is the pinned upstream llama.cpp Android library under
+  MIT; its license notice is included in the APK.
+- **Unload model from memory** frees RAM while retaining the imported file.
+  **Remove imported model file** frees its app-private storage. Messages remain
+  in the encrypted journal and are labeled as teacher replies.
+  No message becomes a confirmed principle automatically.
+- Native integration details: [Model Adapter Contract](docs/MODEL-ADAPTER.md).
+- Application ID remains `ai.forgecore.mobile`. Version 0.4.0 (code 5).
 
 **Install caveat:** GitHub-hosted debug builds may use different temporary
 debug signing keys. If Android refuses an in-place update due to a signing
@@ -54,8 +63,11 @@ This is a **standalone experimental Android app** (package ai.forgecore.mobile),
 
 ## Build
 
-GitHub Actions workflow: .github/workflows/android.yml. Install the generated **debug** APK for testing only. It is not a Play-distribution build. Local SDK 35 + JDK 17 + Gradle 8.10.2:
+GitHub Actions workflow: `.github/workflows/android.yml`. Install the generated **debug** APK for testing only. It is not a Play-distribution build. Local SDK 35 + NDK 29 + CMake 3.31.6 + JDK 17 + Gradle 8.10.2:
 
+    cd android
+    bash scripts/setup-llama.sh
+    cd ..
     gradle -p android :app:assembleDebug
 
 The workflow must show a successful green run before claiming that an installable APK exists. This README is a specification and source guide, not a claim of device verification.
@@ -66,7 +78,22 @@ Android 16 restricts usage-access permission for certain sideloaded APKs. If For
 
 **Manual teaching works without Usage Access.** Android permission access only gates observation of selected app-switch signals, not learning through direct conversation.
 
-The APK does not currently ship a language model. For the planned fully offline pretrained language teacher and separate scratch-model research, see [language bridge](../docs/LANGUAGE-BRIDGE.md).
+## Local chat bridge setup
+
+1. Obtain a compatible GGUF from a source you trust and follow its license.
+   Forge Core does not download model weights.
+2. Open **Settings > Local Language Bridge > Choose local GGUF model** and
+   select the file. Import checks its header and digest, then stores it privately.
+3. Tap **Load local model** and wait for the ready status. Return to **Chat**;
+   helper replies are labeled **LOCAL LANGUAGE BRIDGE · NOT FORGE SEED**.
+4. Tap **Unload model from memory** when you finish. To remove its storage file,
+   unload it first, then choose **Remove imported model file**.
+
+Model loading can take several minutes and may exceed a phone's available RAM.
+The encrypted journal is not replayed as context after an app restart; clearing
+history unloads the model first so its in-memory conversation context is removed.
+
+The APK does not ship model weights. The user obtains a compatible GGUF from a source they trust and imports it locally. The scratch-trained Forge Seed remains a separate research model and is not connected as a chat engine. See [language bridge](../docs/LANGUAGE-BRIDGE.md).
 
 ## First phone test
 
