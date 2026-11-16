@@ -20,3 +20,8 @@ Restart after adding the missing dataset mode switch; retain the same code-level
 ## Retry 3
 
 Use 128 training, 16 validation, and 16 test instances per category; train 60 epochs; compute constant-median parameter baselines; score Blender PNG masks with Pillow and fail if masks are empty or nearly full.
+
+
+## Follow-up run — geometry-target correction
+
+Repeat the fixed CC0 dataset and three-seed study after correcting the class-prior baseline and masking parameter loss/metrics to geometric controls that are actually used by each object category. Unused controls, including p7, must not distort training or validation selection. Preserve all prior modality reports and Blender silhouette scoring; keep every checkpoint research-only and isolated from the Forge Seed language weights.
