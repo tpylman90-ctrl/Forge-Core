@@ -24,7 +24,7 @@ jobs:
           blender --version
       - name: Generate fixed data splits and four renders per object
         run: |
-          blender --background --factory-startup --python scripts/generate_object_dataset_v2.py -- \
+          blender --background --factory-startup --python scripts/generate_object_dataset_v1.py -- \
             --out "$RUNNER_TEMP/forge-object-data" --seed 202611 \
             --train-per-category 128 --valid-per-category 16 --test-per-category 16 --resolution 96
       - uses: actions/upload-artifact@v4
@@ -99,9 +99,9 @@ jobs:
           path: candidate
       - name: Render proxy predictions against held-out targets
         run: |
-          blender --background --factory-startup --python scripts/render_object_eval_v2.py -- \
+          blender --background --factory-startup --python scripts/render_object_eval_v1.py -- \
             --predictions candidate/predictions.json --out render/seed-${{ matrix.seed }} --limit 96 --resolution 96
-          python scripts/score_object_render_v2.py \
+          python scripts/score_object_render_v1.py \
             --pairs render/seed-${{ matrix.seed }}/render_pairs.json \
             --out render/seed-${{ matrix.seed }}/render_metrics.json
       - uses: actions/upload-artifact@v4
