@@ -1,3 +1,7 @@
 # Forge object shape and detail understanding v2
 
 Train a fully isolated image branch from random initialization using the fixed procedural CC0 multi-view object dataset. Use the explicit foreground-mask input and spatial feature map, with geometry-only per-category targets and geometry-weighted training. Run seeds 43, 53, and 73; report text, single-view, four-view, and combined modes; compare active shape parameter MAE against the no-input median; render predicted geometry against held-out targets and report silhouette IoU. Keep checkpoints research-only and separate from Forge Seed language weights. No Android integration or promotion until repeatable image-only geometry gains appear across seeds and held-out silhouettes improve.
+
+## Run after workflow path correction
+
+Use the existing v1-named Blender data-generation and render/scoring scripts; only the visual branch trainer and artifact labels are v2. Start from the corrected workflow commit.
