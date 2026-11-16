@@ -42,6 +42,7 @@ class ObjectData(Dataset):
     def __init__(self,root,rows,vocab,mode,seed):
         self.root,self.rows,self.vocab,self.mode,self.seed=root,rows,vocab,mode,seed; self.epoch=0
     def __len__(self): return len(self.rows)
+    def set_mode(self, mode): self.mode=mode
     def __getitem__(self,i):
         r=self.rows[i]; rng=random.Random(self.seed+i+self.epoch*100003)
         imgs=torch.zeros((4,3,SIZE,SIZE)); mask=torch.zeros(4)
