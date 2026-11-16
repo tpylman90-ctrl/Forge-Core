@@ -13,6 +13,17 @@ TOKEN_RE=re.compile(r"[a-z0-9]+")
 SIZE=64
 PARAM_DIM=8
 
+# Only score controls that the procedural geometry actually uses for each class.
+# p7 is intentionally inactive for every class; several other controls are category-specific.
+ACTIVE_PARAMETERS=(
+    (1,1,1,1,1,0,0,0), # crate: dimensions, bevel, rib detail
+    (1,1,1,1,1,1,0,0), # stool: dimensions, bevel, seat height, leg width
+    (1,1,1,1,1,1,1,0), # chair: adds back-panel height
+    (1,1,1,0,1,0,0,0), # mug: dimensions and handle thickness
+    (1,1,1,0,1,1,1,0), # lamp: dimensions, base, stem, shade details
+    (1,1,1,1,1,1,0,0), # hovercraft: dimensions, bevel, hull, pod width
+)
+
 
 def sha(path):
     h=hashlib.sha256()
@@ -87,21 +98,31 @@ class ObjectConceptNet(nn.Module):
         return self.category(fused),torch.sigmoid(self.shape(fused))
 
 
+def active_parameter_mask(labels):
+    table=torch.tensor(ACTIVE_PARAMETERS,dtype=torch.float32,device=labels.device)
+    return table[labels]
+
+
 def evaluate(model,root,rows,vocab,mode,seed,batch):
     ds=ObjectData(root,rows,vocab,mode,seed); loader=DataLoader(ds,batch_size=batch,shuffle=False)
-    model.eval(); correct=0; n=0; err=torch.zeros(PARAM_DIM); samples=[]
+    model.eval(); correct=0; n=0; err=torch.zeros(PARAM_DIM); active_count=torch.zeros(PARAM_DIM); samples=[]
     with torch.no_grad():
         for im,mask,ids,labels,params,record_ids in loader:
             logits,shape=model(im,mask,ids); pred=logits.argmax(-1)
-            correct+=int((pred==labels).sum()); n+=len(labels); err+=(shape-params).abs().sum(0)
+            correct+=int((pred==labels).sum()); n+=len(labels)
+            active=active_parameter_mask(labels).cpu()
+            err+=((shape-params).abs()*active).sum(0)
+            active_count+=active.sum(0)
             if mode=="both":
                 for j,rid in enumerate(record_ids):
                     samples.append({"id":rid,"predicted_category":CATEGORIES[int(pred[j])],
                         "target_category":CATEGORIES[int(labels[j])],
                         "predicted_params":[round(float(v),6) for v in shape[j]],
                         "target_params":[round(float(v),6) for v in params[j]]})
-    return {"category_accuracy":correct/max(1,n),"parameter_mae":float(err.sum()/(max(1,n)*PARAM_DIM)),
-            "parameter_mae_by_dimension":[round(float(v/max(1,n)),6) for v in err]},samples
+    active_total=float(active_count.sum())
+    per_dim=[round(float(err[i]/max(1.0,float(active_count[i]))),6) for i in range(PARAM_DIM)]
+    return {"category_accuracy":correct/max(1,n),"parameter_mae":float(err.sum()/max(1.0,active_total)),
+            "parameter_mae_by_dimension":per_dim,"active_geometry_parameters":int(active_total)},samples
 
 
 def train(root,out,seed,epochs=30,batch=32):
@@ -111,9 +132,11 @@ def train(root,out,seed,epochs=30,batch=32):
     train_params=torch.tensor([r["params"] for r in train_rows],dtype=torch.float32)
     test_params=torch.tensor([r["params"] for r in test],dtype=torch.float32)
     baseline_params=train_params.median(dim=0).values
-    baseline_mae=float((test_params-baseline_params).abs().mean())
+    test_labels=torch.tensor([CATEGORIES.index(r["category"]) for r in test],dtype=torch.long)
+    test_active=active_parameter_mask(test_labels)
+    baseline_mae=float(((test_params-baseline_params).abs()*test_active).sum()/test_active.sum().clamp(min=1))
     train_labels=[r["category"] for r in train_rows]
-    baseline_class_accuracy=max(train_labels.count(c) for c in CATEGORIES)/max(1,len(test))
+    baseline_class_accuracy=max(train_labels.count(c) for c in CATEGORIES)/max(1,len(train_labels))
     vocab=make_vocab(train_rows); ds=ObjectData(root,train_rows,vocab,"train",seed)
     loader=DataLoader(ds,batch_size=batch,shuffle=True,num_workers=0,generator=torch.Generator().manual_seed(seed))
     model=ObjectConceptNet(len(vocab)); optimizer=torch.optim.AdamW(model.parameters(),lr=0.001,weight_decay=1e-4)
@@ -122,7 +145,10 @@ def train(root,out,seed,epochs=30,batch=32):
         ds.epoch=epoch; model.train(); losses=[]; ds.set_mode("train")
         for im,mask,ids,label,params,_ in loader:
             logits,shape=model(im,mask,ids)
-            loss=nn.functional.cross_entropy(logits,label)+0.75*nn.functional.smooth_l1_loss(shape,params)
+            active=active_parameter_mask(label)
+            per_value=nn.functional.smooth_l1_loss(shape,params,reduction="none")
+            shape_loss=(per_value*active).sum()/active.sum().clamp(min=1)
+            loss=nn.functional.cross_entropy(logits,label)+0.75*shape_loss
             optimizer.zero_grad(set_to_none=True); loss.backward()
             nn.utils.clip_grad_norm_(model.parameters(),1.0); optimizer.step(); losses.append(float(loss.detach()))
         val=[]
@@ -151,7 +177,7 @@ def train(root,out,seed,epochs=30,batch=32):
         "weights_origin":"fresh_random_initialization","used_forge_language_checkpoint":False,
         "validation_best_score":best,"test_by_modality":modes,
         "baseline":{"category_accuracy":baseline_class_accuracy,"parameter_mae":baseline_mae,
-                    "definition":"Most-common train class and per-dimension training median; no image or prompt input."},
+                    "definition":"Most-common train class and per-dimension training median; no image or prompt input. Parameter MAE uses only geometry controls active for each test category; unused p7 and category-inapplicable controls are excluded."},
         "training_curve":curve,
         "parameters":sum(p.numel() for p in model.parameters()),"android_integrated":False,
         "promotion":"none; task review and repeatable held-out gains required",
