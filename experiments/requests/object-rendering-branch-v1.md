@@ -8,3 +8,7 @@ Run the separate fresh-random-init object branch experiment.
 - Render predicted against target proxy geometry and record silhouette IoU.
 - Preserve generated data, model/optimizer checkpoints, hashes, metrics, Blender version, and draft research archive.
 - Keep the experiment research-only; do not merge weights, integrate Android, or claim general photo-to-3D ability from this narrow synthetic benchmark.
+
+## Retry
+
+Restart after installing Blender's required EGL and headless OpenGL libraries; retain the same dataset seed and training settings.
