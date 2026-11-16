@@ -1,0 +1,171 @@
+name: Forge fresh object photo-text branch v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/object-rendering-branch-v1.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  generate:
+    name: Generate synthetic multi-view object data
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender
+          blender --version
+      - name: Generate fixed data splits and four renders per object
+        run: |
+          blender --background --factory-startup --python scripts/generate_object_dataset_v1.py -- \
+            --out "$RUNNER_TEMP/forge-object-data" --seed 202611 \
+            --train-per-category 48 --valid-per-category 12 --test-per-category 12 --resolution 96
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-object-data-v1-${{ github.run_id }}
+          path: ${{ runner.temp }}/forge-object-data/
+          retention-days: 90
+          if-no-files-found: error
+
+  train:
+    name: Fresh object branch seed ${{ matrix.seed }}
+    needs: generate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        seed: [43, 53, 73]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install pillow
+          python -m pip install --no-deps -e .
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-object-data-v1-${{ github.run_id }}
+          path: dataset
+      - name: Train from random initialization and score held-out modes
+        run: |
+          set -euo pipefail
+          python -m py_compile src/forge_core/visual/object_branch_v1.py
+          python -m forge_core.visual.object_branch_v1 \
+            --data dataset --out "artifacts/seed-${{ matrix.seed }}" \
+            --seed "${{ matrix.seed }}" --epochs 30 --batch-size 32
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-object-branch-v1-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/seed-${{ matrix.seed }}/
+          retention-days: 90
+          if-no-files-found: error
+
+  render-evaluation:
+    name: Blender silhouette check seed ${{ matrix.seed }}
+    needs: train
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        seed: [43, 53, 73]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-object-branch-v1-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: candidate
+      - name: Render proxy predictions against held-out targets
+        run: |
+          blender --background --factory-startup --python scripts/render_object_eval_v1.py -- \
+            --predictions candidate/predictions.json --out render/seed-${{ matrix.seed }} --limit 72 --resolution 96
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-object-render-v1-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: render/seed-${{ matrix.seed }}/
+          retention-days: 90
+          if-no-files-found: error
+
+  summarize:
+    name: Compare fresh object branch seeds and archive
+    needs: [generate, train, render-evaluation]
+    if: always() && needs.generate.result == 'success' && needs.train.result == 'success' && needs.render-evaluation.result == 'success'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-object-data-v1-${{ github.run_id }}
+          path: dataset
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-object-branch-v1-seed*-${{ github.run_id }}
+          path: candidates
+          merge-multiple: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-object-render-v1-seed*-${{ github.run_id }}
+          path: renders
+          merge-multiple: false
+      - name: Summarize each seed and modality
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[]
+          for p in sorted(Path("candidates").glob("**/metrics.json")):
+            r=json.loads(p.read_text()); seed=str(r["seed"])
+            q=next(x for x in Path("renders").glob("**/render_metrics.json") if f"seed{seed}" in str(x))
+            rows.append((r,json.loads(q.read_text())))
+          if len(rows)!=3: raise SystemExit(f"Expected 3 seed reports, found {len(rows)}")
+          rows.sort(key=lambda x:x[0]["seed"])
+          lines=["# Forge fresh object photo-text branch v1","",
+            "Fresh random initialization; no Forge Seed language checkpoint loaded. Dataset is procedural and declared CC0-1.0.",
+            "Object-disjoint test metrics include class accuracy, normalized parameter MAE and Blender proxy silhouette IoU.","",
+            "| Seed | Parameters | Text class acc / MAE | Single view | Four views | Both | Proxy silhouette IoU | Checkpoint SHA-256 |",
+            "|---:|---:|---:|---:|---:|---:|---:|---|"]
+          for r,rr in rows:
+            m=r["test_by_modality"]
+            def cell(k): return f'{m[k]["category_accuracy"]:.3f} / {m[k]["parameter_mae"]:.3f}'
+            lines.append(f'| {r["seed"]} | {r["parameters"]:,} | {cell("text")} | {cell("single")} | {cell("all_views")} | {cell("both")} | {rr["silhouette_iou_mean"]:.3f} | \u0060{r["checkpoint_sha256"]}\u0060 |')
+          lines += ["","This is a narrow six-category synthetic proof of concept. It does not establish arbitrary photo-to-3D ability, production mesh topology, photorealism, or general competence. No candidates are promoted.",""]
+          Path("object-branch-results.md").write_text("\n".join(lines))
+          print("\n".join(lines))
+          PY
+      - name: Package lineage and checkpoints as a draft research release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p "archive/forge-object-render-v1-${{ github.run_id }}"
+          cp -R dataset candidates renders "archive/forge-object-render-v1-${{ github.run_id }}/"
+          cp object-branch-results.md "archive/forge-object-render-v1-${{ github.run_id }}/"
+          tar -czf "forge-object-render-v1-${{ github.run_id }}.tar.gz" -C archive "forge-object-render-v1-${{ github.run_id }}"
+          cat > notes.md <<'EOF'
+          Fresh random-init visual/text object branch research archive. Includes synthetic CC0 data, data hashes, per-seed model and optimizer checkpoints, held-out metrics and Blender proxy-render scores. No Forge Seed language weights are used; this is not an Android or general capability upgrade.
+          EOF
+          gh release create "forge-object-render-v1-${{ github.run_id }}" "forge-object-render-v1-${{ github.run_id }}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge object photo-text research ${{ github.run_id }}" --notes-file notes.md
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-object-render-v1-results-${{ github.run_id }}
+          path: object-branch-results.md
+          retention-days: 90
