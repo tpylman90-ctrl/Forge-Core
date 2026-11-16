@@ -67,15 +67,16 @@ def write_checkpoint(out: Path, lane: str, parent: dict, parent_sha: str,
                      parent_run: str, parent_step: int,
                      model: ByteTransformer, optimizer: torch.optim.Optimizer,
                      rng: torch.Generator, seed: int, updates: int,
-                     best_loss: float, manifest: dict) -> None:
+                     best_step: int, best_loss: float, manifest: dict) -> None:
     ckpt = {
         "schema": 3,
         "lane": lane,
         "parent_run": parent_run,
         "parent_step": parent_step,
         "parent_sha256": parent_sha,
-        "step": parent_step + updates if lane == "language" else parent_step,
-        "lane_updates": updates,
+        "step": best_step,
+        "lane_updates": int(parent.get("lane_updates", 0)) + updates,
+        "updates_this_run": updates,
         "seed": seed,
         "configuration": model.cfg.__dict__,
         "revision": parent["revision"],
@@ -155,12 +156,17 @@ def run(lane: str, source: Path, out: Path, seed: int,
     language_lr = float(parent.get("lr", 1.25e-5))
     learning_rate = (language_lr if lane == "language" else 1.0e-5) * learning_rate_scale
     optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-    if lane == "language":
+    resume_branch = parent.get("lane") == lane and parent.get("optimizer") is not None
+    resume_optimizer = lane == "language" or resume_branch
+    if resume_optimizer:
         optimizer.load_state_dict(parent["optimizer"])
         for group in optimizer.param_groups:
             group["lr"] = learning_rate
-        torch.set_rng_state(parent["torch_rng_state"])
+        if parent.get("torch_rng_state") is not None:
+            torch.set_rng_state(parent["torch_rng_state"])
     rng = torch.Generator().manual_seed(seed + 1)
+    if resume_optimizer and parent.get("sample_rng_state") is not None:
+        rng.set_state(parent["sample_rng_state"])
 
     out.mkdir(parents=True, exist_ok=True)
     parent_valid = heldout(model, valid_ids, windows=eval_windows, seq_len=SEQ_LEN)
@@ -168,6 +174,7 @@ def run(lane: str, source: Path, out: Path, seed: int,
     parent_core = heldout(model, core_valid_ids, windows=2048, seq_len=SEQ_LEN)
     best_valid = parent_valid
     best_core = parent_core
+    best_step = parent_step
     best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
     best_optimizer = copy.deepcopy(optimizer.state_dict())
     best_torch_rng = torch.get_rng_state().clone()
@@ -201,6 +208,7 @@ def run(lane: str, source: Path, out: Path, seed: int,
                 if eligible and improved:
                     best_valid = valid_loss
                     best_core = core_loss
+                    best_step = parent_step + total_updates if lane == "language" else parent_step
                     best_state = {k: v.detach().clone() for k, v in model.state_dict().items()}
                     best_optimizer = copy.deepcopy(optimizer.state_dict())
                     best_torch_rng = torch.get_rng_state().clone()
@@ -248,8 +256,9 @@ def run(lane: str, source: Path, out: Path, seed: int,
     optimizer.load_state_dict(best_optimizer)
     torch.set_rng_state(best_torch_rng)
     rng.set_state(best_sample_rng)
+    weights_changed = any(not torch.equal(best_state[k], parent["model"][k]) for k in best_state)
     write_checkpoint(out, lane, parent, parent_sha, parent_run, parent_step,
-                     model, optimizer, rng, seed, total_updates, best_valid, manifest)
+                     model, optimizer, rng, seed, total_updates, best_step, best_valid, manifest)
     task_samples = generate_task_samples(model, tokenizer, lane) if lane in TASK_PROMPTS else []
     if task_samples:
         (out / "task-samples.json").write_text(json.dumps(task_samples, indent=2) + "\n", encoding="utf-8")
@@ -263,6 +272,10 @@ def run(lane: str, source: Path, out: Path, seed: int,
         "parent_checkpoint_sha256": parent_sha,
         "parent_step": parent_step,
         "parent_seed": parent_seed,
+        "selected_checkpoint_step": best_step,
+        "weights_changed_from_parent": weights_changed,
+        "optimizer_state_resumed": resume_optimizer,
+        "cumulative_lane_updates": int(parent.get("lane_updates", 0)) + total_updates,
         "candidate_checkpoint_sha256": sha256_file(out / "checkpoint.pt"),
         "updates": total_updates,
         "elapsed_seconds": round(time.monotonic() - started, 2),
@@ -295,9 +308,14 @@ def run(lane: str, source: Path, out: Path, seed: int,
     (out / "metrics.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     (out / "lineage.json").write_text(json.dumps({
         "lane": lane, "seed": seed, "parent_run": parent_run,
-        "parent_step": parent_step, "parent_seed": parent_seed, "parent_sha256": parent_sha,
+        "parent_step": parent_step, "selected_step": best_step,
+        "parent_seed": parent_seed, "parent_sha256": parent_sha,
         "candidate_sha256": report["candidate_checkpoint_sha256"],
-        "updates": total_updates, "isolated_lane_weights": True,
+        "weights_changed_from_parent": weights_changed,
+        "optimizer_state_resumed": resume_optimizer,
+        "parent_lane_updates": int(parent.get("lane_updates", 0)),
+        "cumulative_lane_updates": int(parent.get("lane_updates", 0)) + total_updates,
+        "updates_this_run": total_updates, "isolated_lane_weights": True,
         "personal_memory_in_weights": False, "android_integrated": False,
     }, indent=2) + "\n", encoding="utf-8")
     (out / "source-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
