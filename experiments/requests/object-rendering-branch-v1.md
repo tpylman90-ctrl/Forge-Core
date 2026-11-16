@@ -12,3 +12,7 @@ Run the separate fresh-random-init object branch experiment.
 ## Retry
 
 Restart after installing Blender's required EGL and headless OpenGL libraries; retain the same dataset seed and training settings.
+
+## Retry 2
+
+Restart after adding the missing dataset mode switch; retain the same code-level dataset seed and three model seeds.
