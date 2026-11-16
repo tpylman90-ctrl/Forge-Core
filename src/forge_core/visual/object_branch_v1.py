@@ -108,6 +108,12 @@ def train(root,out,seed,epochs=30,batch=32):
     random.seed(seed); torch.manual_seed(seed); torch.set_num_threads(min(2,torch.get_num_threads()))
     manifest=json.loads((root/"dataset_manifest.json").read_text()); msha=sha(root/"dataset_manifest.json")
     train_rows=read_records(root,"train"); valid=read_records(root,"valid"); test=read_records(root,"test")
+    train_params=torch.tensor([r["params"] for r in train_rows],dtype=torch.float32)
+    test_params=torch.tensor([r["params"] for r in test],dtype=torch.float32)
+    baseline_params=train_params.median(dim=0).values
+    baseline_mae=float((test_params-baseline_params).abs().mean())
+    train_labels=[r["category"] for r in train_rows]
+    baseline_class_accuracy=max(train_labels.count(c) for c in CATEGORIES)/max(1,len(test))
     vocab=make_vocab(train_rows); ds=ObjectData(root,train_rows,vocab,"train",seed)
     loader=DataLoader(ds,batch_size=batch,shuffle=True,num_workers=0,generator=torch.Generator().manual_seed(seed))
     model=ObjectConceptNet(len(vocab)); optimizer=torch.optim.AdamW(model.parameters(),lr=0.001,weight_decay=1e-4)
@@ -143,7 +149,10 @@ def train(root,out,seed,epochs=30,batch=32):
         "training_examples":len(train_rows),"validation_examples":len(valid),"test_examples":len(test),
         "dataset_manifest_sha256":msha,"dataset_license":manifest["license"],
         "weights_origin":"fresh_random_initialization","used_forge_language_checkpoint":False,
-        "validation_best_score":best,"test_by_modality":modes,"training_curve":curve,
+        "validation_best_score":best,"test_by_modality":modes,
+        "baseline":{"category_accuracy":baseline_class_accuracy,"parameter_mae":baseline_mae,
+                    "definition":"Most-common train class and per-dimension training median; no image or prompt input."},
+        "training_curve":curve,
         "parameters":sum(p.numel() for p in model.parameters()),"android_integrated":False,
         "promotion":"none; task review and repeatable held-out gains required",
         "checkpoint_sha256":sha(out/"checkpoint.pt")}

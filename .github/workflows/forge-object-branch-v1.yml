@@ -26,7 +26,7 @@ jobs:
         run: |
           blender --background --factory-startup --python scripts/generate_object_dataset_v1.py -- \
             --out "$RUNNER_TEMP/forge-object-data" --seed 202611 \
-            --train-per-category 48 --valid-per-category 12 --test-per-category 12 --resolution 96
+            --train-per-category 128 --valid-per-category 16 --test-per-category 16 --resolution 96
       - uses: actions/upload-artifact@v4
         with:
           name: forge-object-data-v1-${{ github.run_id }}
@@ -64,7 +64,7 @@ jobs:
           python -m py_compile src/forge_core/visual/object_branch_v1.py
           python -m forge_core.visual.object_branch_v1 \
             --data dataset --out "artifacts/seed-${{ matrix.seed }}" \
-            --seed "${{ matrix.seed }}" --epochs 30 --batch-size 32
+            --seed "${{ matrix.seed }}" --epochs 60 --batch-size 32
       - uses: actions/upload-artifact@v4
         with:
           name: forge-object-branch-v1-seed${{ matrix.seed }}-${{ github.run_id }}
@@ -84,6 +84,11 @@ jobs:
         seed: [43, 53, 73]
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install image-mask scorer
+        run: python -m pip install pillow
       - name: Install Blender
         run: |
           sudo apt-get update
@@ -95,7 +100,10 @@ jobs:
       - name: Render proxy predictions against held-out targets
         run: |
           blender --background --factory-startup --python scripts/render_object_eval_v1.py -- \
-            --predictions candidate/predictions.json --out render/seed-${{ matrix.seed }} --limit 72 --resolution 96
+            --predictions candidate/predictions.json --out render/seed-${{ matrix.seed }} --limit 96 --resolution 96
+          python scripts/score_object_render_v1.py \
+            --pairs render/seed-${{ matrix.seed }}/render_pairs.json \
+            --out render/seed-${{ matrix.seed }}/render_metrics.json
       - uses: actions/upload-artifact@v4
         with:
           name: forge-object-render-v1-seed${{ matrix.seed }}-${{ github.run_id }}
@@ -139,12 +147,12 @@ jobs:
           lines=["# Forge fresh object photo-text branch v1","",
             "Fresh random initialization; no Forge Seed language checkpoint loaded. Dataset is procedural and declared CC0-1.0.",
             "Object-disjoint test metrics include class accuracy, normalized parameter MAE and Blender proxy silhouette IoU.","",
-            "| Seed | Parameters | Text class acc / MAE | Single view | Four views | Both | Proxy silhouette IoU | Checkpoint SHA-256 |",
-            "|---:|---:|---:|---:|---:|---:|---:|---|"]
+            "| Seed | Parameters | Text class acc / MAE | Single view | Four views | Both | Param median baseline MAE | Proxy silhouette IoU | Checkpoint SHA-256 |",
+            "|---:|---:|---:|---:|---:|---:|---:|---:|---|"]
           for r,rr in rows:
             m=r["test_by_modality"]
             def cell(k): return f'{m[k]["category_accuracy"]:.3f} / {m[k]["parameter_mae"]:.3f}'
-            lines.append(f'| {r["seed"]} | {r["parameters"]:,} | {cell("text")} | {cell("single")} | {cell("all_views")} | {cell("both")} | {rr["silhouette_iou_mean"]:.3f} | \u0060{r["checkpoint_sha256"]}\u0060 |')
+            lines.append(f'| {r["seed"]} | {r["parameters"]:,} | {cell("text")} | {cell("single")} | {cell("all_views")} | {cell("both")} | {r["baseline"]["parameter_mae"]:.3f} | {rr["silhouette_iou_mean"]:.3f} | \u0060{r["checkpoint_sha256"]}\u0060 |')
           lines += ["","This is a narrow six-category synthetic proof of concept. It does not establish arbitrary photo-to-3D ability, production mesh topology, photorealism, or general competence. No candidates are promoted.",""]
           Path("object-branch-results.md").write_text("\n".join(lines))
           print("\n".join(lines))

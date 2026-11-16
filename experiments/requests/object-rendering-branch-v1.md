@@ -16,3 +16,7 @@ Restart after installing Blender's required EGL and headless OpenGL libraries; r
 ## Retry 2
 
 Restart after adding the missing dataset mode switch; retain the same code-level dataset seed and three model seeds.
+
+## Retry 3
+
+Use 128 training, 16 validation, and 16 test instances per category; train 60 epochs; compute constant-median parameter baselines; score Blender PNG masks with Pillow and fail if masks are empty or nearly full.
