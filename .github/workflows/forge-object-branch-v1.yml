@@ -20,7 +20,7 @@ jobs:
       - name: Install Blender
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender libegl1 libgl1 libxrender1 libxi6 libxkbcommon0 libsm6
           blender --version
       - name: Generate fixed data splits and four renders per object
         run: |
@@ -87,7 +87,7 @@ jobs:
       - name: Install Blender
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender libegl1 libgl1 libxrender1 libxi6 libxkbcommon0 libsm6
       - uses: actions/download-artifact@v4
         with:
           name: forge-object-branch-v1-seed${{ matrix.seed }}-${{ github.run_id }}
