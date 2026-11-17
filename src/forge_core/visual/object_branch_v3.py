@@ -8,6 +8,8 @@ from torch import nn
 from torch.utils.data import DataLoader,Dataset
 
 CATEGORIES=("crate","stool","chair","mug","lamp","hovercraft")
+SEEN_CATEGORIES=("crate","stool","lamp","hovercraft")
+HELDOUT_CATEGORIES=("chair","mug")
 VIEWS=("front","side","top","three_quarter")
 TOKEN_RE=re.compile(r"[a-z0-9]+")
 SIZE=64
