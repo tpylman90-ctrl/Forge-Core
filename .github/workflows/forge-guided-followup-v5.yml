@@ -1,0 +1,164 @@
+name: Forge Blender-Godot continuation v5
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/guided-followup-v5-2026-11-17.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  continue-lanes:
+    name: ${{ matrix.lane }} seed ${{ matrix.seed }} low-rate replication
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        include:
+          - lane: blender
+            seed: 43
+          - lane: blender
+            seed: 53
+          - lane: blender
+            seed: 73
+          - lane: godot
+            seed: 43
+          - lane: godot
+            seed: 53
+          - lane: godot
+            seed: 73
+    env:
+      SOURCE_RUN: "43804101939"
+      GH_TOKEN: ${{ github.token }}
+      PYTHONUNBUFFERED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore exact v4 candidate and verify lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p source
+          artifact="forge-guided-followup-v4-${{ matrix.lane }}-seed${{ matrix.seed }}-$SOURCE_RUN"
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" --name "$artifact" --dir source
+          python - <<'PY'
+          import hashlib,json,torch
+          from pathlib import Path
+          p=Path("source")
+          ck=p/"checkpoint.pt"
+          metrics=json.loads((p/"metrics.json").read_text())
+          state=torch.load(ck,map_location="cpu",weights_only=True)
+          digest=hashlib.sha256(ck.read_bytes()).hexdigest()
+          lane="${{ matrix.lane }}"; seed=int("${{ matrix.seed }}")
+          assert metrics["lane"]==lane and metrics["seed"]==seed
+          assert metrics["candidate_checkpoint_sha256"]==digest
+          assert state["lane"]==lane and state["seed"]==seed
+          assert state["lane_updates"]>=3000 and state.get("optimizer") is not None
+          assert state.get("sample_rng_state") is not None
+          manifest=json.loads((p/"source-manifest.json").read_text())
+          assert manifest["revision"]=="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          assert manifest["license"]=="cdla-sharing-1.0"
+          assert (p/"manual").is_dir()
+          print(json.dumps({"lane":lane,"seed":seed,"parent_sha256":digest,
+            "base_step":state["step"],"cumulative_lane_updates":state["lane_updates"],
+            "optimizer_resumed":True,"source_revision":manifest["revision"]},indent=2))
+          PY
+      - name: Continue with conservative low-rate, balanced replay
+        run: |
+          python -m py_compile src/forge_core/neural/guided_curriculum_v3.py
+          python -m forge_core.neural.guided_curriculum_v3 \
+            --lane "${{ matrix.lane }}" --source source --out artifacts/candidate \
+            --seed "${{ matrix.seed }}" --stage-updates 500 --eval-every 100 \
+            --parent-sha256 "$(python -c 'import hashlib; print(hashlib.sha256(open("source/checkpoint.pt","rb").read()).hexdigest())')" \
+            --parent-run "$SOURCE_RUN" --expected-parent-seed "${{ matrix.seed }}" \
+            --replay-fraction 0.5 --learning-rate-scale 0.5
+      - name: Preserve parent, exact source and selected candidate metadata
+        if: always()
+        run: |
+          set -euo pipefail
+          cp source/checkpoint.pt artifacts/candidate/parent-checkpoint.pt
+          cp source/tokenizer.json source/source-manifest.json source/train.txt source/valid.txt source/test.txt artifacts/candidate/
+          cp -R source/manual artifacts/candidate/ 2>/dev/null || true
+          python - <<'PY'
+          import hashlib,json,torch
+          from pathlib import Path
+          p=Path("artifacts/candidate")
+          parent=torch.load(p/"parent-checkpoint.pt",map_location="cpu",weights_only=True)
+          ck=p/"checkpoint.pt"
+          if ck.exists():
+            candidate=torch.load(ck,map_location="cpu",weights_only=True)
+            metrics=json.loads((p/"metrics.json").read_text())
+            lineage={"status":"research_only_not_promoted","lane":metrics["lane"],
+              "seed":metrics["seed"],"parent_run":metrics["parent_run"],
+              "parent_checkpoint_sha256":metrics["parent_checkpoint_sha256"],
+              "parent_lane_updates":parent.get("lane_updates",0),
+              "updates_this_run":metrics["updates"],
+              "candidate_checkpoint_sha256":hashlib.sha256(ck.read_bytes()).hexdigest(),
+              "selected_base_forge_step":candidate["step"],
+              "cumulative_lane_updates":candidate["lane_updates"],
+              "used_common_language_weights":True,"merged_with_other_lanes":False,
+              "android_integrated":False}
+            (p/"followup-lineage.json").write_text(json.dumps(lineage,indent=2)+"\n")
+            print(json.dumps(lineage,indent=2))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-guided-followup-v5-${{ matrix.lane }}-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/candidate/
+          retention-days: 90
+          if-no-files-found: warn
+
+  summarize:
+    name: Compare low-rate lane continuations
+    needs: continue-lanes
+    if: always() && needs.continue-lanes.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download candidate artifacts
+        run: |
+          mkdir -p bundle
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir bundle
+      - name: Summarize paired seed results and archive
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[]
+          for p in sorted(Path("bundle").glob("**/metrics.json")):
+            m=json.loads(p.read_text())
+            if m.get("lane") in {"blender","godot"}: rows.append(m)
+          if len(rows)!=6: raise SystemExit(f"Expected 6 reports, found {len(rows)}")
+          rows.sort(key=lambda m:(m["lane"],m["seed"]))
+          lines=["# Forge Blender-Godot low-rate continuation v5","",
+            "Each seed resumes its matching v4 specialist checkpoint and optimizer state. Learning rate is halved; batches retain 50% TinyStories replay. Research only; no lane merge or Android promotion.","",
+            "| Lane | Seed | Updates | Domain test parent → candidate | Core language Δ | Guard | Candidate SHA-256 |",
+            "|---|---:|---:|---:|---:|:---:|---|"]
+          for m in rows:
+            lines.append(f'| {m["lane"]} | {m["seed"]} | {m["updates"]} | {m["domain_test_loss_parent"]:.4f} → {m["domain_test_loss_candidate"]:.4f} | {m["core_language_delta_candidate_minus_parent"]:+.4f} | {"pass" if m["core_language_guard_passed"] else "fail"} | `{m["candidate_checkpoint_sha256"]}` |')
+          lines += ["","Loss measures next-token prediction on pinned source text, not task competence. Test splits are reported once after validation-based selection. Lower held-out loss is better."]
+          Path("bundle/FORGE-GUIDED-FOLLOWUP-V5-RESULTS.md").write_text("\n".join(lines)+"\n")
+          print("\n".join(lines))
+          PY
+          tar -czf "forge-guided-followup-v5-$GITHUB_RUN_ID.tar.gz" -C bundle .
+          printf '%s\n' "Six isolated specialist research continuations from verified v4 Blender and Godot candidates. Each resumes optimizer and sampler state, uses half learning rate and balanced language replay. Includes parent, data, checkpoint, and held-out evaluation. No merge or Android promotion." > release-notes.md
+          gh release create "forge-guided-followup-v5-$GITHUB_RUN_ID" "forge-guided-followup-v5-$GITHUB_RUN_ID.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge Blender-Godot low-rate continuation v5 $GITHUB_RUN_ID" \
+            --notes-file release-notes.md
