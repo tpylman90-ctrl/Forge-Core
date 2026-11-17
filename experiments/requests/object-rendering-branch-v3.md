@@ -5,3 +5,7 @@ Generate CC0 multi-view images with semantic pixel maps for body, support, featu
 Report seen-family and held-out-family category, geometry MAE, and foreground part mIoU for text-only, single-view, four-view, and combined inputs. Render predictions against held-out Blender targets and report silhouette IoU separately for seen families and withheld chair/mug families. Keep all weights research-only, separate from the Forge Seed language model, and do not promote or integrate until held-out part and shape metrics are repeatable.
 
 Implementation note: Initial run 44007365268 stopped before optimizer updates because the first seed found an undefined seen/held-out category constant. Constants are now explicit in the trainer; retry the same fixed dataset generation, seeds and evaluation after the code fix. No checkpoint from that attempt exists.
+
+## Retry after category-constant fix
+
+Rerun the three seeds from the corrected v3 trainer. The failed attempt ended before any optimizer updates; retain the same generated dataset artifact if available, and preserve the held-out chair/mug evaluation.
