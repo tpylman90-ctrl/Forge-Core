@@ -65,7 +65,8 @@ jobs:
           assert metrics["lane"]==lane and metrics["seed"]==seed
           assert metrics["candidate_checkpoint_sha256"]==digest
           assert state["lane"]==lane and state["seed"]==seed
-          assert state["lane_updates"]>=3000 and state.get("optimizer") is not None
+          assert state.get("optimizer") is not None and state.get("sample_rng_state") is not None
+          assert state["step"]>=107250
           assert state.get("sample_rng_state") is not None
           manifest=json.loads((p/"source-manifest.json").read_text())
           assert manifest["revision"]=="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
@@ -88,6 +89,7 @@ jobs:
         if: always()
         run: |
           set -euo pipefail
+          mkdir -p artifacts/candidate
           cp source/checkpoint.pt artifacts/candidate/parent-checkpoint.pt
           cp source/tokenizer.json source/source-manifest.json source/train.txt source/valid.txt source/test.txt artifacts/candidate/
           cp -R source/manual artifacts/candidate/ 2>/dev/null || true
