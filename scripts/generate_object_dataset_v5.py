@@ -1,7 +1,8 @@
-"""Generate CC0 multi-view object RGB images and semantic part maps.
+"""Generate CC0 RGB views and semantic part maps for controlled shape learning.
 
-Training uses four object families. Chair and mug are withheld entirely from
-training and validation and appear only in the family-held-out test split.
+All six object categories appear in every split. Training exposes central controls
+and at most one extreme control per object; held-out tests combine two or three
+extreme proportion/detail controls to measure compositional generalization.
 """
 import argparse, hashlib, json, random, sys
 from pathlib import Path
