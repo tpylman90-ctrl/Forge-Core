@@ -46,3 +46,7 @@ The visual branch starts from fresh random weights and does not load Forge Seed 
 5. Keep source revisions, licenses, corpus hashes, checkpoint parents, optimizer/RNG state, selected-step bookkeeping, and independent evaluations in every training archive.
 
 All candidate weights discussed here remain research-only. No branch was merged, Android-integrated, or described as a capability upgrade.
+
+## Visual-data follow-up completed
+
+The stricter CC0 semantic-part/family-holdout run completed as [object branch v3 results](OBJECT-PHOTO-TEXT-V3-RESULTS-2026-11-17.md). Across three fresh random-init seeds, mean silhouette IoU was 0.386 on seen families and 0.248 on the entirely withheld chair/mug families; mean part mIoU was about 0.258. The combined geometry prediction averaged 0.200 MAE versus a 0.214 training-median baseline overall, but held-out-family geometry averaged about 0.217. This is not a generalization win. It confirms the need to expand families and hold out geometry templates within trained categories for the main evaluation, while keeping category-level zero-shot as a distinct stress test. The branch remains separate and research-only.
