@@ -229,7 +229,7 @@ def train(root,out,seed,epochs=60,batch=32):
         modes[mode],preds=evaluate(model,root,test,vocab,mode,seed+101,batch)
         if mode=="both": (out/"predictions.json").write_text(json.dumps(preds,indent=2)+"\n")
     ck={"schema":3,"model":best_state,"optimizer":best_opt,"seed":seed,"epoch_count":epochs,
-        "architecture":"ObjectConceptNetV5-part-segmentation-family-holdout","categories":list(CATEGORIES),
+        "architecture":"ObjectConceptNetV5-single-axis-to-combination","categories":list(CATEGORIES),
         "seen_categories":list(SEEN_CATEGORIES),"heldout_categories":list(HELDOUT_CATEGORIES),"heldout_controls":manifest.get("heldout_families",{}),
         "vocabulary":vocab,"weights_origin":"fresh_random_initialization","forge_seed_parent":None,
         "dataset_manifest_sha256":msha,"training_curve":curve}
