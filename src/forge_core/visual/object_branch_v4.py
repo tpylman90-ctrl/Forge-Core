@@ -242,7 +242,7 @@ def train(root,out,seed,epochs=60,batch=32):
         "validation_best_score":best,"test_by_modality":modes,
         "baseline":{"category_accuracy":baseline_class_accuracy,"seen_category_accuracy":baseline_seen,
                     "parameter_mae":baseline_mae,"part_miou_foreground":0.0,
-                    "definition":"Most-common train class, per-dimension training median, and all-background part mask. Parameter MAE scores only active geometry controls. Chair and mug are held out from both training and validation."},
+                    "definition":"Most-common train class, per-dimension training median, and all-background part mask. Parameter MAE scores only active geometry controls. All six categories remain in training; test-only shape families use extreme p0-p6 values outside the training range."},
         "training_curve":curve,"parameters":sum(p.numel() for p in model.parameters()),
         "android_integrated":False,
         "promotion":"none; repeatable held-out-family part and geometry gains required",
