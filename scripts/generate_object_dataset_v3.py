@@ -65,8 +65,9 @@ def main():
                 for name,direction in view_directions().items():
                     aim_camera(cam,center,direction,scale)
                     image_path=image_root/f"{sid}_{name}.png"; scene.render.filepath=str(image_path)
-                    scene.display.shading.color_type="MATERIAL"
+                    scene.display.shading.color_type="MATERIAL"; scene.display.shading.light="STUDIO"
                     scene.display.shading.show_shadows=True; scene.display.shading.show_cavity=True
+                    scene.world.color=(0.075,0.085,0.10)
                     bpy.ops.render.render(write_still=True); views[name]=str(image_path.relative_to(out))
                     scene.display.shading.color_type="OBJECT"
                     scene.display.shading.light="FLAT"; scene.display.shading.show_shadows=False
