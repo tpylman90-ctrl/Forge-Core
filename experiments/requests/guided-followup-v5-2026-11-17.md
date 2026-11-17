@@ -17,3 +17,5 @@
 
 ## Interpretation
 A win requires lower domain test loss than the matching v4 parent across seeds without violating the core-language guard. This only shows better next-token prediction on the pinned documentation. It does not certify Blender/Godot task skill. Language training is deferred pending a stronger independent evaluation and a broader reviewed corpus; visual training remains a separate random-init research branch. No model is merged, promoted to Android, or used with personal memory.
+
+Implementation note: Initial attempt 44006678996 stopped during pre-training validation because the v4 artifact predates the lane-update bookkeeping fix. No optimizer steps ran. Retry after the check was corrected to verify the artifact hash, lane/seed, optimizer and sampler RNG without assuming the newer cumulative-update field.
