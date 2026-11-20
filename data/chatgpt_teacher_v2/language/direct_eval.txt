@@ -1,0 +1,17 @@
+Independent held-out direct-v2 examples.
+
+Task: A candidate lowers its own training loss but raises unseen language validation loss.
+Procedure:
+1. Treat train loss and validation loss as separate measurements.
+2. Keep the candidate for study and resume from the last passing checkpoint.
+3. Change one factor and repeat with a fixed evaluation.
+Principle: Better fit to training examples is not sufficient evidence of generalization.
+Check: Compare both losses and preserve the exact parent.
+
+Task: A fluent generated answer may be factually wrong.
+Procedure:
+1. Identify claims that can be checked.
+2. Compare them with a trusted source or execute a safe test.
+3. Report uncertainty when the evidence is incomplete.
+Principle: Fluency is not a correctness measurement.
+Check: Define the expected result before running the test.
