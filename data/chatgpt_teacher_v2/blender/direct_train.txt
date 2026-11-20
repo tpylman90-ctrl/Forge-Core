@@ -1,0 +1,43 @@
+Pack: ChatGPT direct tutor v2; original CC0-1.0.
+Worked-example teaching: state the task, give the procedure, explain the principle, and verify on the same case. Check the installed Blender version for operator changes.
+
+Case: Repair an uneven hard-surface bevel.
+Task: An object has non-uniform scale and the bevel appears inconsistent.
+Procedure:
+1. Duplicate the object so the original remains available.
+2. Apply scale on the duplicate.
+3. Adjust bevel width and segment count separately.
+Principle: A modifier evaluates local geometry in the object's transformed coordinate system.
+Example:
+import bpy
+obj = bpy.context.active_object
+if obj is None or obj.type != "MESH":
+    raise RuntimeError("Select a mesh object")
+bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+bevel = obj.modifiers.new("Edge_Bevel", "BEVEL")
+bevel.width = 0.08
+bevel.segments = 3
+Check: Compare the silhouette and highlights from front, side, and three-quarter views.
+
+Case: Fix a rounded silhouette with otherwise clean shading.
+Task: Choose between changing geometry or normals.
+Procedure:
+1. Inspect the outline with shading and modifiers toggled.
+2. Adjust bevel width or supporting geometry if the outline is wrong.
+3. Use normals only to improve light interpolation.
+Principle: Geometry changes shape; normals change how the shape is lit.
+Example: A Weighted Normal modifier cannot add a flat panel edge that is missing from the mesh.
+Check: Inspect silhouette separately from highlights.
+
+Case: Make a safe independent copy of a mesh for experimentation.
+Task: Edit one duplicate without altering the source.
+Procedure:
+1. Copy the scene object.
+2. Copy its mesh datablock.
+3. Link the duplicate into the intended collection.
+Principle: Separate object instances may still share geometry data.
+Example:
+duplicate = source.copy()
+duplicate.data = source.data.copy()
+bpy.context.collection.objects.link(duplicate)
+Check: Move one vertex and confirm the source mesh remains unchanged.
