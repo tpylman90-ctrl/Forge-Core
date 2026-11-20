@@ -3,6 +3,7 @@ Tutor cycle: retrieve first, diagnose the assumption, explain in small steps, ha
 
 Case: A CharacterBody3D slides through a wall at some frame rates.
 Forge first attempt: Lower speed until it stops clipping.
+Forge asks why: Why should I check the physics update path and collision setup before changing speed?
 ChatGPT asks: Is movement done in the fixed physics callback, and are collisions handled through the body movement method?
 Forge diagnoses: I treated a symptom by tuning speed before checking the update path.
 ChatGPT explains:
@@ -20,6 +21,7 @@ Forge checks: Reproduce with a minimal scene and confirm the expected signal.
 
 Case: A scene instance appears at an unexpected location after its parent node is rotated.
 Forge first attempt: Add the desired world coordinates directly to position.
+Forge asks why: Why should I check the physics update path and collision setup before changing speed?
 ChatGPT asks: Is the desired point parent-relative or world-relative?
 Forge diagnoses: I used local position as if it were global.
 ChatGPT explains:
@@ -38,6 +40,7 @@ Confidence: Confirm the node type and Godot version when using transform APIs.
 
 Case: A reusable health component directly updates a HUD node by a hard-coded path.
 Forge first attempt: Add another node path for every UI listener.
+Forge asks why: Why should I check the physics update path and collision setup before changing speed?
 ChatGPT asks: Should the health component know which systems respond to health changes?
 Forge diagnoses: I coupled the data owner to every possible consumer.
 ChatGPT explains:
