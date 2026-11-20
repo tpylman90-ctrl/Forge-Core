@@ -11,7 +11,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "experiments/requests/dialogue-bootstrap-v1-001.md"
+      - "experiments/requests/dialogue-bootstrap-v1-*.md"
 
 concurrency:
   group: forge-seed-pure-dialogue-bootstrap-v1
@@ -60,10 +60,39 @@ jobs:
           test -f original/source-manifest.json
           test -f original/train.txt
           test -f original/valid.txt
-      - name: Train matched correct-target and shuffled-target arms
+      - name: Replicate matched training across two CPU seeds
         run: |
-          python -m forge_core.neural.dialogue_bootstrap_v1 \
-            --source original --out results --steps "$STEPS" --seed 43
+          set -euo pipefail
+          for seed in 53 73; do
+            python -m forge_core.neural.dialogue_bootstrap_v1 \
+              --source original --out "results/seed-$seed" --steps "$STEPS" --seed "$seed"
+          done
+      - name: Summarize replication gates
+        if: always()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reports = []
+          for path in sorted(Path("results").glob("seed-*/report.json")):
+              report = json.loads(path.read_text())
+              gate = report["dialogue_improvement_gate"]
+              reports.append({
+                  "seed": int(path.parent.name.removeprefix("seed-")),
+                  "correct": gate["correct_arm_macro_accuracy"],
+                  "control": gate["shuffled_control_macro_accuracy"],
+                  "parent": gate["frozen_parent_macro_accuracy"],
+                  "retention_delta": gate["tiny_stories_validation_loss_delta"],
+                  "passed": gate["passed"],
+              })
+          summary = {
+              "replications": reports,
+              "all_available_seeds_passed": bool(reports) and all(r["passed"] for r in reports),
+              "interpretation": "Two additional seeds test whether the first pilot's narrow synthetic response-ranking gain repeats; no candidate is promoted."
+          }
+          Path("results/replication-summary.json").write_text(json.dumps(summary, indent=2) + "\n")
+          print(json.dumps(summary, indent=2))
+          PY
       - name: Preserve unpromoted candidates and report
         if: always()
         uses: actions/upload-artifact@v4
