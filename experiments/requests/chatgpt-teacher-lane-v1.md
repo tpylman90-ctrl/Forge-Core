@@ -9,3 +9,5 @@ Keep all three lesson packs separate and hash-attributed in the reports. Save th
 This is a one-seed pilot only. Do not merge lane weights, change canonical Forge weights, publish a release, or claim tool competence from token loss. If a lane shows a useful signal, use independent-seed replication and task-level evaluation before considering a checkpoint for durable storage beside other sessions.
 
 Retry note: this run request was re-pushed after correcting workflow expression interpolation; use the corrected workflow version.
+
+Matrix note: explicitly include both control and ChatGPT arms for each of the three lanes.

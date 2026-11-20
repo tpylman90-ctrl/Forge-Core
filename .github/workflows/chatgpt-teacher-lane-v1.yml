@@ -22,11 +22,22 @@ jobs:
         include:
           - lane: language
             seed: 43
+            arm: control
+          - lane: language
+            seed: 43
+            arm: chatgpt
           - lane: blender
             seed: 731
+            arm: control
+          - lane: blender
+            seed: 731
+            arm: chatgpt
           - lane: godot
             seed: 947
-        arm: [control, chatgpt]
+            arm: control
+          - lane: godot
+            seed: 947
+            arm: chatgpt
     env:
       SOURCE_RUN: "42552572467"
       SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
