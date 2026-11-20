@@ -13,3 +13,8 @@ This tests whether the explain-and-apply format improves prediction of new examp
 ## Pilot results
 
 See [the completed controlled CPU study](CHATGPT-ASKWHY-LANE-V1-RESULTS.md) for the matched control, direct-teaching, and Ask-Why results.
+
+
+## Follow-up
+
+The expanded diagnostic and transfer curriculum is documented in [ChatGPT adaptive tutor v2](CHATGPT-ADAPTIVE-TUTOR-V2.md). Its two-seed lane runs are reported separately; v1 packs and results remain intact.
