@@ -30,3 +30,8 @@ Each candidate is scored on held-out tutor-v2, direct-teaching, and Ask-Why v1 t
 ## Results
 
 See [the completed v2 study](CHATGPT-ADAPTIVE-TUTOR-V2-RESULTS.md) for all six lane runs and the corrected independent language replication.
+
+
+## Matched comparison
+
+See [the matched control, direct-v2, and tutor-v2 study](CHATGPT-MATCHED-TUTOR-V2-RESULTS.md). It found clear format-specific text-learning gains, but the tutor arm did not lead the existing lane-test metric.
