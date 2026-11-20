@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   train:
-    name: ${ matrix.lane } ${ matrix.arm } teacher pilot
+    name: ${{ matrix.lane }} ${{ matrix.arm }} teacher pilot
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -31,7 +31,7 @@ jobs:
       SOURCE_RUN: "42552572467"
       SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
       PYTHONUNBUFFERED: "1"
-      GH_TOKEN: ${ github.token }
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -61,7 +61,7 @@ jobs:
           manifest = json.loads(Path("source/source-manifest.json").read_text())
           assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
           print({"parent_step": ckpt["step"], "parent_sha256": digest,
-                 "lane": "${ matrix.lane }", "arm": "${ matrix.arm }"})
+                 "lane": "${{ matrix.lane }}", "arm": "${{ matrix.arm }}"})
           PY
       - name: Check teacher pack and trainer syntax
         run: |
@@ -80,25 +80,25 @@ jobs:
       - name: Run matched control or ChatGPT-teacher branch
         run: |
           python -m forge_core.neural.chatgpt_teacher_v1 \
-            --lane "${ matrix.lane }" --arm "${ matrix.arm }" \
-            --source source --out "artifacts/${ matrix.lane }/${ matrix.arm }" \
-            --seed "${ matrix.seed }" --updates 500
+            --lane "${{ matrix.lane }}" --arm "${{ matrix.arm }}" \
+            --source source --out "artifacts/${{ matrix.lane }}/${{ matrix.arm }}" \
+            --seed "${{ matrix.seed }}" --updates 500
       - name: Preserve parent, candidate, teacher data, and metrics together
         if: always()
         run: |
           set -euo pipefail
-          mkdir -p "artifacts/${ matrix.lane }/${ matrix.arm }/parent"
+          mkdir -p "artifacts/${{ matrix.lane }}/${{ matrix.arm }}/parent"
           cp source/checkpoint.pt source/tokenizer.json \
-             "artifacts/${ matrix.lane }/${ matrix.arm }/parent/"
-          cp "data/chatgpt_teacher_v1/${ matrix.lane }/train.txt" \
-             "artifacts/${ matrix.lane }/${ matrix.arm }/parent/teacher-train.txt"
-          cp "data/chatgpt_teacher_v1/${ matrix.lane }/eval.txt" \
-             "artifacts/${ matrix.lane }/${ matrix.arm }/parent/teacher-eval.txt"
+             "artifacts/${{ matrix.lane }}/${{ matrix.arm }}/parent/"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/train.txt" \
+             "artifacts/${{ matrix.lane }}/${{ matrix.arm }}/parent/teacher-train.txt"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/eval.txt" \
+             "artifacts/${{ matrix.lane }}/${{ matrix.arm }}/parent/teacher-eval.txt"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: forge-chatgpt-teacher-v1-${ matrix.lane }-${ matrix.arm }-${ github.run_id }
-          path: artifacts/${ matrix.lane }/${ matrix.arm }/
+          name: forge-chatgpt-teacher-v1-${{ matrix.lane }}-${{ matrix.arm }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/${{ matrix.arm }}/
           retention-days: 90
           if-no-files-found: warn
 
@@ -110,7 +110,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: forge-chatgpt-teacher-v1-*-${ github.run_id }
+          pattern: forge-chatgpt-teacher-v1-*-${{ github.run_id }}
           path: results
           merge-multiple: false
           if-no-files-found: ignore
@@ -152,7 +152,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: forge-chatgpt-teacher-v1-results-${ github.run_id }
+          name: forge-chatgpt-teacher-v1-results-${{ github.run_id }}
           path: chatgpt-teacher-v1-results.md
           retention-days: 90
           if-no-files-found: warn
