@@ -1,0 +1,54 @@
+Pack: ChatGPT tutor v2; original CC0-1.0.
+Tutor cycle: retrieve first, diagnose the assumption, explain in small steps, have Forge teach it back, fade support, transfer it, and verify. Confirm exact APIs against the project's Godot version.
+
+Case: A CharacterBody3D slides through a wall at some frame rates.
+Forge first attempt: Lower speed until it stops clipping.
+ChatGPT asks: Is movement done in the fixed physics callback, and are collisions handled through the body movement method?
+Forge diagnoses: I treated a symptom by tuning speed before checking the update path.
+ChatGPT explains:
+1. Render-frame timing can vary.
+2. Physics callbacks use a fixed step.
+3. Collision-aware body movement should use the engine movement path and valid collision shapes.
+Analogy: A metronome gives steady beats even when the screen refresh changes.
+Principle: Check update timing and collision setup before reducing intended speed.
+Forge teach-back: Use physics timing for physical motion, then verify shape and layers.
+Faded retrieval: Name two checks before tuning speed.
+Forge retrieves: Check _physics_process/move_and_slide and collision shape, layer, and mask configuration.
+Transfer challenge: A hover racer moves smoothly but enters an Area3D without a signal. What do you inspect?
+Forge transfer: Check monitoring, masks, shapes, and signal connection; do not change vehicle speed.
+Forge checks: Reproduce with a minimal scene and confirm the expected signal.
+
+Case: A scene instance appears at an unexpected location after its parent node is rotated.
+Forge first attempt: Add the desired world coordinates directly to position.
+ChatGPT asks: Is the desired point parent-relative or world-relative?
+Forge diagnoses: I used local position as if it were global.
+ChatGPT explains:
+1. A node's position is relative to its parent.
+2. Parent transforms affect the world position.
+3. Use the coordinate-space conversion that matches the goal.
+Analogy: One step forward inside a rotating room differs from one step north on a map.
+Principle: Name the coordinate space before writing a transform.
+Forge teach-back: Use local position for parent-relative layout and global coordinates for world placement.
+Faded retrieval: How would you test this under a rotated parent?
+Forge retrieves: Compare position and global_position in a minimal rotated-parent scene.
+Transfer challenge: Place a waypoint at a world-space race gate from a child node.
+Forge transfer: Convert the world point to the appropriate local space or assign the correct global transform.
+Forge checks: Rotate the parent and confirm the waypoint remains at the intended world location.
+Confidence: Confirm the node type and Godot version when using transform APIs.
+
+Case: A reusable health component directly updates a HUD node by a hard-coded path.
+Forge first attempt: Add another node path for every UI listener.
+ChatGPT asks: Should the health component know which systems respond to health changes?
+Forge diagnoses: I coupled the data owner to every possible consumer.
+ChatGPT explains:
+1. The component can emit a typed signal when health changes.
+2. UI, sound, and game logic can connect independently.
+3. Test that the signal fires once with the expected value.
+Analogy: A doorbell announces a visitor without knowing every person in the house.
+Principle: Use events to reduce unnecessary dependencies.
+Forge teach-back: The emitter reports; listeners choose their response.
+Faded retrieval: Give one situation where a direct call is still simpler.
+Forge retrieves: Direct calls are reasonable for a stable, deliberate dependency; signals help when multiple independent listeners may react.
+Transfer challenge: A race checkpoint should notify audio and UI without depending on either. What pattern fits?
+Forge transfer: Emit a typed checkpoint event and connect audio and UI listeners.
+Forge checks: Remove one listener and confirm the checkpoint still works.
