@@ -101,7 +101,7 @@ jobs:
             cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/$file" "$folder/"
           done
           for file in why_train.txt why_eval.txt; do
-            cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/$file" "$folder/"
+            cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/$file" "$folder/tutor-v2-$file"
           done
       - uses: actions/upload-artifact@v4
         if: always()
