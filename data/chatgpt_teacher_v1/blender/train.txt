@@ -1,0 +1,133 @@
+Task: A selected mesh has an origin far from its geometry. Move its origin to the geometry bounds center with a safe context check.
+Answer:
+import bpy
+obj = bpy.context.active_object
+if obj is None or obj.type != "MESH":
+    raise RuntimeError("Select a mesh object first")
+bpy.context.view_layer.objects.active = obj
+obj.select_set(True)
+bpy.ops.object.origin_set(type="ORIGIN_GEOMETRY", center="BOUNDS")
+Why: The operator acts on the active selected object. Checking the context first produces a clear failure instead of silently changing the wrong object.
+Verify: Inspect the orange origin dot and confirm the mesh did not move in world space.
+
+Task: Create a cube with consistent bevel width after non-uniform scaling.
+Answer:
+import bpy
+bpy.ops.mesh.primitive_cube_add(size=2)
+obj = bpy.context.object
+obj.scale = (2.0, 1.0, 0.5)
+bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+bevel = obj.modifiers.new("Edge_Bevel", "BEVEL")
+bevel.width = 0.08
+bevel.segments = 3
+Why: Applying scale before adding the bevel makes the width behave consistently in object space.
+Verify: Inspect the corners from several angles and check that the modifier remains unapplied.
+
+Task: Build a mesh from vertices and faces, then make it visible in the scene.
+Answer:
+import bpy
+vertices = [(-1, -1, 0), (1, -1, 0), (0, 1, 0), (0, 0, 1)]
+faces = [(0, 1, 3), (1, 2, 3), (2, 0, 3), (0, 2, 1)]
+mesh = bpy.data.meshes.new("PyramidMesh")
+mesh.from_pydata(vertices, [], faces)
+mesh.update()
+obj = bpy.data.objects.new("Pyramid", mesh)
+bpy.context.collection.objects.link(obj)
+Why: Creating the data block does not add an object to the scene; it must be linked into a collection.
+Verify: Check that the object appears in the active collection and that its faces have consistent normals.
+
+Task: Export only the active mesh to GLB without exporting the rest of the scene.
+Answer:
+import bpy
+obj = bpy.context.active_object
+if obj is None or obj.type != "MESH":
+    raise RuntimeError("Select a mesh object first")
+bpy.ops.object.select_all(action="DESELECT")
+obj.select_set(True)
+bpy.context.view_layer.objects.active = obj
+bpy.ops.export_scene.gltf(filepath="asset.glb", export_format="GLB", use_selection=True)
+Why: Restricting the exporter to the intended selection avoids including cameras, lights, and unrelated objects.
+Verify: Reimport the GLB in a clean scene and compare object count and transforms.
+
+Task: Duplicate a mesh so later edits do not affect the original.
+Answer:
+import bpy
+source = bpy.context.active_object
+if source is None or source.type != "MESH":
+    raise RuntimeError("Select a mesh object first")
+duplicate = source.copy()
+duplicate.data = source.data.copy()
+duplicate.name = source.name + "_Independent"
+bpy.context.collection.objects.link(duplicate)
+Why: Copying the mesh data as well as the object prevents both objects from sharing vertex edits.
+Verify: Move one vertex on the duplicate and confirm the source mesh remains unchanged.
+
+Task: Apply a material to an active mesh and set a viewport color.
+Answer:
+import bpy
+obj = bpy.context.active_object
+if obj is None or obj.type != "MESH":
+    raise RuntimeError("Select a mesh object first")
+mat = bpy.data.materials.new("Enamel_Blue")
+mat.diffuse_color = (0.08, 0.25, 0.8, 1.0)
+obj.data.materials.append(mat)
+Why: A material can be created independently, then assigned through the mesh material slots.
+Verify: Confirm the material is assigned and inspect it in material preview.
+
+Task: Keep a non-destructive bevel modifier but apply object scale first.
+Answer:
+import bpy
+obj = bpy.context.active_object
+if obj is None or obj.type != "MESH":
+    raise RuntimeError("Select a mesh object first")
+bpy.context.view_layer.objects.active = obj
+bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+bevel = obj.modifiers.new("HardSurfaceBevel", "BEVEL")
+bevel.width = 0.04
+bevel.segments = 2
+Why: Applying scale makes bevel values easier to predict while leaving the modifier editable.
+Verify: Check the modifier order and review shading on the bevel transitions.
+
+Task: Move an object to a new collection while removing it from old collections.
+Answer:
+import bpy
+obj = bpy.context.active_object
+if obj is None:
+    raise RuntimeError("Select an object first")
+target = bpy.data.collections.new("Generated_Assets")
+bpy.context.scene.collection.children.link(target)
+for old in list(obj.users_collection):
+    old.objects.unlink(obj)
+target.objects.link(obj)
+Why: Collection membership and object identity are separate; explicit unlinking avoids unintended duplicates.
+Verify: Confirm the object appears only under the intended collection.
+
+Task: Add a weighted-normal modifier after a bevel modifier.
+Answer:
+import bpy
+obj = bpy.context.active_object
+if obj is None or obj.type != "MESH":
+    raise RuntimeError("Select a mesh object first")
+bevel = obj.modifiers.new("Bevel", "BEVEL")
+bevel.width = 0.05
+bevel.segments = 3
+obj.modifiers.new("WeightedNormals", "WEIGHTED_NORMAL")
+Why: Bevels create edge geometry; weighted normals affect shading and do not replace geometric bevels.
+Verify: Compare the shading with the weighted-normal modifier enabled and disabled.
+
+Task: Create a named empty parent for a group of generated objects.
+Answer:
+import bpy
+parent = bpy.data.objects.new("Generated_Group", None)
+bpy.context.collection.objects.link(parent)
+for obj in list(bpy.context.selected_objects):
+    if obj != parent:
+        obj.parent = parent
+Why: Parenting organizes transforms without joining mesh data.
+Verify: Move the parent and confirm all intended children follow.
+
+Task: Keep source and validation files separate when building a reusable mesh-generation script.
+Answer:
+The script should define deterministic inputs, create named data blocks, link objects into a known collection, and save outputs to a caller-provided path. Store validation scenes and expected screenshots outside the generated asset directory.
+Why: Separating inputs, outputs, and checks makes runs reproducible and prevents one test from overwriting another.
+Verify: Run twice from a clean file and compare object names and mesh hashes.

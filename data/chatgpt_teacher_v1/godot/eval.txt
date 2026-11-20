@@ -1,0 +1,19 @@
+Task: A node must move in world space even though its parent is rotated. Which property should usually be used?
+Answer: Use global_position for a world-space position change; position is local to the parent.
+Why: Parent transforms affect local coordinates.
+
+Task: An impulse is applied inside _physics_process every frame. What is the likely mistake?
+Answer: The impulse is a one-time momentum change. Apply it once at launch, or use an appropriate continuous force for sustained acceleration.
+Why: Repeated impulses accumulate each frame.
+
+Task: A CharacterBody3D passes through walls after its script began assigning position directly. What should be checked?
+Answer: Use the CharacterBody3D velocity and move_and_slide() in _physics_process, and verify collision shapes and layers.
+Why: Direct position changes bypass the body's normal collision motion handling.
+
+Task: A PackedScene is loaded but the new node never appears. What step is missing?
+Answer: Instantiate the PackedScene and add the instance to the active scene tree with add_child().
+Why: Loading a resource does not insert a node into the running tree.
+
+Task: A body entering Area3D is never detected. Name three checks.
+Answer: Confirm monitoring is enabled, the body and area collision layers and masks overlap, and the body's collision shape is configured.
+Why: A signal connection alone cannot detect a physics pair excluded by collision settings.

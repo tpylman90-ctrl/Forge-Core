@@ -1,0 +1,19 @@
+Task: A beginner's mesh script creates a mesh datablock but the object is missing in the viewport. What is the likely missing step?
+Answer: Create a bpy.data.objects.new object using that mesh and link the object into a collection such as bpy.context.collection.objects.link(obj).
+Why: A mesh datablock is geometry data; it is not itself a scene object.
+
+Task: Why should a GLB export be reopened in a clean scene?
+Answer: To verify the exported file independently, including its object count, transforms, materials, and that unrelated scene objects were excluded.
+Why: A successful exporter call alone does not show that the intended asset was exported correctly.
+
+Task: A bevel looks much wider on one axis after scaling. What should be checked first?
+Answer: Apply or account for object scale before choosing the bevel width, then inspect the modifier result from multiple angles.
+Why: Non-uniform object scale changes how local-space modifier widths appear.
+
+Task: Two duplicated Blender objects change together when one is edited. What is the likely cause?
+Answer: They share the same mesh datablock. Copy the mesh data as well as the object before editing independently.
+Why: Object data can be shared even when object transforms are separate.
+
+Task: A script silently edits the wrong mesh. What preconditions should it check?
+Answer: Verify that an active object exists, that it is a mesh, and that the intended object is active and selected before calling context-sensitive operators.
+Why: Blender operators often depend on active selection and mode.

@@ -1,0 +1,103 @@
+Task: Load a reusable scene, instantiate it, and add it as a child of the current node.
+Answer:
+var actor_scene: PackedScene = preload("res://actors/actor.tscn")
+var actor: Node = actor_scene.instantiate()
+add_child(actor)
+Why: A PackedScene is a reusable resource. instantiate() creates a node hierarchy, and add_child() places it into the running scene tree.
+Verify: Confirm the node appears under the expected parent in the Remote scene tree.
+
+Task: Define a typed signal for a health change and emit it after updating health.
+Answer:
+signal health_changed(current_health: int)
+var health: int = 100
+func set_health(value: int) -> void:
+    health = value
+    health_changed.emit(health)
+Why: A signal communicates an event to connected listeners without requiring the health owner to know each listener.
+Verify: Connect a test listener and confirm it receives the updated value.
+
+Task: Create an ArrayMesh surface from vertices and triangle indices.
+Answer:
+var arrays: Array = []
+arrays.resize(Mesh.ARRAY_MAX)
+arrays[Mesh.ARRAY_VERTEX] = PackedVector3Array([
+    Vector3(-1, 0, 0), Vector3(1, 0, 0), Vector3(0, 1, 0)
+])
+arrays[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2])
+var mesh := ArrayMesh.new()
+mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+Why: ArrayMesh expects vertex data and optional indices in the correct array slots. Triangle indices refer to positions in the vertex array.
+Verify: Add a MeshInstance3D with this mesh and inspect its winding and visibility.
+
+Task: Move a node by a fixed offset while respecting a parent transform.
+Answer:
+position += Vector3(0, 1, 0)
+Why: Node3D.position is local to its parent. Use global_position when the offset should be in world coordinates.
+Verify: Place the node under a rotated parent and compare local and global results.
+
+Task: Organize a reusable character scene with a clear root and child nodes.
+Answer:
+CharacterBody3D
+├── CollisionShape3D
+├── MeshInstance3D
+└── CameraPivot
+    └── Camera3D
+Why: A clear scene hierarchy keeps collision, visuals, and camera behavior independently editable.
+Verify: Open the scene and confirm the collision shape matches the body and the camera pivot rotates as intended.
+
+Task: Expose a typed speed setting in the Inspector.
+Answer:
+@export var max_speed: float = 12.0
+Why: The export annotation makes a script variable configurable per instance in the Inspector while keeping its type explicit.
+Verify: Select the node and confirm the property appears with a numeric editor.
+
+Task: Apply an impulse once when a rigid body is launched.
+Answer:
+func launch(direction: Vector3, impulse_strength: float) -> void:
+    apply_central_impulse(direction.normalized() * impulse_strength)
+Why: An impulse represents a one-time change in momentum; applying it each physics frame would continuously add force.
+Verify: Call launch once and compare the resulting motion with a per-frame force.
+
+Task: Detect a node entering an Area3D using the body_entered signal.
+Answer:
+func _ready() -> void:
+    $Area3D.body_entered.connect(_on_body_entered)
+
+func _on_body_entered(body: Node3D) -> void:
+    print(body.name)
+Why: The signal is emitted when a physics body enters the area. The Area3D monitoring and collision masks must be configured.
+Verify: Move a colliding body through the area and check that the handler runs once.
+
+Task: Avoid moving a CharacterBody3D by changing its position every frame.
+Answer:
+func _physics_process(delta: float) -> void:
+    velocity.x = input_axis * speed
+    move_and_slide()
+Why: CharacterBody3D movement should use its physics methods so collision response remains consistent.
+Verify: Move into a wall at different frame rates and confirm collision behavior is stable.
+
+Task: Save a generated text resource and report a readable error if saving fails.
+Answer:
+var file := FileAccess.open("user://generated.txt", FileAccess.WRITE)
+if file == null:
+    push_error("Could not open output file")
+    return
+file.store_string("generated content")
+Why: Checking the returned handle makes storage failures visible instead of silently losing generated output.
+Verify: Read the file back and compare its contents.
+
+Task: Keep a signal callback separate from the node that emits the signal.
+Answer:
+var target = get_node_or_null("Target")
+if target == null:
+    push_error("Target node is missing")
+    return
+target.health_changed.connect(_on_target_health_changed)
+Why: A clear connection and null check make scene dependencies easier to debug.
+Verify: Test both the expected scene tree and a missing-target case.
+
+Task: Explain when to use _process and _physics_process.
+Answer:
+Use _process(delta) for frame-driven visual updates. Use _physics_process(delta) for physics-related movement and checks at the fixed physics tick.
+Why: Separating visual timing from physics timing reduces frame-rate-dependent physics behavior.
+Verify: Test the scene at different render frame rates and confirm physical motion remains consistent.

@@ -1,0 +1,158 @@
+name: Forge ChatGPT teacher CPU pilot v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/chatgpt-teacher-lane-v1.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    name: ${ matrix.lane } ${ matrix.arm } teacher pilot
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - lane: language
+            seed: 43
+          - lane: blender
+            seed: 731
+          - lane: godot
+            seed: 947
+        arm: [control, chatgpt]
+    env:
+      SOURCE_RUN: "42552572467"
+      SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${ github.token }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the pinned Forge Seed parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" --dir restore
+          cp -a restore/language/. source/
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          ckpt_path = Path("source/checkpoint.pt")
+          ckpt = torch.load(ckpt_path, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(ckpt_path.read_bytes()).hexdigest()
+          assert ckpt["step"] == 107250 and ckpt.get("seed") == 43
+          assert digest == "848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99"
+          manifest = json.loads(Path("source/source-manifest.json").read_text())
+          assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          print({"parent_step": ckpt["step"], "parent_sha256": digest,
+                 "lane": "${ matrix.lane }", "arm": "${ matrix.arm }"})
+          PY
+      - name: Check teacher pack and trainer syntax
+        run: |
+          python -m py_compile src/forge_core/neural/chatgpt_teacher_v1.py
+          python - <<'PY'
+          from pathlib import Path
+          import hashlib
+          root = Path("data/chatgpt_teacher_v1")
+          for lane in ("language", "blender", "godot"):
+              train = (root / lane / "train.txt").read_bytes()
+              exam = (root / lane / "eval.txt").read_bytes()
+              assert len(train) > 1000 and len(exam) > 500
+              assert hashlib.sha256(train).digest() != hashlib.sha256(exam).digest()
+              print(lane, "train_bytes", len(train), "eval_bytes", len(exam))
+          PY
+      - name: Run matched control or ChatGPT-teacher branch
+        run: |
+          python -m forge_core.neural.chatgpt_teacher_v1 \
+            --lane "${ matrix.lane }" --arm "${ matrix.arm }" \
+            --source source --out "artifacts/${ matrix.lane }/${ matrix.arm }" \
+            --seed "${ matrix.seed }" --updates 500
+      - name: Preserve parent, candidate, teacher data, and metrics together
+        if: always()
+        run: |
+          set -euo pipefail
+          mkdir -p "artifacts/${ matrix.lane }/${ matrix.arm }/parent"
+          cp source/checkpoint.pt source/tokenizer.json \
+             "artifacts/${ matrix.lane }/${ matrix.arm }/parent/"
+          cp "data/chatgpt_teacher_v1/${ matrix.lane }/train.txt" \
+             "artifacts/${ matrix.lane }/${ matrix.arm }/parent/teacher-train.txt"
+          cp "data/chatgpt_teacher_v1/${ matrix.lane }/eval.txt" \
+             "artifacts/${ matrix.lane }/${ matrix.arm }/parent/teacher-eval.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-chatgpt-teacher-v1-${ matrix.lane }-${ matrix.arm }-${ github.run_id }
+          path: artifacts/${ matrix.lane }/${ matrix.arm }/
+          retention-days: 90
+          if-no-files-found: warn
+
+  summarize:
+    name: Compare teacher and control lanes
+    needs: train
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-chatgpt-teacher-v1-*-${ github.run_id }
+          path: results
+          merge-multiple: false
+          if-no-files-found: ignore
+      - name: Summarize measured results without promotion
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          files = sorted(Path("results").glob("**/metrics.json"))
+          rows = []
+          for path in files:
+              report = json.loads(path.read_text())
+              study = report.get("chatgpt_teacher_study", {})
+              rows.append((study.get("lane", report.get("lane", "unknown")),
+                           study.get("arm", "unknown"), report.get("updates"),
+                           study.get("teacher_eval_loss_parent"),
+                           study.get("teacher_eval_loss_candidate"),
+                           study.get("teacher_eval_improvement"),
+                           report.get("test_loss_parent"),
+                           report.get("test_loss_candidate"),
+                           report.get("core_language_delta_candidate_minus_parent")))
+          rows.sort()
+          lines = [
+              "# ChatGPT teacher lane v1 pilot",
+              "",
+              "Matched control and teacher arms start from the same pinned Forge Seed parent. Lower loss is better.",
+              "Teacher-pack held-out token loss is a learning signal, not proof of language or tool competence.",
+              "Each lane has one seed in this pilot. No candidate is promoted; repeat independent seeds and task-level checks before durable checkpoint archival.",
+              "",
+              "| Lane | Arm | Updates | Teacher eval parent → candidate | Teacher Δ | Lane test parent → candidate | Core-language Δ |",
+              "|---|---|---:|---:|---:|---:|---:|",
+          ]
+          for lane, arm, updates, tp, tc, ti, dp, dc, core in rows:
+              fmt = lambda x: "n/a" if x is None else f"{x:.5f}"
+              lines.append(f"| {lane} | {arm} | {updates or 'n/a'} | {fmt(tp)} → {fmt(tc)} | {fmt(ti)} | {fmt(dp)} → {fmt(dc)} | {fmt(core)} |")
+          Path("chatgpt-teacher-v1-results.md").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-chatgpt-teacher-v1-results-${ github.run_id }
+          path: chatgpt-teacher-v1-results.md
+          retention-days: 90
+          if-no-files-found: warn
