@@ -1,0 +1,109 @@
+name: Forge ChatGPT Ask-Why overnight candidates
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/chatgpt-askwhy-overnight-2026-11-20.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    name: ${{ matrix.lane }} seed-${{ matrix.seed }} Ask-Why overnight
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - lane: language
+            seed: 43
+          - lane: language
+            seed: 44
+          - lane: blender
+            seed: 731
+          - lane: godot
+            seed: 947
+    env:
+      SOURCE_RUN: "42552572467"
+      SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+      TRAIN_SECONDS: "7200"
+      MAX_UPDATES: "50000"
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify pinned Forge parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" --dir restore
+          cp -a restore/language/. source/
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          p = Path("source/checkpoint.pt")
+          ck = torch.load(p, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ck["step"] == 107250 and ck.get("seed") == 43
+          assert digest == "848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99"
+          manifest = json.loads(Path("source/source-manifest.json").read_text())
+          assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          print({"parent_step": ck["step"], "parent_sha256": digest,
+                 "lane": "${{ matrix.lane }}", "seed": "${{ matrix.seed }}"})
+          PY
+      - name: Validate isolated tutor-v2 lessons
+        run: |
+          python -m py_compile src/forge_core/neural/chatgpt_askwhy_v1.py
+          python - <<'PY'
+          from pathlib import Path
+          lane = "${{ matrix.lane }}"
+          root = Path("data/chatgpt_teacher_v2") / lane
+          train = (root / "why_train.txt").read_text(encoding="utf-8")
+          exam = (root / "why_eval.txt").read_text(encoding="utf-8")
+          assert len(train) > 1800 and len(exam) > 500
+          assert "Forge asks why" in train and "Independent held-out" in exam
+          print(lane, "Ask-Why tutor-v2 and independent evaluation verified")
+          PY
+      - name: Train isolated candidate with regression checks
+        run: |
+          python -m forge_core.neural.chatgpt_askwhy_v1 \
+            --lane "${{ matrix.lane }}" --arm chatgpt_tutor_v2 \
+            --source source --out "artifacts/${{ matrix.lane }}/seed-${{ matrix.seed }}" \
+            --seed "${{ matrix.seed }}" --updates "$MAX_UPDATES" \
+            --seconds "$TRAIN_SECONDS" --patience 3
+      - name: Preserve parent and exact teaching data
+        if: always()
+        run: |
+          set -euo pipefail
+          folder="artifacts/${{ matrix.lane }}/seed-${{ matrix.seed }}/parent"
+          mkdir -p "$folder"
+          cp source/checkpoint.pt source/tokenizer.json "$folder/"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/train.txt" "$folder/"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/eval.txt" "$folder/"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/why_train.txt" "$folder/"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/why_eval.txt" "$folder/"
+          cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/why_train.txt" "$folder/"
+          cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/why_eval.txt" "$folder/"
+      - name: Upload reproducible research checkpoint
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-chatgpt-askwhy-overnight-${{ matrix.lane }}-seed-${{ matrix.seed }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/seed-${{ matrix.seed }}/
+          retention-days: 90
+          if-no-files-found: warn
