@@ -25,3 +25,8 @@ Each candidate is scored on held-out tutor-v2, direct-teaching, and Ask-Why v1 t
 - Change the surface details in a transfer problem so copying the example is insufficient.
 - Name an observable verification step and distinguish evidence from a plausible explanation.
 - Keep all training branches reproducible and isolated; preserve failed candidates for analysis while continuing from the last passing parent.
+
+
+## Results
+
+See [the completed v2 study](CHATGPT-ADAPTIVE-TUTOR-V2-RESULTS.md) for all six lane runs and the corrected independent language replication.
