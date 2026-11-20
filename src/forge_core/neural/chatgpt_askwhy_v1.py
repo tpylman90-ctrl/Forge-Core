@@ -96,6 +96,8 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--updates", type=int, default=500)
+    parser.add_argument("--seconds", type=int, default=900, help="Maximum training time in seconds")
+    parser.add_argument("--patience", type=int, default=3, help="Evaluations without lane-validation improvement before stopping")
     parser.add_argument("--independent-sampling", action="store_true", help="Use a seed-specific sampling stream for a language-lane replication")
     args = parser.parse_args()
     tokenizer = Tokenizer.from_file(str(args.source / "tokenizer.json"))
@@ -104,8 +106,8 @@ def main() -> None:
     if curriculum:
         install_treatment(args.lane, tokenizer, curriculum)
     report = trainer.run_lane(
-        args.lane, args.source, args.out, seconds=900, max_updates=args.updates,
-        seed_override=args.seed, eval_every=100, patience=3,
+        args.lane, args.source, args.out, seconds=args.seconds, max_updates=args.updates,
+        seed_override=args.seed, eval_every=100, patience=args.patience,
         core_replay_probability=0.25 if args.lane != "language" else 0.0,
         max_core_regression=0.05,
         independent_sampling=args.independent_sampling,
