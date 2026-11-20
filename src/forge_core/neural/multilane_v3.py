@@ -464,7 +464,8 @@ def generate_task_samples(model, tokenizer: Tokenizer, lane: str) -> list[dict]:
 def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int | None = None,
              seed_override: int | None = None, learning_rate_override: float | None = None,
              eval_every: int = 1000, patience: int = 0,
-             core_replay_probability: float = 0.0, max_core_regression: float = 0.05):
+             core_replay_probability: float = 0.0, max_core_regression: float = 0.05,
+             independent_sampling: bool = False):
     if lane not in {"language", "blender", "godot"}:
         raise ValueError("Unknown lane")
     if not 60 <= seconds <= MAX_SECONDS:
@@ -522,9 +523,15 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int 
         optimizer.load_state_dict(parent["optimizer"])
         for group in optimizer.param_groups:
             group["lr"] = learning_rate
-        torch.set_rng_state(parent["torch_rng_state"])
-        rng = torch.Generator()
-        rng.set_state(parent["sample_rng_state"])
+        if independent_sampling:
+            # Preserve parent weights and optimizer, but use the requested seed for
+            # the sample stream so language-lane replications are genuinely independent.
+            torch.manual_seed(seed)
+            rng = torch.Generator().manual_seed(seed + 1)
+        else:
+            torch.set_rng_state(parent["torch_rng_state"])
+            rng = torch.Generator()
+            rng.set_state(parent["sample_rng_state"])
     else:
         rng = torch.Generator().manual_seed(seed + 1)
 
@@ -648,7 +655,11 @@ def run_lane(lane: str, source: Path, out: Path, seconds: int, max_updates: int 
         "training_config": {"learning_rate": learning_rate, "eval_every": eval_every,
                             "patience": patience, "core_replay_probability": core_replay_probability,
                             "max_core_regression": max_core_regression, "stop_reason": stop_reason,
-                            "seed": seed},
+                            "seed": seed,
+                            "independent_sampling": independent_sampling if lane == "language" else None,
+                            "rng_policy": ("independent-seed sampling" if lane == "language" and independent_sampling
+                                           else "parent RNG restored" if lane == "language"
+                                           else "lane seed")},
         "capability_claim": "None. Documentation token loss and ungraded generated samples are not proof of tool competence.",
         "task_samples_human_reviewed": False,
         "android_integrated": False,
@@ -695,10 +706,11 @@ def main():
     parser.add_argument("--patience", type=int, default=0, help="Specialist validation evaluations without improvement before stopping")
     parser.add_argument("--core-replay-probability", type=float, default=0.0)
     parser.add_argument("--max-core-regression", type=float, default=0.05, help="Maximum allowed shared language validation-loss increase")
+    parser.add_argument("--independent-sampling", action="store_true", help="For language-lane replication, seed sample/dropout RNG independently while keeping parent weights and optimizer")
     args = parser.parse_args()
     run_lane(args.lane, args.source, args.out, args.seconds, args.max_updates,
              args.seed, args.learning_rate, args.eval_every, args.patience,
-             args.core_replay_probability, args.max_core_regression)
+             args.core_replay_probability, args.max_core_regression, args.independent_sampling)
 
 
 if __name__ == "__main__":
