@@ -1,0 +1,182 @@
+name: Forge matched tutor-v2 study
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/matched-tutor-v2.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    name: ${{ matrix.lane }} ${{ matrix.arm }} matched run
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - lane: language
+            seed: 43
+            arm: control
+          - lane: language
+            seed: 43
+            arm: chatgpt_direct_v2
+          - lane: language
+            seed: 43
+            arm: chatgpt_tutor_v2
+          - lane: blender
+            seed: 731
+            arm: control
+          - lane: blender
+            seed: 731
+            arm: chatgpt_direct_v2
+          - lane: blender
+            seed: 731
+            arm: chatgpt_tutor_v2
+          - lane: godot
+            seed: 947
+            arm: control
+          - lane: godot
+            seed: 947
+            arm: chatgpt_direct_v2
+          - lane: godot
+            seed: 947
+            arm: chatgpt_tutor_v2
+    env:
+      SOURCE_RUN: "42552572467"
+      SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the pinned parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" --dir restore
+          cp -a restore/language/. source/
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          p = Path("source/checkpoint.pt")
+          ck = torch.load(p, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ck["step"] == 107250 and ck.get("seed") == 43
+          assert digest == "848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99"
+          m = json.loads(Path("source/source-manifest.json").read_text())
+          assert m["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          print({"parent_sha256": digest, "lane": "${{ matrix.lane }}",
+                 "arm": "${{ matrix.arm }}", "seed": "${{ matrix.seed }}"})
+          PY
+      - name: Validate matched v2 lesson packs
+        run: |
+          python -m py_compile src/forge_core/neural/multilane_v3.py src/forge_core/neural/chatgpt_askwhy_v1.py
+          python - <<'PY'
+          from pathlib import Path
+          for lane in ("language", "blender", "godot"):
+              root = Path("data/chatgpt_teacher_v2") / lane
+              for name in ("direct_train.txt", "direct_eval.txt", "why_train.txt", "why_eval.txt"):
+                  text = (root / name).read_text(encoding="utf-8")
+                  assert len(text) > 500, (lane, name)
+              adaptive = (root / "why_train.txt").read_text()
+              direct = (root / "direct_train.txt").read_text()
+              assert "Forge asks why" in adaptive and "Faded retrieval" in adaptive
+              assert "Procedure:" in direct and "Principle:" in direct
+              assert "Independent held-out" in (root / "direct_eval.txt").read_text()
+              assert "Independent held-out" in (root / "why_eval.txt").read_text()
+              print(lane, "matched v2 packs verified")
+          PY
+      - name: Train matched control, direct-v2, or tutor-v2 branch
+        run: |
+          python -m forge_core.neural.chatgpt_askwhy_v1 \
+            --lane "${{ matrix.lane }}" --arm "${{ matrix.arm }}" \
+            --source source --out "artifacts/${{ matrix.lane }}/${{ matrix.arm }}" \
+            --seed "${{ matrix.seed }}" --updates 500
+      - name: Preserve parent and exact v1/v2 data
+        if: always()
+        run: |
+          set -euo pipefail
+          folder="artifacts/${{ matrix.lane }}/${{ matrix.arm }}/parent"
+          mkdir -p "$folder"
+          cp source/checkpoint.pt source/tokenizer.json "$folder/"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/train.txt" "$folder/v1-train.txt"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/eval.txt" "$folder/v1-eval.txt"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/why_train.txt" "$folder/v1-why-train.txt"
+          cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/why_eval.txt" "$folder/v1-why-eval.txt"
+          cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/direct_train.txt" "$folder/v2-direct-train.txt"
+          cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/direct_eval.txt" "$folder/v2-direct-eval.txt"
+          cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/why_train.txt" "$folder/v2-tutor-train.txt"
+          cp "data/chatgpt_teacher_v2/${{ matrix.lane }}/why_eval.txt" "$folder/v2-tutor-eval.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-matched-v2-${{ matrix.lane }}-${{ matrix.arm }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/${{ matrix.arm }}/
+          retention-days: 90
+          if-no-files-found: warn
+
+  summarize:
+    name: Compare matched v2 arms
+    needs: train
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-matched-v2-*-${{ github.run_id }}
+          path: results
+          merge-multiple: false
+          if-no-files-found: ignore
+      - name: Summarize same-seed arms
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows = []
+          for path in sorted(Path("results").glob("**/metrics.json")):
+              r = json.loads(path.read_text())
+              s = r.get("chatgpt_askwhy_study", {})
+              core = r.get("core_language_validation", {})
+              rows.append((s.get("lane", r.get("lane")), s.get("arm"), s.get("seed"),
+                           r.get("selected_updates"), s.get("direct_v2_eval_improvement"),
+                           s.get("tutor_v2_eval_improvement"), r.get("test_loss_parent"),
+                           r.get("test_loss_candidate"), core.get("delta_candidate_minus_parent")))
+          rows.sort()
+          lines = [
+              "# Matched ChatGPT tutor-v2 arms",
+              "",
+              "Control, direct-v2, and diagnostic/retrieval tutor-v2 branches use the same pinned parent and seed within each lane.",
+              "Positive lesson gain means lower held-out next-token loss; it does not certify practical task skill.",
+              "",
+              "| Lane | Arm | Seed | Selected updates | Direct-v2 gain | Tutor-v2 gain | Lane test parent → candidate | Shared-language Δ |",
+              "|---|---|---:|---:|---:|---:|---:|---:|",
+          ]
+          for lane, arm, seed, updates, direct, tutor, before, after, core in rows:
+              fmt = lambda x: "n/a" if x is None else f"{x:.5f}"
+              test = "n/a" if before is None or after is None else f"{before:.5f} → {after:.5f}"
+              lines.append(f"| {lane} | {arm} | {seed} | {updates if updates is not None else 'n/a'} | {fmt(direct)} | {fmt(tutor)} | {test} | {fmt(core)} |")
+          Path("matched-v2-results.md").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-matched-v2-results-${{ github.run_id }}
+          path: matched-v2-results.md
+          retention-days: 90
+          if-no-files-found: warn
