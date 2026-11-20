@@ -13,7 +13,7 @@ This matches Forge Core's learning loop: observe, ask why, understand, state a p
 
 ## Experimental setup
 
-The six training jobs run two seeds per lane: language (43, 44), Blender (731, 732), and Godot (947, 948). Every job restores and verifies the same pinned 107,250-step parent. It records the parent, candidate, lesson data, hashes, and metrics in a 90-day Actions artifact. There is no cross-lane weight sharing or automatic promotion.
+The six-job run uses language seeds (43, 44), Blender seeds (731, 732), and Godot seeds (947, 948), all restoring the same pinned 107,250-step parent. During review, I found the language trainer restored the parent's sampling RNG for both declared seeds, making language 43 and 44 identical; that pair is a reproducibility check, not an independent replication. A separate supplemental workflow now runs language seed 44 with an independent sample/RNG stream while keeping the parent weights and optimizer fixed. Blender and Godot use genuinely distinct lane seeds. Each run records parent, candidate, lesson data, hashes, and metrics in a 90-day Actions artifact. No cross-lane weight sharing or automatic promotion is allowed.
 
 Each candidate is scored on held-out tutor-v2, direct-teaching, and Ask-Why v1 text, plus existing lane and shared-language retention checks. This is still next-token text prediction. It does not prove Forge can ask a question on its own, execute Blender/Godot tasks, or carry on a live conversation with ChatGPT. Practical behavior and independent task grading are required before treating a candidate as a capability gain.
 
