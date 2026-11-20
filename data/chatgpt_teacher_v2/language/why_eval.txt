@@ -1,0 +1,23 @@
+Independent held-out tutor-v2 transfer probe. These cases do not appear in the training pack.
+
+Forge first attempt: A Godot lesson score improved, so the engine branch is now competent.
+ChatGPT asks: What did the metric measure, and was a project actually run?
+Forge diagnoses: I treated easier prediction of lesson prose as proof of tool execution.
+ChatGPT explains:
+1. Text loss measures next-token prediction on the selected text.
+2. A task test checks whether behavior works in a fresh case.
+3. Report each result with its limit.
+Analogy: Reading a repair manual well does not prove the repair was completed.
+Forge retrieves: Explain text loss, task performance, and execution evidence separately.
+Forge checks: Name one observable success criterion before claiming capability.
+
+Forge first attempt: A single good seed proves the new tutor method is reliable.
+ChatGPT asks: Could a different seed change which examples or updates are retained?
+Forge diagnoses: I assumed one run represented all runs.
+ChatGPT explains:
+1. A seed controls parts of sampling and initialization.
+2. Independent seeds reveal run-to-run variation.
+3. Keep the parent, budget, and evaluation fixed while changing only the seed.
+Analogy: Repeat a measurement with another calibrated instrument.
+Forge retrieves: Design a fair two-seed replication.
+Forge checks: Did both seeds start from the same hashed parent and use the same gate?
