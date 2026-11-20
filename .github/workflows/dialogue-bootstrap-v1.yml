@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   actions: read
 
 jobs:
@@ -101,3 +101,26 @@ jobs:
           path: results/
           retention-days: 30
           if-no-files-found: warn
+
+      - name: Preserve every produced candidate in a durable draft release
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! find results -name '*.pt' -print -quit | grep -q .; then
+            echo "No candidate checkpoints were produced."
+            exit 0
+          fi
+          tag="forge-dialogue-bootstrap-${GITHUB_RUN_ID}"
+          tar -czf "artifacts/${tag}.tar.gz" -C results .
+          cat > release-notes.md <<'EOF'
+          Research-only Forge Seed dialogue bootstrap candidates and their
+          reports. These weights are preserved for review and lineage tracking.
+          A passing narrow synthetic gate does not certify open-ended dialogue.
+          Rejected or regressed candidates are retained for comparison.
+          No base checkpoint or Android model is modified.
+          EOF
+          gh release create "${tag}" "artifacts/${tag}.tar.gz" \
+            --repo "${GITHUB_REPOSITORY}" --draft --prerelease \
+            --title "Forge dialogue bootstrap candidates ${GITHUB_RUN_ID}" \
+            --notes-file release-notes.md

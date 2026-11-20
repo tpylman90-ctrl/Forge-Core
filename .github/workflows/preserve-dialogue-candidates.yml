@@ -1,0 +1,60 @@
+name: Preserve prior dialogue bootstrap checkpoints
+
+on:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/preserve-dialogue-candidates-2026-11-20.md"]
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Retrieve the passing 160-update and gated-out 500-update candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p archive/run-160 archive/run-500
+          gh run download 44657287501 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-pure-dialogue-bootstrap-v1 --dir archive/run-160
+          gh run download 44660738727 --repo "$GITHUB_REPOSITORY" \
+            --name forge-seed-pure-dialogue-bootstrap-v1 --dir archive/run-500
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          for label, updates, expected_pass in (("run-160", 160, True), ("run-500", 500, False)):
+              reports = sorted(Path("archive", label).glob("seed-*/report.json"))
+              if len(reports) != 2:
+                  raise SystemExit(f"{label}: expected two seed reports, found {len(reports)}")
+              for path in reports:
+                  report = json.loads(path.read_text())
+                  gate = report["dialogue_improvement_gate"]
+                  if report["steps_per_arm"] != updates or gate["passed"] is not expected_pass:
+                      raise SystemExit(f"{path}: report does not match expected gate disposition")
+                  if report["parent_sha256"] != "848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99":
+                      raise SystemExit(f"{path}: unexpected Forge parent lineage")
+          print("Verified two passing 160-update candidates and two retention-gated 500-update candidates.")
+          PY
+      - name: Archive checkpoints and evidence as a draft release
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="forge-dialogue-candidates-2026-11-20"
+          tar -czf "archive/${tag}.tar.gz" -C archive .
+          cat > release-notes.md <<'EOF'
+          Durable archive of the two passing 160-update research candidates,
+          their matched controls, and the two 500-update candidates that failed
+          the language-retention gate. All artifacts descend from the pinned
+          Forge Seed v0.7 checkpoint. No weights were promoted to main.
+          EOF
+          gh release create "$tag" "archive/${tag}.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+            --title "Forge dialogue candidate archive — 2026-11-20" \
+            --notes-file release-notes.md
