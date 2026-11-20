@@ -1,0 +1,56 @@
+Pack: ChatGPT tutor v2; original CC0-1.0.
+Tutor cycle: retrieve first, diagnose the assumption, explain in small steps, have Forge teach it back, fade support, transfer it, and verify. Blender operator details can vary by version; test in the installed version.
+
+Case: A beveled hard-surface body looks lumpy after its object was scaled non-uniformly.
+Forge first attempt: Increase bevel segments until it looks smooth.
+ChatGPT asks: Does the bevel width look even from every side, and what are the object's scale values?
+Forge diagnoses: I assumed shading density was the problem before checking geometry scale.
+ChatGPT explains:
+1. Object scale changes the local coordinate system.
+2. A bevel width may behave unevenly when scale is unapplied.
+3. Apply scale on a duplicate, then tune width and segments separately.
+Analogy: A stretched ruler gives inconsistent measurements.
+Principle: Fix transforms before diagnosing bevel shading.
+Forge teach-back: Separate geometry width from shading smoothness.
+Faded retrieval: What do you inspect first, and what do you change second?
+Forge retrieves: Inspect scale and silhouette; apply scale on a copy; then tune bevel settings.
+Transfer challenge: A uniformly scaled prop has smooth shading but a pinched silhouette. What do you inspect?
+Forge transfer: Inspect the silhouette and modifier width; changing normals will not repair incorrect geometry.
+Forge checks: Compare wireframe and silhouette from front, side, and three-quarter views.
+Confidence: Scale is a likely cause only when the transform values and bevel behavior support it.
+
+Case: A model looks smooth in the viewport, but exported GLB has flat-looking edges.
+Forge first attempt: Add a Weighted Normal modifier and assume the export is fixed.
+ChatGPT asks: Did the modifier change the silhouette, or only the highlights?
+Forge diagnoses: I confused surface shading with actual edge geometry.
+ChatGPT explains:
+1. A bevel adds faces and changes the silhouette.
+2. Normals affect how light interpolates across faces.
+3. Check export settings and reopen the GLB in the target viewer.
+Analogy: A lamp can change how a block looks, but it cannot round the block.
+Principle: Inspect shape and shading as different evidence.
+Forge teach-back: Use geometry tools for shape and normals for lighting.
+Faded retrieval: Describe a test that separates the two.
+Forge retrieves: Compare silhouette with modifiers on and off, then inspect highlights and exported normals separately.
+Transfer challenge: A vehicle panel is too round in profile but has clean highlights. What do you alter first?
+Forge transfer: Change supporting geometry or bevel width on a copy; preserve shading settings until the silhouette is correct.
+Forge checks: Reopen the exported file and compare its outline with the source.
+Confidence: Export behavior also depends on the exporter and viewer versions.
+
+Case: A Python tool edits the source object when the user expected a safe variant.
+Forge first attempt: Continue editing; undo should be enough.
+ChatGPT asks: Is the original mesh data shared with the duplicate?
+Forge diagnoses: I treated two scene objects as independent without checking their datablock.
+ChatGPT explains:
+1. Duplicating an object may preserve a shared mesh reference.
+2. Copy both the object and mesh data for independent geometry edits.
+3. Work on a named duplicate and verify the source stays unchanged.
+Analogy: Two frames can point to the same editable photo.
+Principle: Check ownership and reversibility before a destructive change.
+Forge teach-back: A separate object is not always separate mesh data.
+Faded retrieval: Which data do you copy before editing vertices?
+Forge retrieves: Copy the object and its mesh datablock, then link the copy into the intended collection.
+Transfer challenge: A material edit should also stay isolated. What data might need its own copy?
+Forge transfer: Copy the material datablock if the change must not affect other users.
+Forge checks: Change one vertex or material value and confirm the source is unchanged.
+Confidence: Inspect data users before assuming a resource is unique.
