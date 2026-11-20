@@ -8,7 +8,7 @@ All jobs completed successfully. The four Blender/Godot jobs used distinct speci
 
 The maximum budget was 500 updates. Specialist lanes selected the checkpoint that passed existing validation and shared-language retention gates; they stopped selecting after 100 updates. Positive lesson gain means lower held-out next-token loss.
 
-| Lane | Sampling | Selected updates | Tutor-v2 gain | Direct gain | Ask-Why v1 gain | Lane test: parent → candidate | Shared-language Δ |
+| Lane | Sampling | Selected updates | Tutor-v2 gain | Direct gain | Ask-Why v1 gain | Lane test: parent → candidate | Shared-language Δ (language row: TinyStories test) |
 |---|---|---:|---:|---:|---:|---:|---:|
 | Blender | Seed 731 | 100 | +1.38897 | +1.36913 | +1.65258 | 5.49547 → 4.55590 | +0.04799 |
 | Blender | Seed 732 | 100 | +1.29900 | +1.24485 | +1.51644 | 5.49547 → 4.61963 | +0.03763 |
