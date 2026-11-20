@@ -1,0 +1,176 @@
+name: Forge ChatGPT Ask-Why CPU study v1
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/chatgpt-askwhy-lane-v1.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    name: ${{ matrix.lane } ${{ matrix.arm } Ask-Why study
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        include:
+          - lane: language
+            seed: 43
+            arm: control
+          - lane: language
+            seed: 43
+            arm: chatgpt_direct
+          - lane: language
+            seed: 43
+            arm: chatgpt_askwhy
+          - lane: blender
+            seed: 731
+            arm: control
+          - lane: blender
+            seed: 731
+            arm: chatgpt_direct
+          - lane: blender
+            seed: 731
+            arm: chatgpt_askwhy
+          - lane: godot
+            seed: 947
+            arm: control
+          - lane: godot
+            seed: 947
+            arm: chatgpt_direct
+          - lane: godot
+            seed: 947
+            arm: chatgpt_askwhy
+    env:
+      SOURCE_RUN: "42552572467"
+      SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify the pinned Forge Seed parent
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" --dir restore
+          cp -a restore/language/. source/
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          p = Path("source/checkpoint.pt")
+          ck = torch.load(p, map_location="cpu", weights_only=True)
+          digest = hashlib.sha256(p.read_bytes()).hexdigest()
+          assert ck["step"] == 107250 and ck.get("seed") == 43
+          assert digest == "848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99"
+          m = json.loads(Path("source/source-manifest.json").read_text())
+          assert m["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          print({"step": ck["step"], "parent_sha256": digest,
+                 "lane": "${{ matrix.lane }", "arm": "${{ matrix.arm }"})
+          PY
+      - name: Validate isolated direct and Ask-Why lesson packs
+        run: |
+          python -m py_compile src/forge_core/neural/chatgpt_askwhy_v1.py
+          python - <<'PY'
+          from pathlib import Path
+          root = Path("data/chatgpt_teacher_v1")
+          for lane in ("language", "blender", "godot"):
+              for name in ("train.txt", "eval.txt", "why_train.txt", "why_eval.txt"):
+                  p = root / lane / name
+                  assert p.exists() and p.stat().st_size > 500, p
+              why = (root / lane / "why_train.txt").read_text()
+              assert "Forge asks why" in why and "ChatGPT explains" in why
+              assert "Forge applies" in why and "Forge checks" in why
+              print(lane, "direct and ask-why packs verified")
+          PY
+      - name: Train matched control, direct-teaching, or Ask-Why branch
+        run: |
+          python -m forge_core.neural.chatgpt_askwhy_v1 \
+            --lane "${{ matrix.lane }" --arm "${{ matrix.arm }" \
+            --source source --out "artifacts/${{ matrix.lane }/${{ matrix.arm }" \
+            --seed "${{ matrix.seed }" --updates 500
+      - name: Preserve exact parent, candidate, and both teaching packs
+        if: always()
+        run: |
+          set -euo pipefail
+          folder="artifacts/${{ matrix.lane }/${{ matrix.arm }/parent"
+          mkdir -p "$folder"
+          cp source/checkpoint.pt source/tokenizer.json "$folder/"
+          for file in train.txt eval.txt why_train.txt why_eval.txt; do
+            cp "data/chatgpt_teacher_v1/${{ matrix.lane }/$file" "$folder/"
+          done
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-askwhy-v1-${{ matrix.lane }-${{ matrix.arm }-${{ github.run_id }
+          path: artifacts/${{ matrix.lane }/${{ matrix.arm }/
+          retention-days: 90
+          if-no-files-found: warn
+
+  summarize:
+    name: Compare direct teaching with Ask-Why teaching
+    needs: train
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-askwhy-v1-*-${{ github.run_id }
+          path: results
+          merge-multiple: false
+          if-no-files-found: ignore
+      - name: Summarize both held-out lesson evaluations
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows = []
+          for path in sorted(Path("results").glob("**/metrics.json")):
+              r = json.loads(path.read_text())
+              s = r.get("chatgpt_askwhy_study", {})
+              core = r.get("core_language_validation", {})
+              core_delta = core.get("delta_candidate_minus_parent")
+              if s.get("lane") == "language":
+                  core_delta = r.get("test_loss_candidate", 0) - r.get("test_loss_parent", 0)
+              rows.append((s.get("lane", r.get("lane")), s.get("arm"), r.get("updates"),
+                           s.get("direct_eval_improvement"), s.get("askwhy_eval_improvement"),
+                           r.get("test_loss_parent"), r.get("test_loss_candidate"), core_delta))
+          rows.sort()
+          lines = [
+              "# ChatGPT Ask-Why lane v1",
+              "",
+              "Matched control, direct ChatGPT teaching, and Ask-Why teaching start from the same pinned parent per lane.",
+              "Positive lesson improvement means lower held-out next-token loss. It is not proof of task ability.",
+              "One seed per lane; all candidates remain research-only pending independent-seed and task-level checks.",
+              "",
+              "| Lane | Arm | Updates | Direct lesson gain | Ask-Why lesson gain | Lane test parent → candidate | Core-language Δ |",
+              "|---|---|---:|---:|---:|---:|---:|",
+          ]
+          for lane, arm, updates, direct, why, test_parent, test_candidate, core in rows:
+              fmt = lambda x: "n/a" if x is None else f"{x:.5f}"
+              lines.append(f"| {lane} | {arm} | {updates or 'n/a'} | {fmt(direct)} | {fmt(why)} | {fmt(test_parent)} → {fmt(test_candidate)} | {fmt(core)} |")
+          Path("askwhy-results.md").write_text("\n".join(lines) + "\n")
+          print("\n".join(lines))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-askwhy-v1-results-${{ github.run_id }
+          path: askwhy-results.md
+          retention-days: 90
+          if-no-files-found: warn

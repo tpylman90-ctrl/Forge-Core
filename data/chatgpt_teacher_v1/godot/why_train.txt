@@ -1,0 +1,94 @@
+Lesson: local and global position.
+Forge asks why: Why does position differ from global_position when a parent is rotated? Explain it in short steps, with a comparison and a check.
+ChatGPT explains:
+1. position is measured relative to the node's parent.
+2. global_position is measured in world coordinates after parent transforms.
+3. A rotated parent changes how a local offset appears in the world.
+Simple comparison: A step forward inside a spinning room is not the same direction as a step north on the map.
+Forge restates: Use position for parent-relative movement and global_position for world-relative placement.
+Forge applies: Choose the property that matches the intended coordinate space.
+Forge checks: Put the node under a rotated parent and compare both values.
+
+Lesson: one-time impulse.
+Forge asks why: Why should a launch impulse not be applied every physics frame?
+ChatGPT explains:
+1. An impulse represents one short change in momentum.
+2. Applying it repeatedly adds momentum over and over.
+3. Use a continuous force for sustained acceleration.
+Simple comparison: A single push starts a cart moving; repeated pushes keep speeding it up.
+Forge restates: Apply an impulse once at launch.
+Forge applies: Call apply_central_impulse from the launch event, not every tick.
+Forge checks: Compare the one-time launch with a per-frame call.
+
+Lesson: scene instantiation.
+Forge asks why: Why does loading a PackedScene not make a node appear?
+ChatGPT explains:
+1. Loading gives you a reusable scene resource.
+2. instantiate() creates the node hierarchy.
+3. add_child() inserts it into the active tree.
+Simple comparison: Opening a saved recipe does not place food on the table.
+Forge restates: Load, instantiate, then add the node to the correct parent.
+Forge applies:
+var actor_scene: PackedScene = preload("res://actors/actor.tscn")
+var actor: Node = actor_scene.instantiate()
+add_child(actor)
+Forge checks: Look under the expected parent in the Remote scene tree.
+
+Lesson: CharacterBody3D movement.
+Forge asks why: Why should a CharacterBody3D use move_and_slide instead of assigning position directly?
+ChatGPT explains:
+1. Direct position changes can skip the body's normal collision handling.
+2. velocity stores the intended motion.
+3. move_and_slide processes that motion against collisions in the physics step.
+Simple comparison: Follow the marked hallway and let the collision rules stop you at the wall, rather than teleporting through it.
+Forge restates: Use the body's physics movement methods for collision-aware motion.
+Forge applies:
+func _physics_process(delta: float) -> void:
+    velocity.x = input_axis * speed
+    move_and_slide()
+Forge checks: Move into a wall and confirm collision behavior stays stable.
+
+Lesson: signals.
+Forge asks why: Why use a signal instead of having a health component directly call every listener?
+ChatGPT explains:
+1. The health component can announce that health changed.
+2. Interested nodes can connect to that event.
+3. The health code does not need to know every listener.
+Simple comparison: A doorbell announces a visitor; it does not need a list of everyone in the house.
+Forge restates: Emit a typed signal and let listeners decide how to react.
+Forge applies:
+signal health_changed(current_health: int)
+Forge checks: Connect a listener and verify it receives the new value.
+
+Lesson: frame and physics updates.
+Forge asks why: Why separate _process from _physics_process?
+ChatGPT explains:
+1. _process runs with rendered frames.
+2. _physics_process runs at the fixed physics tick.
+3. Collision-related movement should use the physics step for steadier behavior.
+Simple comparison: Animation follows the screen refresh, while a metronome gives physics a steady beat.
+Forge restates: Use the callback that matches the kind of work.
+Forge applies: Keep visual-only updates in _process and physics movement in _physics_process.
+Forge checks: Test at different frame rates.
+
+Lesson: collision layers.
+Forge asks why: Why can two Area3D nodes overlap visually but never detect each other?
+ChatGPT explains:
+1. Visual overlap does not guarantee a physics pair.
+2. Monitoring, collision layers, and collision masks decide which pairs are checked.
+3. The relevant shapes must also be enabled and positioned.
+Simple comparison: Two people can stand in the same room but not be connected to the same radio channel.
+Forge restates: Check monitoring, masks, layers, and shapes.
+Forge applies: Adjust only the missing collision setting.
+Forge checks: Enter the area and observe the expected signal.
+
+Lesson: typed exports.
+Forge asks why: Why use @export var max_speed: float instead of a loose untyped value?
+ChatGPT explains:
+1. The type communicates the expected value.
+2. @export exposes it in the Inspector.
+3. A designer can tune each instance without editing script code.
+Simple comparison: A labeled dial is safer to adjust than a hidden number inside a machine.
+Forge restates: Use typed exports for values that need safe per-instance tuning.
+Forge applies: Add the annotation and set a sensible default.
+Forge checks: Select the node and verify the Inspector field.

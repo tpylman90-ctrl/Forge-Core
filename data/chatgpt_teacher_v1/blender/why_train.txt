@@ -1,0 +1,99 @@
+Lesson: applying scale before a bevel.
+Forge asks why: Why apply object scale before choosing a bevel width? Explain it in short steps, with a simple comparison and a way to check.
+ChatGPT explains:
+1. The scale values stretch the object's local coordinate system.
+2. The Bevel modifier uses a width relative to that geometry.
+3. Applying scale keeps the visible size but resets the multiplier, making the width easier to predict.
+Simple comparison: Marking a board in centimeters is easier when the ruler is not secretly stretched.
+Forge restates: Apply scale first so a chosen bevel width behaves consistently.
+Forge applies:
+import bpy
+obj = bpy.context.active_object
+if obj is None or obj.type != "MESH":
+    raise RuntimeError("Select a mesh object first")
+bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)
+Forge checks: Inspect the object dimensions and bevel from more than one view.
+
+Lesson: mesh data versus scene object.
+Forge asks why: Why does creating a Mesh datablock not make geometry appear in the scene?
+ChatGPT explains:
+1. Mesh data stores vertices, edges, and faces.
+2. A scene object refers to that mesh data and carries transforms.
+3. The object also needs to be linked to a collection.
+Simple comparison: A blueprint is not the building; the building must be placed on the site.
+Forge restates: Create an object from the mesh, then link it into a collection.
+Forge applies:
+mesh = bpy.data.meshes.new("BlockMesh")
+mesh.from_pydata([(0,0,0),(1,0,0),(0,1,0)], [], [(0,1,2)])
+mesh.update()
+obj = bpy.data.objects.new("Block", mesh)
+bpy.context.collection.objects.link(obj)
+Forge checks: Confirm the object exists in the active collection and appears in the viewport.
+
+Lesson: shared mesh data.
+Forge asks why: Why do two Blender objects change together when I edit one?
+ChatGPT explains:
+1. The two objects may point to the same mesh datablock.
+2. Changing shared vertices changes the data both objects display.
+3. Copy the mesh data when the duplicate must be independent.
+Simple comparison: Two picture frames can hold the same photo; changing the photo changes both views.
+Forge restates: Copy both the object and its mesh data before independent edits.
+Forge applies:
+duplicate = source.copy()
+duplicate.data = source.data.copy()
+Forge checks: Move one vertex and verify the source stays unchanged.
+
+Lesson: active-object context.
+Forge asks why: Why should a script check the active object before using a context-sensitive operator?
+ChatGPT explains:
+1. Many bpy.ops commands act on the active selection.
+2. If nothing is active, the operator may fail or affect the wrong object.
+3. Check and set the intended object first.
+Simple comparison: A command needs a selected target, like addressing the right file before deleting it.
+Forge restates: Verify the object and its type before calling the operator.
+Forge applies: Raise a clear error if the active object is missing or is not a mesh.
+Forge checks: Try both a valid mesh and a missing selection.
+
+Lesson: geometry and shading.
+Forge asks why: Why doesn't a Weighted Normal modifier create sharp bevel geometry?
+ChatGPT explains:
+1. A bevel changes the mesh shape by adding or adjusting edge faces.
+2. Weighted normals change how lighting interpolates across the existing faces.
+3. They solve different problems and may be used together.
+Simple comparison: Shaping a clay edge is different from changing the direction of a lamp.
+Forge restates: Use a bevel for geometry and normals for shading.
+Forge applies: Add the bevel before the Weighted Normal modifier, then compare shaded results.
+Forge checks: Inspect the silhouette as well as the highlights.
+
+Lesson: GLB export selection.
+Forge asks why: Why export only the intended mesh instead of the entire Blender scene?
+ChatGPT explains:
+1. A scene may contain cameras, lights, and helper objects.
+2. Exporting all objects can add them to the asset unexpectedly.
+3. Selecting the intended object makes the export contents easier to verify.
+Simple comparison: Pack only the tools you need instead of emptying the whole workshop into a box.
+Forge restates: Select the asset and enable selected-object export.
+Forge applies: Export the active mesh and reopen the GLB in a clean scene.
+Forge checks: Compare object count, transforms, and materials.
+
+Lesson: non-destructive changes.
+Forge asks why: Why keep a bevel modifier unapplied while iterating?
+ChatGPT explains:
+1. The modifier keeps the bevel settings editable.
+2. You can change width or segments without rebuilding the mesh.
+3. Apply it only when the pipeline needs committed geometry.
+Simple comparison: Keep an adjustable wrench until the final fit is known.
+Forge restates: Leave the modifier live during design iteration.
+Forge applies: Name the modifier and review the stack order.
+Forge checks: Change one setting and confirm the model updates predictably.
+
+Lesson: object origin.
+Forge asks why: Why can moving an object's origin help animation or placement?
+ChatGPT explains:
+1. Transforms rotate and scale around the origin.
+2. A misplaced origin makes those operations pivot from an awkward point.
+3. Moving the origin changes the pivot without necessarily moving the visible mesh.
+Simple comparison: A gate swings around its hinge, not around its center.
+Forge restates: Place the origin where the intended motion should pivot.
+Forge applies: Set it to the geometry bounds center only when that is the desired pivot.
+Forge checks: Rotate the object and inspect the path.

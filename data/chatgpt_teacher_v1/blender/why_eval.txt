@@ -1,0 +1,17 @@
+Held-out explanation check: A bevel appears uneven after an object was scaled non-uniformly. Explain the first diagnostic and why.
+Forge asks why: Why inspect and apply scale before changing bevel width?
+ChatGPT explains: Non-uniform scale changes how local modifier widths appear. Apply or account for scale, then inspect the result before tuning the width.
+Forge applies: Compare the same edge before and after the scale operation.
+Forge checks: Did the surface stay in place and the bevel become consistent?
+
+Held-out explanation check: A mesh exists in bpy.data.meshes but nothing is visible.
+Forge asks why: Why create and link an object?
+ChatGPT explains: Mesh data is geometry storage; a scene object gives it a place, transform, and collection membership.
+Forge applies: Create bpy.data.objects.new with the mesh and link it into a collection.
+Forge checks: Confirm the object appears in the scene and the mesh is assigned.
+
+Held-out explanation check: A GLB contains a camera and helper empties unexpectedly.
+Forge asks why: Why inspect export selection and reopen the file?
+ChatGPT explains: An export can include more than the intended asset. Reopening independently checks the file that downstream tools will actually load.
+Forge applies: Export only the selected asset and inspect the clean-scene contents.
+Forge checks: Are the object list and transforms expected?

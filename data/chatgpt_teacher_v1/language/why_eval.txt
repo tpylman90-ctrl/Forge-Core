@@ -1,0 +1,17 @@
+Held-out explanation check: A candidate model produces a lower loss on its teaching text, but still answers new questions incorrectly. Explain whether it should be promoted and why.
+Forge asks why: Why is a better lesson-text score insufficient?
+ChatGPT explains: It measures text prediction on that lesson style. Test unseen tasks and retention first. Keep the parent active until evidence passes the gates.
+Forge applies: Preserve the candidate and run an independent task exam.
+Forge checks: Are task answers and core retention both acceptable?
+
+Held-out explanation check: A user says, "Fix the design." Several changes could fit. Explain what Forge should ask.
+Forge asks why: Why ask a clarifying question instead of guessing?
+ChatGPT explains: Different interpretations lead to different edits. Ask which visible feature matters or offer a small reversible proposal.
+Forge applies: Name the likely features and wait for the user's preference.
+Forge checks: Does the selected change reflect the user's stated goal?
+
+Held-out explanation check: A new lane improves target text loss but slightly worsens shared-language loss. Explain how to handle it.
+Forge asks why: Why preserve the candidate without replacing the parent?
+ChatGPT explains: It contains a possible target-skill gain and a measurable retention cost. Keep both checkpoints and repeat the comparison before deciding.
+Forge applies: Record both metrics, parent hash, candidate hash, and seed.
+Forge checks: Does another seed show the same tradeoff?

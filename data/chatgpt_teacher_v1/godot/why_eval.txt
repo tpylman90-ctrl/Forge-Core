@@ -1,0 +1,17 @@
+Held-out explanation check: A reusable scene is loaded but its node is absent at runtime.
+Forge asks why: Why are instantiate and add_child both needed?
+ChatGPT explains: Loading reads the reusable resource; instantiating creates nodes; add_child puts them into the running scene tree.
+Forge applies: Perform each step and attach the instance beneath the intended parent.
+Forge checks: Confirm the node appears in the Remote tree.
+
+Held-out explanation check: A character clips through a wall after direct position assignment.
+Forge asks why: Why use a physics movement method?
+ChatGPT explains: Direct position changes can bypass collision motion handling. Update velocity and use move_and_slide during the physics tick.
+Forge applies: Check the body type, collision shape, and movement callback.
+Forge checks: Does it stop at a wall at different frame rates?
+
+Held-out explanation check: A signal handler never fires for an overlapping area.
+Forge asks why: Why check collision masks if objects visibly overlap?
+ChatGPT explains: The rendering system and physics filtering are separate. Monitoring, layers, masks, and collision shapes determine whether the pair can emit the event.
+Forge applies: Verify each setting and test one collision pair.
+Forge checks: Does the signal fire only for the intended body?
