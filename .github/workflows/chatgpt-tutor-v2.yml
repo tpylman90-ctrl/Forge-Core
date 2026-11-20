@@ -22,16 +22,22 @@ jobs:
         include:
           - lane: language
             seed: 43
+            independent_sampling: false
           - lane: language
             seed: 44
+            independent_sampling: true
           - lane: blender
             seed: 731
+            independent_sampling: false
           - lane: blender
             seed: 732
+            independent_sampling: false
           - lane: godot
             seed: 947
+            independent_sampling: false
           - lane: godot
             seed: 948
+            independent_sampling: false
     env:
       SOURCE_RUN: "42552572467"
       SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
@@ -86,10 +92,13 @@ jobs:
           PY
       - name: Train isolated tutor-v2 branch
         run: |
-          python -m forge_core.neural.chatgpt_askwhy_v1 \
-            --lane "${{ matrix.lane }}" --arm chatgpt_tutor_v2 \
+          args=(--lane "${{ matrix.lane }}" --arm chatgpt_tutor_v2 \
             --source source --out "artifacts/${{ matrix.lane }}/seed-${{ matrix.seed }}" \
-            --seed "${{ matrix.seed }}" --updates 500
+            --seed "${{ matrix.seed }}" --updates 500)
+          if [[ "${{ matrix.independent_sampling }}" == "true" ]]; then
+            args+=(--independent-sampling)
+          fi
+          python -m forge_core.neural.chatgpt_askwhy_v1 "${args[@]}"
       - name: Preserve parent and reproducible teaching data
         if: always()
         run: |
