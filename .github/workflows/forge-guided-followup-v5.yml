@@ -156,11 +156,35 @@ jobs:
             lines.append(f'| {m["lane"]} | {m["seed"]} | {m["updates"]} | {m["domain_test_loss_parent"]:.4f} → {m["domain_test_loss_candidate"]:.4f} | {m["core_language_delta_candidate_minus_parent"]:+.4f} | {"pass" if m["core_language_guard_passed"] else "fail"} | `{m["candidate_checkpoint_sha256"]}` |')
           lines += ["","Loss measures next-token prediction on pinned source text, not task competence. Test splits are reported once after validation-based selection. Lower held-out loss is better."]
           Path("bundle/FORGE-GUIDED-FOLLOWUP-V5-RESULTS.md").write_text("\n".join(lines)+"\n")
+          # Long-term release storage is gated lane-by-lane. Require all three
+          # paired seeds to improve validation and independent test loss by at
+          # least 0.2%, retain the core-language guard, and change weights.
+          eligible=[]
+          for lane in ("blender","godot"):
+            group=[m for m in rows if m["lane"]==lane]
+            def gain(parent,candidate):
+              return (parent-candidate)/max(parent,1e-12)
+            if len(group)==3 and all(
+              m.get("weights_changed_from_parent") is True
+              and m.get("optimizer_state_resumed") is True
+              and m.get("core_language_guard_passed") is True
+              and gain(m["domain_validation_loss_parent"],m["domain_validation_loss_candidate"]) >= 0.002
+              and gain(m["domain_test_loss_parent"],m["domain_test_loss_candidate"]) >= 0.002
+              for m in group):
+              eligible.append(lane)
+          Path("bundle/eligible-lanes.json").write_text(json.dumps(eligible,indent=2)+"\n")
+          import shutil
+          for report in list(Path("bundle").glob("**/metrics.json")):
+            m=json.loads(report.read_text())
+            if m.get("lane") not in eligible:
+              shutil.rmtree(report.parent)
           print("\n".join(lines))
+          print("Eligible release lanes: "+(", ".join(eligible) if eligible else "none"))
           PY
-          tar -czf "forge-guided-followup-v5-$GITHUB_RUN_ID.tar.gz" -C bundle .
-          printf '%s\n' "Six isolated specialist research continuations from verified v4 Blender and Godot candidates. Each resumes optimizer and sampler state, uses half learning rate and balanced language replay. Includes parent, data, checkpoint, and held-out evaluation. No merge or Android promotion." > release-notes.md
-          gh release create "forge-guided-followup-v5-$GITHUB_RUN_ID" "forge-guided-followup-v5-$GITHUB_RUN_ID.tar.gz" \
-            --repo "$GITHUB_REPOSITORY" --draft --prerelease \
-            --title "Forge Blender-Godot low-rate continuation v5 $GITHUB_RUN_ID" \
-            --notes-file release-notes.md
+          if test -s bundle/eligible-lanes.json && grep -Eq '"(blender|godot)"' bundle/eligible-lanes.json; then
+            tar -czf "forge-guided-followup-v5-$GITHUB_RUN_ID.tar.gz" -C bundle .
+            printf '%s\n' "Only lanes passing all three seed-level validation and independent-test improvement checks (>=0.2% each), optimizer/weight lineage checks, and the core-language guard are included. Research draft only; no merge or Android promotion." > release-notes.md
+            gh release create "forge-guided-followup-v5-$GITHUB_RUN_ID" "forge-guided-followup-v5-$GITHUB_RUN_ID.tar.gz" \
+              --repo "$GITHUB_REPOSITORY" --draft --prerelease \
+              --title "Forge Blender-Godot low-rate continuation v5 $GITHUB_RUN_ID" \
+              --notes-file release-notes.md
