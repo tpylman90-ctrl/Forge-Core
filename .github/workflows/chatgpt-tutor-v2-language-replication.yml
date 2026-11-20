@@ -1,0 +1,86 @@
+name: Forge language tutor v2 independent replication
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["experiments/requests/chatgpt-tutor-v2-language-replication.md"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  replicate:
+    name: language seed-44 independent tutor v2
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      SOURCE_RUN: "42552572467"
+      SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
+      PYTHONUNBUFFERED: "1"
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Restore and verify pinned parent
+        run: |
+          set -euo pipefail
+          mkdir -p restore source
+          gh run download "$SOURCE_RUN" --repo "$GITHUB_REPOSITORY" \
+            --name "$SOURCE_ARTIFACT" --dir restore
+          cp -a restore/language/. source/
+          python - <<'PY'
+          import hashlib, json, torch
+          from pathlib import Path
+          p = Path("source/checkpoint.pt")
+          ck = torch.load(p, map_location="cpu", weights_only=True)
+          assert ck["step"] == 107250 and ck.get("seed") == 43
+          assert hashlib.sha256(p.read_bytes()).hexdigest() == "848553a81549c1269c360c5d07c57adde92a7816a0bc19b61ecc8028c93fee99"
+          manifest = json.loads(Path("source/source-manifest.json").read_text())
+          assert manifest["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
+          print("Pinned parent and corpus verified")
+          PY
+      - name: Validate independent language lesson packs
+        run: |
+          python -m py_compile src/forge_core/neural/multilane_v3.py src/forge_core/neural/chatgpt_askwhy_v1.py
+          python - <<'PY'
+          from pathlib import Path
+          for version in ("v1", "v2"):
+              root = Path(f"data/chatgpt_teacher_{version}/language")
+              train = (root / "why_train.txt").read_text()
+              exam = (root / "why_eval.txt").read_text()
+              assert len(train) > 1000 and len(exam) > 500
+          assert "Forge asks why" in Path("data/chatgpt_teacher_v2/language/why_train.txt").read_text()
+          print("Both lesson versions and held-out examples verified")
+          PY
+      - name: Train independent language sampling branch
+        run: |
+          python -m forge_core.neural.chatgpt_askwhy_v1 \
+            --lane language --arm chatgpt_tutor_v2 \
+            --source source --out artifacts/language/seed-44-independent \
+            --seed 44 --independent-sampling --updates 500
+      - name: Preserve exact parent and lessons
+        if: always()
+        run: |
+          set -euo pipefail
+          folder=artifacts/language/seed-44-independent/parent
+          mkdir -p "$folder"
+          cp source/checkpoint.pt source/tokenizer.json "$folder/"
+          cp data/chatgpt_teacher_v1/language/{train.txt,eval.txt,why_train.txt,why_eval.txt} "$folder/"
+          cp data/chatgpt_teacher_v2/language/why_train.txt "$folder/tutor-v2-why_train.txt"
+          cp data/chatgpt_teacher_v2/language/why_eval.txt "$folder/tutor-v2-why_eval.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forge-tutor-v2-language-seed-44-independent-${{ github.run_id }}
+          path: artifacts/language/seed-44-independent/
+          retention-days: 90
+          if-no-files-found: warn
