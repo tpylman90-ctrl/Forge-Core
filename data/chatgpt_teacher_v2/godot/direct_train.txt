@@ -1,0 +1,36 @@
+Pack: ChatGPT direct tutor v2; original CC0-1.0.
+Worked-example teaching: state the task, give the procedure, explain the principle, and verify on the same case. Confirm APIs against the project's Godot version.
+
+Case: Keep CharacterBody3D movement collision-aware.
+Task: Stop a body from passing through a wall when frame rate changes.
+Procedure:
+1. Process physical motion in _physics_process.
+2. Set velocity from input and apply gravity as appropriate.
+3. Call move_and_slide() and verify collision shapes, layers, and masks.
+Principle: Fixed physics timing and the body movement method keep movement aligned with collision processing.
+Example:
+func _physics_process(delta: float) -> void:
+    velocity.x = input_axis * speed
+    move_and_slide()
+Check: Reproduce in a minimal scene at different render frame rates.
+
+Case: Place a child node at a known world-space race gate.
+Task: Account for a rotated parent.
+Procedure:
+1. Identify whether the target is local or world space.
+2. Convert coordinates or set the matching global transform.
+3. Rotate the parent and compare the result.
+Principle: position is parent-relative; global_position is world-relative.
+Example: Use node.to_global(local_point) to convert a local point to world coordinates.
+Check: Confirm the target remains at the intended world location.
+
+Case: Let multiple systems react to a health change.
+Task: Notify HUD and sound without making the health component depend on either.
+Procedure:
+1. Declare a typed health_changed signal.
+2. Emit the signal when health changes.
+3. Connect UI and sound listeners independently.
+Principle: Signals report events while reducing direct dependencies.
+Example:
+signal health_changed(current_health: int)
+Check: Remove one listener and verify health updates still work.
