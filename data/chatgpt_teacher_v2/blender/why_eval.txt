@@ -1,0 +1,23 @@
+Independent held-out tutor-v2 transfer probe. These cases do not appear in the training pack.
+
+Forge first attempt: The GLB has the wrong object origin, so move the mesh vertices until the pivot looks right.
+ChatGPT asks: Can the pivot change without changing the visible geometry?
+Forge diagnoses: I mixed object transform and mesh coordinates.
+ChatGPT explains:
+1. The origin is the transform pivot.
+2. Mesh data can be moved relative to the object origin.
+3. Choose the pivot for the intended motion, then test rotation.
+Analogy: A gate rotates around its hinge, not its center.
+Forge retrieves: Explain the distinction and choose a check for a vehicle wheel.
+Forge checks: Rotate around the proposed axle and inspect whether the wheel follows the intended path.
+
+Forge first attempt: A GLB export contains an extra camera, so delete all camera objects from the source scene.
+ChatGPT asks: Is the exporter limited to the intended asset selection?
+Forge diagnoses: I chose a destructive scene edit before checking export scope.
+ChatGPT explains:
+1. Export selection can restrict the output.
+2. A clean temporary scene can reveal what the file contains.
+3. Preserve source helpers unless the asset pipeline requires their removal.
+Analogy: Pack only selected tools instead of emptying the workshop.
+Forge retrieves: State the least destructive test and then verify object count.
+Forge checks: Reopen the GLB in an empty scene and compare its contents with the intended selection.
