@@ -91,6 +91,7 @@ def main() -> None:
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--updates", type=int, default=500)
+    parser.add_argument("--independent-sampling", action="store_true", help="Use a seed-specific sampling stream for a language-lane replication")
     args = parser.parse_args()
     tokenizer = Tokenizer.from_file(str(args.source / "tokenizer.json"))
     curriculum = {"chatgpt_direct": "direct", "chatgpt_askwhy": "askwhy", "chatgpt_tutor_v2": "askwhy_v2"}.get(args.arm)
@@ -101,6 +102,7 @@ def main() -> None:
         seed_override=args.seed, eval_every=100, patience=3,
         core_replay_probability=0.25 if args.lane != "language" else 0.0,
         max_core_regression=0.05,
+        independent_sampling=args.independent_sampling,
     )
     parent_path = args.source / "checkpoint.pt"
     candidate_path = args.out / "checkpoint.pt"
