@@ -1,0 +1,17 @@
+Independent held-out direct-v2 examples.
+
+Task: A vehicle wheel rotates around the wrong point.
+Procedure:
+1. Inspect the object origin.
+2. Place it at the intended axle pivot without changing the required visible geometry.
+3. Rotate the wheel and compare the path.
+Principle: Object transforms use the origin as their pivot.
+Check: Confirm the wheel follows the axle center.
+
+Task: A GLB export includes a camera helper.
+Procedure:
+1. Restrict export to the intended asset selection.
+2. Preserve source helpers unless they must be removed.
+3. Open the exported file in an empty scene and inspect object count.
+Principle: Narrow export scope is safer than destructive source-scene cleanup.
+Check: Compare exported contents with the intended selection.
