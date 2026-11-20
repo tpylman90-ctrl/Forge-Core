@@ -32,7 +32,7 @@ jobs:
       SOURCE_RUN: "42552572467"
       SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
       TRAIN_SECONDS: "7200"
-      MAX_UPDATES: "50000"
+      MAX_UPDATES: "40000"
       PYTHONUNBUFFERED: "1"
       GH_TOKEN: ${{ github.token }}
     steps:
