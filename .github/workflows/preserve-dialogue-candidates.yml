@@ -47,14 +47,14 @@ jobs:
         run: |
           set -euo pipefail
           tag="forge-dialogue-candidates-2026-11-20"
-          tar -czf "archive/${tag}.tar.gz" -C archive .
+          tar -czf "/tmp/${tag}.tar.gz" -C archive .
           cat > release-notes.md <<'EOF'
           Durable archive of the two passing 160-update research candidates,
           their matched controls, and the two 500-update candidates that failed
           the language-retention gate. All artifacts descend from the pinned
           Forge Seed v0.7 checkpoint. No weights were promoted to main.
           EOF
-          gh release create "$tag" "archive/${tag}.tar.gz" \
+          gh release create "$tag" "/tmp/${tag}.tar.gz" \
             --repo "$GITHUB_REPOSITORY" --draft --prerelease \
             --title "Forge dialogue candidate archive — 2026-11-20" \
             --notes-file release-notes.md
