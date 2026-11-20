@@ -83,7 +83,7 @@ jobs:
             --lane "$lane" --source source --out "artifacts/$lane" \
             --seconds 1800 --max-updates 5000 --learning-rate "$learning_rate" \
             --core-replay-probability "$replay" --max-core-regression "$retention" \
-            --eval-every 500 --patience 6
+            --eval-every 250 --patience 6
       - name: Preserve the verified parent with the candidate
         if: always()
         shell: bash
