@@ -101,6 +101,19 @@ questions—not just A/B choices.
 [Verified results and audit](docs/ENGLISH-CLASS-V1-RESULTS.md) ·
 [Read-only audit run](https://github.com/tpylman90-ctrl/Forge-Core/actions/runs/41775982211)
 
+## Next language study: pure dialogue bootstrap v1
+
+The new bounded pilot starts from the selected scratch-trained 107,250-step
+Forge Seed parent and teaches four narrow conversation behaviors with
+fictional, rule-generated examples. A matched shuffled-answer control,
+unseen-wording exam, and TinyStories retention check guard against template
+memorization and language regression. It uses no teacher-generated answers,
+personal chat history, imported weights, or memory data. Both candidates remain
+research-only; even a positive forced-ranking score will not certify open-ended
+conversation or trigger Android promotion.
+
+See [the experiment design and raw local chat command](docs/DIALOGUE-BOOTSTRAP-V1.md).
+
 ## Latest research: formally verified proof generation (v5–v7)
 
 Forge's neural research branch now trains an **original,

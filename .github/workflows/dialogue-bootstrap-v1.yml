@@ -1,0 +1,74 @@
+name: Forge Seed — pure dialogue bootstrap v1
+
+on:
+  workflow_dispatch:
+    inputs:
+      steps:
+        type: number
+        required: true
+        default: 160
+        description: "Matched CPU updates per arm (20–500)"
+  push:
+    branches: [main]
+    paths:
+      - "experiments/requests/dialogue-bootstrap-v1-001.md"
+
+concurrency:
+  group: forge-seed-pure-dialogue-bootstrap-v1
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  dialogue-bootstrap:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      STEPS: ${{ inputs.steps || '160' }}
+      GH_TOKEN: ${{ github.token }}
+      OMP_NUM_THREADS: "2"
+      MKL_NUM_THREADS: "2"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install CPU PyTorch and pinned tokenizer runtime
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "tokenizers>=0.20,<0.23"
+          python -m pip install --no-deps -e .
+      - name: Check bounded experiment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$STEPS" =~ ^[0-9]+$ ]]
+          (( STEPS >= 20 && STEPS <= 500 ))
+      - name: Retrieve source-verified original Forge Seed v0.7 lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p original results
+          gh run download 42552572467 --repo "$GITHUB_REPOSITORY" \
+            --name forge-language-followup-107k-42552572467 --dir restore
+          test -f restore/language/checkpoint.pt
+          cp -R restore/language/. original/
+          test -f original/checkpoint.pt
+          test -f original/tokenizer.json
+          test -f original/source-manifest.json
+          test -f original/train.txt
+          test -f original/valid.txt
+      - name: Train matched correct-target and shuffled-target arms
+        run: |
+          python -m forge_core.neural.dialogue_bootstrap_v1 \
+            --source original --out results --steps "$STEPS" --seed 43
+      - name: Preserve unpromoted candidates and report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-seed-pure-dialogue-bootstrap-v1
+          path: results/
+          retention-days: 30
+          if-no-files-found: warn
