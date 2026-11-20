@@ -1,3 +1,20 @@
-# Retention-controlled three-branch pilot
+# Approved isolated three-lane CPU training continuation
 
-Train language, Blender, and Godot as isolated branches from the verified 107250-step parent. Bound each lane to 5000 updates and 30 minutes. Use 1e-5 LR, 25% shared TinyStories replay, a maximum +0.05 shared-language validation-loss delta, and patience 6 for Blender and Godot; use 1.25e-5 LR and no replay for the language lane. Use verified cached Blender and Godot documentation corpora. Select and record the actual best checkpoint update separately from attempted updates. Preserve candidates as research-only artifacts; do not promote weights or integrate Android.
+Train the language, Blender, and Godot lanes independently from the verified
+107250-step Forge Seed parent in run 42552572467. Run at most 5,000 updates or
+30 minutes per lane. Use the original pinned language split, the versioned
+licensed Blender and Godot documentation corpora, and lane-local optimizers
+and checkpoints. Do not merge the specialist weights into language weights.
+
+Evaluate and save a resumable best checkpoint every 250 updates. For Blender
+and Godot, keep a candidate only when its specialist validation improves and
+shared-core language loss remains within +0.05 of its parent. After six
+consecutive evaluations without an eligible improvement, stop that lane and
+retain its best checkpoint. For language, continue from its parent optimizer
+and RNG state, with no specialist replay.
+
+Record attempted updates separately from selected checkpoint updates. Preserve
+the verified parent, candidate, source manifests, data hashes, validation and
+test scores, and per-checkpoint curves in each lane artifact. All three runs
+are CPU-only and remain isolated research candidates. Do not promote weights,
+merge lanes, or integrate Android automatically.
