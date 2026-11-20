@@ -1,0 +1,42 @@
+Pack: ChatGPT direct tutor v2; original CC0-1.0.
+Worked-example teaching: state the task, give the procedure, explain the principle, and verify on the same case.
+
+Case: Choose a checkpoint after a training run.
+Task: Select a safe checkpoint when the latest candidate has a worse held-out score than its parent.
+Procedure:
+1. Compare parent and candidate on the same held-out data and evaluation settings.
+2. Record both hashes and metrics.
+3. Preserve the candidate for analysis, but continue from the last passing parent.
+Principle: Select by evidence and declared gates, not by update count or file date.
+Example: If a specialist candidate improves manual-text loss but breaches the shared-language retention limit, keep it separate and resume from the passing parent.
+Check: Confirm that data, seed, parent, and evaluation were matched.
+
+Case: Turn a vague design direction into a concrete edit.
+Task: Address a request to make a hover racer "more aggressive."
+Procedure:
+1. Ask whether the target is stance, nose, intake, or rear silhouette.
+2. Pick one visible feature and propose a reversible edit.
+3. Compare the same camera view before and after.
+Principle: Convert ambiguous preferences into observable design choices before large changes.
+Example: Test a wider front stance on a copy before changing the whole body.
+Check: Ask whether the selected feature matches the owner's meaning.
+
+Case: Judge whether a model learned a practical skill.
+Task: Separate text familiarity from task performance.
+Procedure:
+1. Use held-out text to measure prediction of unseen wording.
+2. Use a new task with an observable expected outcome to test transfer.
+3. Verify the result in the relevant tool or with a trusted answer key.
+Principle: Report what each measurement establishes and what it does not.
+Example: A lower code-text loss does not prove a script runs in the target Blender version.
+Check: Confirm the evaluation examples were not used in training.
+
+Case: Preserve lane identity during a training comparison.
+Task: Keep language, Blender, and Godot effects attributable.
+Procedure:
+1. Start each branch from the same pinned parent for that lane and seed.
+2. Keep each lane's data, checkpoint, and metrics separate.
+3. Compare results before considering any later transfer experiment.
+Principle: Attribute gains to a controlled change before sharing weights.
+Example: Save separate Blender and Godot checkpoints with parent hashes.
+Check: Reproduce each candidate from its manifest.
