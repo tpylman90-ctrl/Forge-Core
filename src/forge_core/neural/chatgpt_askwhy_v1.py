@@ -7,6 +7,7 @@ from tokenizers import Tokenizer
 from forge_core.neural import multilane_v3 as trainer
 
 PACK_ROOT = Path("data/chatgpt_teacher_v1")
+PACK_ROOT_V2 = Path("data/chatgpt_teacher_v2")
 LANES = ("language", "blender", "godot")
 ARMS = ("control", "chatgpt_direct", "chatgpt_askwhy")
 
@@ -16,11 +17,12 @@ def sha256(data: bytes) -> str:
 def pack_path(lane: str, curriculum: str, split: str) -> Path:
     if curriculum == "direct":
         filename = "train.txt" if split == "train" else "eval.txt"
-    elif curriculum == "askwhy":
+    elif curriculum in {"askwhy", "askwhy_v2"}:
         filename = "why_train.txt" if split == "train" else "why_eval.txt"
     else:
         raise ValueError(f"Unknown curriculum: {curriculum}")
-    return PACK_ROOT / lane / filename
+    root = PACK_ROOT_V2 if curriculum == "askwhy_v2" else PACK_ROOT
+    return root / lane / filename
 
 def stream(lane: str, tokenizer: Tokenizer, curriculum: str) -> torch.Tensor:
     path = pack_path(lane, curriculum, "train")
@@ -40,7 +42,7 @@ def teacher_manifest(manifest: dict, lane: str, curriculum: str) -> dict:
     eval_path = pack_path(lane, curriculum, "eval")
     result["chatgpt_teacher"] = {
         "teacher": "ChatGPT", "lane": lane, "curriculum": curriculum,
-        "pack_version": "askwhy-v1", "license": "CC0-1.0",
+        "pack_version": "chatgpt-tutor-v2" if curriculum == "askwhy_v2" else "askwhy-v1", "license": "CC0-1.0",
         "train_sha256": sha256(train_path.read_bytes()),
         "eval_sha256": sha256(eval_path.read_bytes()),
         "ask_why_protocol": "Forge asks why; teacher explains in short steps with an analogy; Forge restates, applies, and checks",
@@ -84,14 +86,14 @@ def evaluate_pack(checkpoint: Path, tokenizer: Path, lane: str, curriculum: str)
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--lane", choices=LANES, required=True)
-    parser.add_argument("--arm", choices=ARMS, required=True)
+    parser.add_argument("--arm", choices=(*ARMS, "chatgpt_tutor_v2"), required=True)
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--seed", type=int, required=True)
     parser.add_argument("--updates", type=int, default=500)
     args = parser.parse_args()
     tokenizer = Tokenizer.from_file(str(args.source / "tokenizer.json"))
-    curriculum = {"chatgpt_direct": "direct", "chatgpt_askwhy": "askwhy"}.get(args.arm)
+    curriculum = {"chatgpt_direct": "direct", "chatgpt_askwhy": "askwhy", "chatgpt_tutor_v2": "askwhy_v2"}.get(args.arm)
     if curriculum:
         install_treatment(args.lane, tokenizer, curriculum)
     report = trainer.run_lane(
@@ -106,6 +108,8 @@ def main() -> None:
     direct_candidate = evaluate_pack(candidate_path, args.out / "tokenizer.json", args.lane, "direct")
     why_parent = evaluate_pack(parent_path, args.source / "tokenizer.json", args.lane, "askwhy")
     why_candidate = evaluate_pack(candidate_path, args.out / "tokenizer.json", args.lane, "askwhy")
+    v2_parent = evaluate_pack(parent_path, args.source / "tokenizer.json", args.lane, "askwhy_v2")
+    v2_candidate = evaluate_pack(candidate_path, args.out / "tokenizer.json", args.lane, "askwhy_v2")
     study = {
         "arm": args.arm, "lane": args.lane, "seed": args.seed,
         "direct_eval_loss_parent": round(direct_parent, 8),
@@ -114,7 +118,10 @@ def main() -> None:
         "askwhy_eval_loss_parent": round(why_parent, 8),
         "askwhy_eval_loss_candidate": round(why_candidate, 8),
         "askwhy_eval_improvement": round(why_parent - why_candidate, 8),
-        "measure": "held-out next-token loss on two separate lesson packs; not capability certification",
+        "tutor_v2_eval_loss_parent": round(v2_parent, 8),
+        "tutor_v2_eval_loss_candidate": round(v2_candidate, 8),
+        "tutor_v2_eval_improvement": round(v2_parent - v2_candidate, 8),
+        "measure": "held-out next-token loss on direct, Ask-Why v1, and tutor-v2 lesson packs; not capability certification",
         "promotion_eligible": False,
         "teacher_manifest": None if curriculum is None else teacher_manifest({}, args.lane, curriculum)["chatgpt_teacher"],
     }
