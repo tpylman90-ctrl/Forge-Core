@@ -9,3 +9,7 @@ This adds an explicit teaching step to the ChatGPT channel:
 The workflow compares three matched arms—control, direct ChatGPT teaching, and Ask-Why teaching—for language, Blender, and Godot. It evaluates both held-out direct-lesson and Ask-Why lesson text, while retaining the existing lane and shared-language validation checks. Every branch starts from the same pinned parent for its lane/seed.
 
 This tests whether the explain-and-apply format improves prediction of new examples in that format. It does not establish that the current network can autonomously ask useful questions or carry out the described tools. Candidate weights stay research-only; the lesson dataset and evidence must be reviewed before a separate task-level transfer test.
+
+## Pilot results
+
+See [the completed controlled CPU study](CHATGPT-ASKWHY-LANE-V1-RESULTS.md) for the matched control, direct-teaching, and Ask-Why results.
