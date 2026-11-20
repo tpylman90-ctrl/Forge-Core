@@ -1,0 +1,17 @@
+Independent held-out direct-v2 examples.
+
+Task: A PackedScene resource is loaded but no actor appears in the running game.
+Procedure:
+1. Call instantiate() to create the node hierarchy.
+2. Call add_child() under the correct parent.
+3. Inspect the running Remote scene tree.
+Principle: Loading, instantiation, and insertion into the active tree are separate steps.
+Check: Confirm the actor appears under the expected parent.
+
+Task: A button stops responding after a scene refactor.
+Procedure:
+1. Check that the pressed signal remains connected.
+2. Confirm the receiver node and callback still exist.
+3. Run the scene and observe the callback.
+Principle: Visible controls require a valid event connection to perform behavior.
+Check: Confirm one click calls the expected method exactly once.
