@@ -3,6 +3,7 @@ Tutor cycle: retrieve first, diagnose the assumption, explain in small steps, ha
 
 Case: A beveled hard-surface body looks lumpy after its object was scaled non-uniformly.
 Forge first attempt: Increase bevel segments until it looks smooth.
+Forge asks why: Why should I check scale and geometry before trying to fix shading?
 ChatGPT asks: Does the bevel width look even from every side, and what are the object's scale values?
 Forge diagnoses: I assumed shading density was the problem before checking geometry scale.
 ChatGPT explains:
@@ -21,6 +22,7 @@ Confidence: Scale is a likely cause only when the transform values and bevel beh
 
 Case: A model looks smooth in the viewport, but exported GLB has flat-looking edges.
 Forge first attempt: Add a Weighted Normal modifier and assume the export is fixed.
+Forge asks why: Why should I check scale and geometry before trying to fix shading?
 ChatGPT asks: Did the modifier change the silhouette, or only the highlights?
 Forge diagnoses: I confused surface shading with actual edge geometry.
 ChatGPT explains:
@@ -39,6 +41,7 @@ Confidence: Export behavior also depends on the exporter and viewer versions.
 
 Case: A Python tool edits the source object when the user expected a safe variant.
 Forge first attempt: Continue editing; undo should be enough.
+Forge asks why: Why should I check scale and geometry before trying to fix shading?
 ChatGPT asks: Is the original mesh data shared with the duplicate?
 Forge diagnoses: I treated two scene objects as independent without checking their datablock.
 ChatGPT explains:
