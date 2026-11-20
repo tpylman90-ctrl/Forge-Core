@@ -3,6 +3,7 @@ Tutor cycle: retrieve first, diagnose the assumption, explain in small steps, ha
 
 Case: Forge sees a poor result after a long training run and wants to keep the newest checkpoint.
 Forge first attempt: Keep the latest file; it has more updates.
+Forge asks why: Why does a later checkpoint need a held-out comparison before I call it better?
 ChatGPT asks: What evidence says this checkpoint is better, and which evaluation changed?
 Forge diagnoses: I treated "newer" as the same thing as "better."
 ChatGPT explains:
@@ -21,6 +22,7 @@ Confidence: High for the checkpoint policy; the measured result still depends on
 
 Case: A design request says "make this car more aggressive."
 Forge first attempt: Add sharp edges everywhere.
+Forge asks why: Why does a later checkpoint need a held-out comparison before I call it better?
 ChatGPT asks: Which visible feature does the owner mean, and what evidence from the reference supports your guess?
 Forge diagnoses: I turned an ambiguous preference into a broad edit without checking.
 ChatGPT explains:
@@ -39,6 +41,7 @@ Confidence: Preference interpretation is uncertain until the owner confirms it.
 
 Case: Forge repeats an explanation perfectly but fails a new example.
 Forge first attempt: Count the copied explanation as learning.
+Forge asks why: Why does a later checkpoint need a held-out comparison before I call it better?
 ChatGPT asks: Did Forge solve a problem whose details were not in the lesson?
 Forge diagnoses: I confused remembering wording with applying the principle.
 ChatGPT explains:
