@@ -26,6 +26,16 @@ A passing run is stored only as an unpublished draft. It is not merged with
 another lane, promoted into the Android app, or treated as proof of capability.
 Several seeds and human task evaluation remain necessary before adoption.
 
+
+## Existing GitHub Actions training
+
+The Blender/Godot low-rate continuation workflow now applies an archive gate
+before creating its draft release. A lane is archived only if all three seeds
+changed weights, resumed their optimizer, passed the core-language guard, and
+each seed improves both validation and independent test loss by at least 0.2%.
+If no lane qualifies, no release is created. The run report remains available
+as a temporary Actions artifact for 90 days.
+
 ## One-time Kaggle setup
 
 1. Create a **fine-grained GitHub token** restricted to `tpylman90-ctrl/Forge-Core`
