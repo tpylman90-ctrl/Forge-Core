@@ -1,0 +1,56 @@
+Pack: ChatGPT tutor v2; original CC0-1.0.
+Tutor cycle: retrieve first, diagnose the assumption, explain in small steps, have Forge teach it back, fade support, transfer it, and verify. State uncertainty when a claim needs current documentation.
+
+Case: Forge sees a poor result after a long training run and wants to keep the newest checkpoint.
+Forge first attempt: Keep the latest file; it has more updates.
+ChatGPT asks: What evidence says this checkpoint is better, and which evaluation changed?
+Forge diagnoses: I treated "newer" as the same thing as "better."
+ChatGPT explains:
+1. Training updates change parameters; they do not guarantee improvement.
+2. A fixed held-out evaluation compares the candidate with its parent.
+3. If a protected score regresses, preserve the candidate for study but resume from the last passing checkpoint.
+Analogy: A later batch of a recipe can be worse even if it took longer to cook.
+Principle: Choose checkpoints by predeclared held-out evidence, not age.
+Forge teach-back: Newer means later in time; it does not prove higher quality.
+Faded retrieval: Without looking above, name the comparison and what to do on regression.
+Forge retrieves: Compare candidate and parent on the same held-out set; keep both, but continue from the passing parent.
+Transfer challenge: A Blender branch improves manual-text loss but harms core-language retention. What is the safe next step?
+Forge transfer: Keep the branch artifact, record both scores, and continue from the passing parent until a controlled change meets both gates.
+Forge checks: Are data, seed, parent hash, and evaluation identical across branches?
+Confidence: High for the checkpoint policy; the measured result still depends on evaluation quality.
+
+Case: A design request says "make this car more aggressive."
+Forge first attempt: Add sharp edges everywhere.
+ChatGPT asks: Which visible feature does the owner mean, and what evidence from the reference supports your guess?
+Forge diagnoses: I turned an ambiguous preference into a broad edit without checking.
+ChatGPT explains:
+1. The phrase could mean wider stance, squared nose, larger intakes, or a stronger rear haunch.
+2. Those choices produce different silhouettes.
+3. Ask for a concrete feature or propose one small reversible edit.
+Analogy: "Make the music stronger" could mean louder drums or deeper bass.
+Principle: Resolve ambiguous goals into observable features before large edits.
+Forge teach-back: Ask which feature matters, then change one thing.
+Faded retrieval: Give one clarifying question and one reversible first edit.
+Forge retrieves: "Do you mean stance or nose shape?" Then test one stance change on a copy.
+Transfer challenge: The owner says "cleaner" about a UI. What do you ask and test?
+Forge transfer: Ask whether they mean fewer controls, more spacing, or simpler colors; change one area and compare the same screen.
+Forge checks: Did the selected feature change while the rest stayed stable?
+Confidence: Preference interpretation is uncertain until the owner confirms it.
+
+Case: Forge repeats an explanation perfectly but fails a new example.
+Forge first attempt: Count the copied explanation as learning.
+ChatGPT asks: Did Forge solve a problem whose details were not in the lesson?
+Forge diagnoses: I confused remembering wording with applying the principle.
+ChatGPT explains:
+1. Repetition can measure recall of the lesson.
+2. A changed example tests transfer.
+3. A verified answer key or tool check tests whether the result is correct.
+Analogy: Reciting a map legend is different from navigating a new street.
+Principle: Score recall, transfer, and correctness separately.
+Forge teach-back: Use one unseen example and check its outcome.
+Faded retrieval: Name what each of the three measures tells us.
+Forge retrieves: Recall checks memory; transfer checks reuse; verification checks correctness against evidence.
+Transfer challenge: A code completion looks plausible. What evidence is needed?
+Forge transfer: Run it in the target version and inspect expected behavior; do not infer success from fluent text.
+Forge checks: Is the task held out and the success condition observable?
+Confidence: A good text score alone does not certify tool skill.
