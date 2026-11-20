@@ -12,7 +12,7 @@ permissions:
 
 jobs:
   train:
-    name: ${{ matrix.lane } ${{ matrix.arm } Ask-Why study
+    name: ${{ matrix.lane }} ${{ matrix.arm }} Ask-Why study
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     strategy:
@@ -51,7 +51,7 @@ jobs:
       SOURCE_RUN: "42552572467"
       SOURCE_ARTIFACT: "forge-language-followup-107k-42552572467"
       PYTHONUNBUFFERED: "1"
-      GH_TOKEN: ${{ github.token }
+      GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -81,7 +81,7 @@ jobs:
           m = json.loads(Path("source/source-manifest.json").read_text())
           assert m["revision"] == "f54c09fd23315a6f9c86f9dc80f725de7d8f9c64"
           print({"step": ck["step"], "parent_sha256": digest,
-                 "lane": "${{ matrix.lane }", "arm": "${{ matrix.arm }"})
+                 "lane": "${{ matrix.lane }}", "arm": "${{ matrix.arm }}"})
           PY
       - name: Validate isolated direct and Ask-Why lesson packs
         run: |
@@ -101,24 +101,24 @@ jobs:
       - name: Train matched control, direct-teaching, or Ask-Why branch
         run: |
           python -m forge_core.neural.chatgpt_askwhy_v1 \
-            --lane "${{ matrix.lane }" --arm "${{ matrix.arm }" \
-            --source source --out "artifacts/${{ matrix.lane }/${{ matrix.arm }" \
-            --seed "${{ matrix.seed }" --updates 500
+            --lane "${{ matrix.lane }}" --arm "${{ matrix.arm }}" \
+            --source source --out "artifacts/${{ matrix.lane }}/${{ matrix.arm }}" \
+            --seed "${{ matrix.seed }}" --updates 500
       - name: Preserve exact parent, candidate, and both teaching packs
         if: always()
         run: |
           set -euo pipefail
-          folder="artifacts/${{ matrix.lane }/${{ matrix.arm }/parent"
+          folder="artifacts/${{ matrix.lane }}/${{ matrix.arm }}/parent"
           mkdir -p "$folder"
           cp source/checkpoint.pt source/tokenizer.json "$folder/"
           for file in train.txt eval.txt why_train.txt why_eval.txt; do
-            cp "data/chatgpt_teacher_v1/${{ matrix.lane }/$file" "$folder/"
+            cp "data/chatgpt_teacher_v1/${{ matrix.lane }}/$file" "$folder/"
           done
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: forge-askwhy-v1-${{ matrix.lane }-${{ matrix.arm }-${{ github.run_id }
-          path: artifacts/${{ matrix.lane }/${{ matrix.arm }/
+          name: forge-askwhy-v1-${{ matrix.lane }}-${{ matrix.arm }}-${{ github.run_id }}
+          path: artifacts/${{ matrix.lane }}/${{ matrix.arm }}/
           retention-days: 90
           if-no-files-found: warn
 
@@ -130,7 +130,7 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          pattern: forge-askwhy-v1-*-${{ github.run_id }
+          pattern: forge-askwhy-v1-*-${{ github.run_id }}
           path: results
           merge-multiple: false
           if-no-files-found: ignore
@@ -170,7 +170,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: forge-askwhy-v1-results-${{ github.run_id }
+          name: forge-askwhy-v1-results-${{ github.run_id }}
           path: askwhy-results.md
           retention-days: 90
           if-no-files-found: warn
