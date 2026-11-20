@@ -142,7 +142,7 @@ jobs:
                            study.get("teacher_eval_improvement"),
                            report.get("test_loss_parent"),
                            report.get("test_loss_candidate"),
-                           report.get("core_language_delta_candidate_minus_parent")))
+                           (report.get("core_language_validation", {}).get("delta_candidate_minus_parent")\n                           if study.get("lane") != "language"\n                           else (report.get("test_loss_candidate") - report.get("test_loss_parent")))))
           rows.sort()
           lines = [
               "# ChatGPT teacher lane v1 pilot",
