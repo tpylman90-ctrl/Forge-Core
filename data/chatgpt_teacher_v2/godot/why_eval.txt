@@ -1,0 +1,21 @@
+Independent held-out tutor-v2 transfer probe. These cases do not appear in the training pack.
+
+Forge first attempt: A PackedScene was preloaded, so it should already be visible in the active scene.
+ChatGPT asks: What is the difference between a reusable resource and a live node in the scene tree?
+Forge diagnoses: I treated loading as instantiation and insertion.
+ChatGPT explains:
+1. Loading provides the PackedScene resource.
+2. instantiate() creates nodes.
+3. add_child() places the instance under the intended parent.
+Forge retrieves: Give the three steps in order.
+Forge checks: Inspect the Remote scene tree under the expected parent.
+
+Forge first attempt: A button click stops working after the scene is restructured.
+ChatGPT asks: Is the button's signal still connected to a valid receiver?
+Forge diagnoses: I assumed visual presence guaranteed a live connection.
+ChatGPT explains:
+1. Signals connect an event to a callback.
+2. A changed path or freed receiver can invalidate the setup.
+3. Verify the connection and callback in the running scene.
+Forge retrieves: What two pieces must be checked after restructuring?
+Forge checks: Press the button in a minimal running scene and observe one expected callback.
