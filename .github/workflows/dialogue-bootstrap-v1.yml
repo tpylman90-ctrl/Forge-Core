@@ -6,7 +6,7 @@ on:
       steps:
         type: number
         required: true
-        default: 500
+        default: 160
         description: "Matched CPU updates per arm (20–500)"
   push:
     branches: [main]
@@ -26,7 +26,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 50
     env:
-      STEPS: ${{ inputs.steps || '500' }}
+      STEPS: ${{ inputs.steps || '160' }}
       GH_TOKEN: ${{ github.token }}
       OMP_NUM_THREADS: "2"
       MKL_NUM_THREADS: "2"
