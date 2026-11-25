@@ -14,6 +14,7 @@ on:
     branches: [main]
     paths:
       - 'blender-workspace/**'
+      - 'production/**'
       - '.github/workflows/blender-workspace.yml'
 
 permissions:
@@ -64,6 +65,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: forge-blender-diagnostics-${{ github.run_id }}
-          path: output/blender-workspace/blender.log
+          path: |
+            output/blender-workspace/blender.log
+            output/blender-workspace/asset/asset.blend
+            output/blender-workspace/asset/asset.glb
+            output/blender-workspace/asset/request.json
+            output/blender-workspace/asset/validation.json
           if-no-files-found: ignore
           retention-days: 7
