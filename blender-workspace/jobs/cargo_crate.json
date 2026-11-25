@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "asset_id": "forge_cargo_crate_workspace_001",
+  "family": "cargo_crate",
+  "dimensions_m": [
+    1.4,
+    0.9,
+    0.85
+  ],
+  "color": [
+    0.19,
+    0.34,
+    0.43
+  ],
+  "seed": 43,
+  "triangle_budget": 12000,
+  "texture_size": 256
+}
