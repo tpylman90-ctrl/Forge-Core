@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "mission": "Open, accessible professional-quality 3D asset creation",
+  "active_scope": [
+    "geometry_analysis",
+    "image_shape_understanding",
+    "geometry_construction",
+    "surface_topology",
+    "materials_textures",
+    "inspection",
+    "optimization",
+    "asset_export"
+  ],
+  "backend": "blender",
+  "future_backend": "ai_native_geometry_engine",
+  "lanes": {
+    "cpu": {
+      "role": "geometry analysis and bounded baselines"
+    },
+    "gpu": {
+      "role": "visual reconstruction and materials"
+    },
+    "experimental": {
+      "role": "isolated geometry representations and algorithms"
+    }
+  },
+  "legacy": {
+    "branch": "archive/pre-open-3d-2026-11-25",
+    "commit": "5bf1def03ce72f87fced0f81574bca0ad2817ac0",
+    "active_training": false,
+    "workflow_deactivation_verified": false
+  },
+  "automatic_checkpoint_promotion": false,
+  "public_release_requires_rights_review": true,
+  "mcp_status": "planned"
+}
