@@ -40,6 +40,10 @@ Existing research includes procedural Blender object generation, visual neural e
 - [Previous visual results](docs/OBJECT-PHOTO-TEXT-V4-RESULTS-2026-11-17.md) · [November 20 results](docs/FORGE-TRAINING-RESULTS-2026-11-20.md)
 - [Founding charter](CHARTER.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
+## Dedicated Blender workspace
+
+[Workspace source and instructions](blender-workspace/README.md) · [Run Blender through GitHub Actions](https://github.com/tpylman90-ctrl/Forge-Core/actions/workflows/blender-workspace.yml). A separate headless, CPU-based job runner executes registered asset requests, validates GLB exports and packages editable Blender scenes, preview renders and hashes. No training weights, paid services or credentials are required. First execution verification is pending.
+
 ## Development priorities
 
 1. Geometry understanding and reproducible shape benchmarks.
