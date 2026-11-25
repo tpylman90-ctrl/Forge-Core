@@ -1,34 +1,43 @@
-name: Forge Core CI
+name: Forge Open 3D production CI
 
 on:
   push:
+    branches: [main]
+    paths: ["production/**", ".github/workflows/ci.yml"]
   pull_request:
+    paths: ["production/**", ".github/workflows/ci.yml"]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  cpu-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
+  production-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install CPU PyTorch
-        run: python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - name: Install memory encryption dependency
-        run: python -m pip install "cryptography>=42,<48"
-      - name: Install scratch BPE tokenizer dependency
-        run: python -m pip install "tokenizers>=0.20,<0.23"
-      - name: Install Forge Core
-        run: python -m pip install --no-deps -e .
-      - name: Unit tests
-        run: python -m unittest discover -s tests -v
-      - name: Tiny training smoke
+      - name: Validate request contract
         run: |
-          mkdir -p data
-          python -c "from pathlib import Path; Path('data/smoke.txt').write_text('Forge learns by testing ideas. ' * 12)"
-          python -m forge_core.neural.train --text data/smoke.txt --model-size tiny --steps 2 --batch-size 2 --seq-len 16 --out artifacts/smoke.pt
+          python -m compileall -q production
+          python -m unittest discover -s production -p 'test_*.py' -v
+      - name: Install Blender
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender libegl1 libgl1
+          blender --version
+      - name: Build textured cargo crate and render fixed views
+        run: |
+          blender --background --factory-startup --python-exit-code 1 --python production/build_blender.py -- --request production/requests/cargo_crate.json --out output/crate
+      - name: Validate exported GLB
+        run: python production/validate_glb.py output/crate
+      - name: Package validated production artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-cargo-crate-v1
+          path: output/crate/
+          retention-days: 30
+          if-no-files-found: error
