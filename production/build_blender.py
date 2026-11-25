@@ -100,8 +100,13 @@ def render(out, dims):
     scene = bpy.context.scene
     scene.render.engine = "CYCLES"
     scene.cycles.device = "CPU"
-    scene.cycles.samples = 16
-    scene.cycles.use_denoising = True
+    # Distribution Blender may be compiled without OpenImageDenoise.
+    # Portable CPU preview: more samples, no denoiser dependency.
+    scene.cycles.samples = 64
+    scene.cycles.use_denoising = False
+    for layer in scene.view_layers:
+        if hasattr(layer.cycles, "use_denoising"):
+            layer.cycles.use_denoising = False
     scene.render.resolution_x = scene.render.resolution_y = 512
     scene.render.resolution_percentage = 100
     scene.render.image_settings.file_format = "PNG"
