@@ -27,8 +27,9 @@ jobs:
       - name: Install Blender
         run: |
           sudo apt-get update
-          sudo apt-get install -y blender libegl1 libgl1
+          sudo apt-get install -y blender libegl1 libgl1 python3-numpy
           blender --version
+          blender --background --factory-startup --disable-autoexec --python-exit-code 1 --python-expr "import numpy; import io_scene_gltf2.blender.exp.gltf2_blender_export; print('GLB exporter preflight OK:', numpy.__version__)"
       - name: Build textured cargo crate and render fixed views
         run: |
           blender --background --factory-startup --python-exit-code 1 --python production/build_blender.py -- --request production/requests/cargo_crate.json --out output/crate
