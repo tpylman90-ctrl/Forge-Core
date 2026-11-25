@@ -1,0 +1,68 @@
+name: Forge Blender Workspace
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Registered Blender job
+        type: choice
+        options:
+          - cargo_crate
+        default: cargo_crate
+        required: true
+  push:
+    branches: [main]
+    paths:
+      - 'blender-workspace/**'
+      - '.github/workflows/blender-workspace.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forge-blender-workspace-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  blender:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      FORGE_JOB: ${{ inputs.job || 'cargo_crate' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate source and request tests
+        run: |
+          python -m compileall -q production blender-workspace
+          python -m unittest discover -s production -p 'test_*.py' -v
+      - name: Install Blender on the ephemeral worker
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y blender libegl1 libgl1
+          blender --version
+      - name: Execute headless Blender job
+        run: python blender-workspace/run_job.py --job "$FORGE_JOB" --out output/blender-workspace
+      - name: Show Blender log
+        if: always()
+        run: |
+          if test -f output/blender-workspace/blender.log; then tail -n 100 output/blender-workspace/blender.log; fi
+      - name: Upload completed model and renders
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-blender-${{ env.FORGE_JOB }}-${{ github.run_id }}
+          path: output/blender-workspace/
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-blender-diagnostics-${{ github.run_id }}
+          path: output/blender-workspace/blender.log
+          if-no-files-found: ignore
+          retention-days: 7
