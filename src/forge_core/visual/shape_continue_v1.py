@@ -48,12 +48,24 @@ def tensors(root,rows):
         family.append(int(row.get("family_split")=="heldout"))
     return TensorDataset(torch.stack(images),torch.tensor(labels),torch.tensor(params,dtype=torch.float32),torch.tensor(family))
 
-def infer(model,im,mode):
-    b=len(im); mask=torch.ones(b,4)
-    if mode=="single":
-        mask[:,1:]=0
-        im=im*mask[:,:,None,None,None]
-    return model(im,mask,torch.zeros(b,48,dtype=torch.long))[:2]
+def cache_features(model, dataset, batch_size):
+    # GroupNorm operates independently on each view. Masking cached views
+    # therefore preserves the image-only prediction for either view mode.
+    model.eval()
+    features = []
+    with torch.no_grad():
+        for images, in DataLoader(TensorDataset(dataset.tensors[0]), batch_size=batch_size):
+            _, pooled = model.image_features(images)
+            features.append(pooled)
+    return TensorDataset(torch.cat(features), *dataset.tensors[1:])
+
+def infer(model, features, mode):
+    batch, views = features.shape[:2]
+    mask = features.new_ones((batch, views))
+    if mode == "single":
+        mask[:, 1:] = 0
+    ids = torch.zeros(batch, 48, dtype=torch.long, device=features.device)
+    return model.predict_from_features(features, mask, ids)
 
 def evaluate(model,ds,batch,median):
     model.eval(); result={}
@@ -106,8 +118,25 @@ def main():
     # Only downstream geometry/classification projections are trainable.
     for name,param in model.named_parameters():
         param.requires_grad_(name.split(".")[0] in ("vision_project","fuse","category","shape"))
-    opt=torch.optim.AdamW([p for p in model.parameters() if p.requires_grad],lr=0.0002,weight_decay=1e-4)
-    train=tensors(a.data,rows["train"]);valid=tensors(a.data,rows["valid"])
+    trainable = {name: param for name, param in model.named_parameters() if param.requires_grad}
+    opt = torch.optim.AdamW(list(trainable.values()), lr=0.0002, weight_decay=1e-4)
+    train_images = tensors(a.data, rows["train"])
+    train = cache_features(model, train_images, a.batch)
+    # Verify both cached paths against the checkpoint's regular forward pass.
+    sample = train_images.tensors[0][:2]
+    with torch.no_grad():
+        _, pooled = model.image_features(sample)
+        for mode in ("single", "all_views"):
+            mask = sample.new_ones(sample.shape[:2])
+            if mode == "single":
+                mask[:, 1:] = 0
+            inputs = sample * mask[:, :, None, None, None]
+            expected = model(inputs, mask, torch.zeros(len(sample), 48, dtype=torch.long))[:2]
+            for actual, reference in zip(infer(model, pooled, mode), expected):
+                torch.testing.assert_close(actual, reference)
+    del train_images
+    valid = cache_features(model, tensors(a.data, rows["valid"]), a.batch)
+    updates = 0
     median=train.tensors[2].median(dim=0).values
     baseline=evaluate(model,valid,a.batch,median);best=score(baseline);selected=0;stale=0;curve=[]
     save(a.out/"selected.pt",model,opt,0,parent_sha,msha,a.seed,baseline,ck["vocabulary"])
@@ -121,9 +150,14 @@ def main():
             logits,pred=infer(model,im,mode)
             active=active_parameter_mask(lab)
             loss=((pred-params).abs()*active).sum()/active.sum()+0.35*nn.functional.cross_entropy(logits,lab)
-            opt.zero_grad(set_to_none=True);loss.backward()
-            nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad],1.)
-            opt.step();losses.append(float(loss.detach()))
+            if not torch.isfinite(loss):
+                raise RuntimeError("Nonfinite CPU visual training loss")
+            opt.zero_grad(set_to_none=True)
+            loss.backward()
+            nn.utils.clip_grad_norm_(list(trainable.values()), 1., error_if_nonfinite=True)
+            opt.step()
+            updates += 1
+            losses.append(float(loss.detach()))
         val=evaluate(model,valid,a.batch,median);v=score(val)
         retain=all(val[m]["all"]["category_accuracy"]>=baseline[m]["all"]["category_accuracy"]-0.01 and val[m]["all"]["mae"]<=baseline[m]["all"]["mae"]*1.01 for m in ("single","all_views"))
         improved=retain and v<best-0.0001
@@ -132,19 +166,26 @@ def main():
             save(a.out/"selected.pt",model,opt,epoch,parent_sha,msha,a.seed,val,ck["vocabulary"])
         else: stale+=1
         save(a.out/"latest.pt",model,opt,epoch,parent_sha,msha,a.seed,val,ck["vocabulary"])
-        curve.append({"epoch":epoch,"loss":sum(losses)/len(losses),"validation":val,"retention_pass":retain,"selected":improved})
+        curve.append({"epoch":epoch,"optimizer_updates":updates,"loss":sum(losses)/len(losses),"validation":val,"retention_pass":retain,"selected":improved})
         (a.out/"curve.json").write_text(json.dumps(curve,indent=2))
         print(json.dumps({"event":"epoch",**curve[-1]}),flush=True)
         if stale>=3: break
     # Test is loaded only after the selection is locked.
-    test=tensors(a.data,rows["test"])
-    model.load_state_dict(ck["model"]);parent_test=evaluate(model,test,a.batch,median)
-    chosen=torch.load(a.out/"selected.pt",map_location="cpu",weights_only=True)
+    chosen = torch.load(a.out/"selected.pt", map_location="cpu", weights_only=True)
+    changed = sorted(name for name, tensor in chosen["model"].items()
+                     if not torch.equal(tensor, ck["model"][name]))
+    if set(changed) - trainable.keys():
+        raise RuntimeError("Protected visual checkpoint tensors changed")
+    model.load_state_dict(ck["model"])
+    test = cache_features(model, tensors(a.data, rows["test"]), a.batch)
+    parent_test = evaluate(model, test, a.batch, median)
     model.load_state_dict(chosen["model"]);candidate_test=evaluate(model,test,a.batch,median)
-    gate=selected>0 and all(candidate_test[m]["heldout"]["mae"]<min(parent_test[m]["heldout"]["mae"],candidate_test[m]["heldout"]["median_mae"]) and candidate_test[m]["heldout"]["category_accuracy"]>=parent_test[m]["heldout"]["category_accuracy"]-0.01 for m in ("single","all_views"))
+    gate=selected>0 and bool(changed) and all(candidate_test[m]["heldout"]["mae"]<min(parent_test[m]["heldout"]["mae"],candidate_test[m]["heldout"]["median_mae"]) and candidate_test[m]["heldout"]["category_accuracy"]>=parent_test[m]["heldout"]["category_accuracy"]-0.01 for m in ("single","all_views"))
     report={"status":"research_only","seed":a.seed,"source_run":44011991242,"parent_checkpoint_sha256":parent_sha,"dataset_manifest_sha256":msha,
         "selected_epoch":selected,"epochs_attempted":len(curve),"optimizer_reset":True,"parent_validation":baseline,"parent_test":parent_test,"candidate_test":candidate_test,
-        "heldout_gate_pass":gate,"selected_sha256":sha(a.out/"selected.pt"),"promotion":"none; require multi-seed independent evidence",
+        "heldout_gate_pass":gate,"weights_changed_from_parent":bool(changed),"changed_tensors":changed,
+        "protected_tensors_unchanged":True,"optimizer_updates":updates,"selected_optimizer_updates":curve[selected-1]["optimizer_updates"] if selected else 0,
+        "latest_sha256":sha(a.out/"latest.pt"),"selected_sha256":sha(a.out/"selected.pt"),"promotion":"none; require multi-seed independent evidence",
         "limitations":["Same synthetic V5 family and historical holdout; not a new independent real-world test","No mesh reconstruction or texture learning","No language checkpoint used","Selection uses validation only"]}
     (a.out/"metrics.json").write_text(json.dumps(report,indent=2)+"\n")
     print(json.dumps(report,indent=2),flush=True)
