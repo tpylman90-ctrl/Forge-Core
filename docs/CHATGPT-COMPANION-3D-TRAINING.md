@@ -40,14 +40,15 @@ Use DINOv2 as a candidate visual representation, not as a 3D generator. Keep all
 
 Before training, audit and disable obsolete language/assistant training triggers, verify the Kaggle GPU runtime and durable artifact export, and make a small end-to-end dataset smoke run. The current repository says this trigger audit is not yet certified; do not launch a legacy workflow.
 
-Then use bounded, separately checkpointed runs:
+The prior Kaggle setup had a 30 GPU-hour allowance; verify the remaining balance before scheduling. If the 30 hours remain, reserve them as a gated budget rather than one long run:
 
-1. **Baseline and runtime check (up to 1 GPU hour):** compare a simple image baseline, frozen DINOv2 features, and TripoSR inference on a small fixed set. Record wall time, peak memory, output validity and baseline metrics.
-2. **Frozen encoder study (up to 2 GPU hours):** train only the structured geometry decoder on the licensed synthetic training split. Compare against the no-image median baseline and the existing random-init result.
-3. **Adapter study (up to 4 GPU hours):** only if the frozen encoder beats those baselines, compare a small adapter/partial fine-tune under the same data, compute and evaluation protocol.
-4. **Repeat and refine:** spend remaining available hours only on a measured gain, independent seeds, a stronger held-out family test, or a targeted failure analysis. Keep an explicit reserve for reruns and artifacts.
+1. **Runtime and baseline — 2 hours:** verify dataset generation, GPU dependencies, checkpoint/export recovery, then compare a small image baseline, frozen DINOv2 features and TripoSR inference on a fixed set.
+2. **Frozen visual encoder — 8 hours:** train the structured geometry decoder on licensed synthetic data, compare against no-image and prior visual baselines, and repeat promising settings with independent seeds.
+3. **Adapter study — 8 hours:** only if frozen DINOv2 gives repeatable held-out improvement, test a small adapter or partial fine-tune with the same data and metrics.
+4. **Geometry and asset quality — 6 hours:** only after image-conditioned geometry improves, test targeted improvements for editable part construction, Blender reconstruction, materials or revision handling.
+5. **Independent validation reserve — 6 hours:** rerun the best candidate, test unseen object families, validate exports and preserve checkpoint lineage. Use this reserve for failures or repeatability checks rather than starting an unrelated model.
 
-These are budget ceilings for a proposed first tranche, not guaranteed runtime or a training claim. Confirm available Kaggle quota at run time. Stop early on runtime incompatibility, rights uncertainty, invalid outputs or sustained regression. Do not consume the quota just to exhaust it.
+These are phase ceilings, not required minimums. Release later allocations only when the prior phase produces valid artifacts and a measured gain. Confirm the actual Kaggle balance at run time. Stop early on runtime incompatibility, rights uncertainty, invalid outputs or sustained regression. Do not consume hours just to exhaust the quota.
 
 ## Evaluation gates
 
