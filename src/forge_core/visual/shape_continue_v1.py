@@ -101,9 +101,14 @@ def main():
     p.add_argument("--data",type=Path,required=True);p.add_argument("--parent",type=Path,required=True)
     p.add_argument("--out",type=Path,required=True);p.add_argument("--seed",type=int,required=True)
     p.add_argument("--epochs",type=int,default=12);p.add_argument("--batch",type=int,default=32)
+    p.add_argument("--validation-only", action="store_true", help="Tune on validation without evaluating the test split")
     a=p.parse_args()
     if not 1<=a.epochs<=20: raise ValueError("Bounded epoch budget")
     torch.set_num_threads(2);torch.manual_seed(a.seed);random.seed(a.seed)
+    if a.validation_only:
+        patience = 6
+    else:
+        patience = 3
     a.out.mkdir(parents=True,exist_ok=False)
     manifest,rows=verified_dataset(a.data); msha=sha(a.data/"dataset_manifest.json")
     parent_file=a.parent/"checkpoint.pt"; parent_sha=sha(parent_file)
@@ -144,6 +149,8 @@ def main():
     generator=torch.Generator().manual_seed(a.seed+917)
     loader=DataLoader(train,batch_size=a.batch,shuffle=True,generator=generator)
     for epoch in range(1,a.epochs+1):
+        if a.validation_only and epoch > 12:
+            opt.param_groups[0]["lr"] = 0.0001
         model.train(); losses=[]
         for i,(im,lab,params,_) in enumerate(loader):
             mode="single" if (epoch+i)%2 else "all_views"
@@ -166,23 +173,26 @@ def main():
             save(a.out/"selected.pt",model,opt,epoch,parent_sha,msha,a.seed,val,ck["vocabulary"])
         else: stale+=1
         save(a.out/"latest.pt",model,opt,epoch,parent_sha,msha,a.seed,val,ck["vocabulary"])
-        curve.append({"epoch":epoch,"optimizer_updates":updates,"loss":sum(losses)/len(losses),"validation":val,"retention_pass":retain,"selected":improved})
+        curve.append({"epoch":epoch,"optimizer_updates":updates,"learning_rate":opt.param_groups[0]["lr"],"loss":sum(losses)/len(losses),"validation":val,"retention_pass":retain,"selected":improved})
         (a.out/"curve.json").write_text(json.dumps(curve,indent=2))
         print(json.dumps({"event":"epoch",**curve[-1]}),flush=True)
-        if stale>=3: break
+        if stale >= patience: break
     # Test is loaded only after the selection is locked.
     chosen = torch.load(a.out/"selected.pt", map_location="cpu", weights_only=True)
     changed = sorted(name for name, tensor in chosen["model"].items()
                      if not torch.equal(tensor, ck["model"][name]))
     if set(changed) - trainable.keys():
         raise RuntimeError("Protected visual checkpoint tensors changed")
-    model.load_state_dict(ck["model"])
-    test = cache_features(model, tensors(a.data, rows["test"]), a.batch)
-    parent_test = evaluate(model, test, a.batch, median)
-    model.load_state_dict(chosen["model"]);candidate_test=evaluate(model,test,a.batch,median)
-    gate=selected>0 and bool(changed) and all(candidate_test[m]["heldout"]["mae"]<min(parent_test[m]["heldout"]["mae"],candidate_test[m]["heldout"]["median_mae"]) and candidate_test[m]["heldout"]["category_accuracy"]>=parent_test[m]["heldout"]["category_accuracy"]-0.01 for m in ("single","all_views"))
+    parent_test = candidate_test = gate = None
+    if not a.validation_only:
+        model.load_state_dict(ck["model"])
+        test = cache_features(model, tensors(a.data, rows["test"]), a.batch)
+        parent_test = evaluate(model, test, a.batch, median)
+        model.load_state_dict(chosen["model"])
+        candidate_test = evaluate(model, test, a.batch, median)
+        gate=selected>0 and bool(changed) and all(candidate_test[m]["heldout"]["mae"]<min(parent_test[m]["heldout"]["mae"],candidate_test[m]["heldout"]["median_mae"]) and candidate_test[m]["heldout"]["category_accuracy"]>=parent_test[m]["heldout"]["category_accuracy"]-0.01 for m in ("single","all_views"))
     report={"status":"research_only","seed":a.seed,"source_run":44011991242,"parent_checkpoint_sha256":parent_sha,"dataset_manifest_sha256":msha,
-        "selected_epoch":selected,"epochs_attempted":len(curve),"optimizer_reset":True,"parent_validation":baseline,"parent_test":parent_test,"candidate_test":candidate_test,
+        "selected_epoch":selected,"validation_only":a.validation_only,"selected_validation":chosen["validation"],"epochs_attempted":len(curve),"optimizer_reset":True,"parent_validation":baseline,"parent_test":parent_test,"candidate_test":candidate_test,
         "heldout_gate_pass":gate,"weights_changed_from_parent":bool(changed),"changed_tensors":changed,
         "protected_tensors_unchanged":True,"optimizer_updates":updates,"selected_optimizer_updates":curve[selected-1]["optimizer_updates"] if selected else 0,
         "latest_sha256":sha(a.out/"latest.pt"),"selected_sha256":sha(a.out/"selected.pt"),"promotion":"none; require multi-seed independent evidence",
