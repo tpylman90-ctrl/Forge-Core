@@ -59,7 +59,7 @@ def scan_sources(shard_count, cache):
                 if not name.endswith(".json") or m.size>1<<20: continue
                 meta=json.loads(tf.extractfile(m).read())
                 ident=str(meta.get("object_id",""))
-                if not ident or ident in seen_ids or not accepted_license(meta.get("license")):
+                if not ident or ident in seen_ids or not accepted_license(meta.get("license_id")):
                     continue
                 meshname=name[:-5]+".glb"
                 glb=members.get(meshname)
