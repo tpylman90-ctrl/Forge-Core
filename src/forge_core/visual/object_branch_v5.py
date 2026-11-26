@@ -104,18 +104,28 @@ class ObjectConceptNetV5(nn.Module):
         self.text=nn.Sequential(nn.Linear(64,96),nn.GELU(),nn.Linear(96,64),nn.GELU())
         self.fuse=nn.Sequential(nn.Linear(194,128),nn.GELU(),nn.Linear(128,128),nn.GELU())
         self.category=nn.Linear(128,len(CATEGORIES)); self.shape=nn.Linear(128,PARAM_DIM)
-    def forward(self,images,view_mask,ids):
-        b=images.size(0)
-        maps=self.backbone(images.reshape(b*4,4,SIZE,SIZE))
-        vf=self.vision_project(self.global_pool(maps).flatten(1)).reshape(b,4,128)
+    def image_features(self, images):
+        batch, views = images.shape[:2]
+        maps = self.backbone(images.reshape(batch * views, 4, SIZE, SIZE))
+        pooled = self.global_pool(maps).flatten(1).reshape(batch, views, -1)
+        return maps, pooled
+
+    def predict_from_features(self, pooled, view_mask, ids):
+        vf = self.vision_project(pooled.flatten(0, 1)).reshape(*pooled.shape[:2], 128)
         vm=view_mask.unsqueeze(-1); vision=(vf*vm).sum(1)/vm.sum(1).clamp(min=1)
         tm=(ids!=0).float().unsqueeze(-1); emb=self.embedding(ids)
         pooled=(emb*tm).sum(1)/tm.sum(1).clamp(min=1); text=self.text(pooled)
         flags=torch.stack((view_mask.sum(1).gt(0).float(),tm.sum((1,2)).gt(0).float()),1)
         fused=self.fuse(torch.cat((vision,text,flags),1))
-        part=nn.functional.interpolate(self.part_head(maps),size=(SIZE,SIZE),mode="bilinear",align_corners=False)
-        part=part.reshape(b,4,5,SIZE,SIZE)
-        return self.category(fused),torch.sigmoid(self.shape(fused)),part
+        return self.category(fused), torch.sigmoid(self.shape(fused))
+
+    def forward(self, images, view_mask, ids):
+        maps, pooled = self.image_features(images)
+        logits, shape = self.predict_from_features(pooled, view_mask, ids)
+        part = nn.functional.interpolate(
+            self.part_head(maps), size=(SIZE, SIZE), mode="bilinear", align_corners=False
+        )
+        return logits, shape, part.reshape(len(images), 4, 5, SIZE, SIZE)
 
 
 def active_parameter_mask(labels):
