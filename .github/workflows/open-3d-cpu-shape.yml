@@ -34,7 +34,7 @@ jobs:
           python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
           python -m pip install pillow
           python -m pip install --no-deps -e .
-          python -m py_compile src/forge_core/visual/shape_continue_v1.py
+          python -m py_compile src/forge_core/visual/object_branch_v5.py src/forge_core/visual/shape_continue_v1.py
       - name: Restore exact V5 visual dataset
         uses: actions/download-artifact@v4
         with:
@@ -76,10 +76,10 @@ jobs:
           from pathlib import Path
           rows=[json.loads(p.read_text()) for p in Path("reports").glob("**/metrics.json")]
           if sorted(r["seed"] for r in rows)!=[43,53,73]: raise SystemExit("Incomplete reports")
-          lines=["# Open 3D CPU continuation","", "| Seed | Selected epoch | Single-view heldout MAE parent / candidate | Four-view heldout MAE parent / candidate | Gate |","|---|---|---|---|---|"]
+          lines=["# Open 3D CPU continuation","", "| Seed | Selected epoch | Single-view heldout MAE parent / candidate | Four-view heldout MAE parent / candidate | Selected updates | Weights changed | Gate |","|---|---|---|---|---|---|---|"]
           for r in sorted(rows,key=lambda x:x["seed"]):
               def pair(m): return f'{r["parent_test"][m]["heldout"]["mae"]:.5f} / {r["candidate_test"][m]["heldout"]["mae"]:.5f}'
-              lines.append(f'| {r["seed"]} | {r["selected_epoch"]} | {pair("single")} | {pair("all_views")} | {r["heldout_gate_pass"]} |')
+              lines.append(f'| {r["seed"]} | {r["selected_epoch"]} | {pair("single")} | {pair("all_views")} | {r["selected_optimizer_updates"]} | {r["weights_changed_from_parent"]} | {r["heldout_gate_pass"]} |')
           lines += ["","Historical synthetic holdout only; independent external evaluation still required. No promotion."]
           Path("summary.md").write_text("\n".join(lines)+"\n")
           print("\n".join(lines))
