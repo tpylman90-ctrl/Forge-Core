@@ -98,6 +98,13 @@ def evaluate(net,loader,device):
                 base[m].extend(iou(hull,y).cpu().tolist())
     return {m:{"surface_iou":float(np.mean(total[m])),"visual_hull_iou":float(np.mean(base[m])),"count":len(total[m])} for m in total}
 
+def model_sha256(net):
+    digest = hashlib.sha256()
+    for name, tensor in net.state_dict().items():
+        digest.update(name.encode("utf-8") + b"\0")
+        digest.update(tensor.detach().cpu().contiguous().numpy().tobytes())
+    return digest.hexdigest()
+
 def checkpoint(path,net,opt,seed,epoch,metrics,manifest):
     tmp=path.with_suffix(".tmp")
     torch.save({"architecture":"CADSurface32-v1","model":net.state_dict(),"optimizer":opt.state_dict(),
@@ -115,9 +122,13 @@ def run(data,root,seed,epochs,batch,manifest):
         return DataLoader(TensorDataset(x,y),batch_size=batch,shuffle=shuffle,pin_memory=True,
                           generator=torch.Generator().manual_seed(seed))
     train,valid,test=loader("train",True),loader("valid"),loader("test")
+    torch.cuda.reset_peak_memory_stats(device)
     initial=evaluate(net,valid,device)
+    initial_model_sha256 = model_sha256(net)
+    updates = 0
     def score(m): return (m["single"]["surface_iou"]+m["multi"]["surface_iou"])/2
     best=score(initial);selected=0;stale=0;curve=[];start=time.monotonic()
+    checkpoint(out/"initial.pt",net,opt,seed,0,initial,manifest)
     checkpoint(out/"selected.pt",net,opt,seed,0,initial,manifest)
     for epoch in range(1,epochs+1):
         net.train();n=0;loss_sum=0
@@ -128,6 +139,7 @@ def run(data,root,seed,epochs,batch,manifest):
             loss=nn.functional.binary_cross_entropy_with_logits(pred,y,pos_weight=torch.tensor(5.,device=device))
             if not torch.isfinite(loss): raise RuntimeError("Nonfinite training loss")
             loss.backward();nn.utils.clip_grad_norm_(net.parameters(),1.);opt.step()
+            updates += 1
             loss_sum+=float(loss.detach())*len(x);n+=len(x)
         val=evaluate(net,valid,device);s=score(val)
         if s>best+0.001:
@@ -135,17 +147,23 @@ def run(data,root,seed,epochs,batch,manifest):
             checkpoint(out/"selected.pt",net,opt,seed,epoch,val,manifest)
         else: stale+=1
         checkpoint(out/"latest.pt",net,opt,seed,epoch,val,manifest)
-        curve.append({"epoch":epoch,"loss":loss_sum/n,"validation":val,"seconds":time.monotonic()-start})
+        curve.append({"epoch":epoch,"updates":updates,"loss":loss_sum/n,"validation":val,"seconds":time.monotonic()-start})
         (out/"curve.json").write_text(json.dumps(curve,indent=2))
         print(json.dumps({"seed":seed,**curve[-1]}),flush=True)
         if stale>=4 or time.monotonic()-start>1800: break
     chosen=torch.load(out/"selected.pt",map_location=device,weights_only=True)
     net.load_state_dict(chosen["model"])
+    selected_model_sha256 = model_sha256(net)
     result=evaluate(net,test,device)
     report={"seed":seed,"selected_epoch":selected,"epochs_attempted":len(curve),"initial_validation":initial,
             "selected_validation":chosen["metrics"],"test":result,"checkpoint_sha256":sha(out/"selected.pt"),
+            "initial_checkpoint_sha256":sha(out/"initial.pt"),
+            "initial_model_sha256":initial_model_sha256,"selected_model_sha256":selected_model_sha256,
+            "weights_changed_from_initial":selected_model_sha256 != initial_model_sha256,
+            "updates":updates,"batch_size":batch,"epoch_limit":epochs,
+            "peak_cuda_allocated_bytes":torch.cuda.max_memory_allocated(device),
             "dataset_sha256":manifest,"gpu":torch.cuda.get_device_name(0),"seconds":time.monotonic()-start,
-            "status":"research_only","gate":selected>0 and all(result[m]["surface_iou"]>result[m]["visual_hull_iou"] for m in result),
+            "status":"research_only","gate":selected>0 and selected_model_sha256 != initial_model_sha256 and all(result[m]["surface_iou"]>result[m]["visual_hull_iou"] for m in result),
             "limitations":"Synthetic surface voxels, fixed 18 CAD templates, correlated families; no mesh, texture, or arbitrary-photo reconstruction."}
     (out/"metrics.json").write_text(json.dumps(report,indent=2))
     print(json.dumps(report),flush=True)
