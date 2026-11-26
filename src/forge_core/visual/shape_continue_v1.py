@@ -77,11 +77,11 @@ def evaluate(model,ds,batch,median):
 def score(metrics):
     return sum(metrics[m]["all"]["mae"] for m in ("single","all_views"))/2
 
-def save(path,model,opt,epoch,parent_sha,manifest_sha,seed,metrics):
+def save(path,model,opt,epoch,parent_sha,manifest_sha,seed,metrics,vocab):
     temp=path.with_suffix(".tmp")
     torch.save({"schema":1,"architecture":"ObjectConceptNetV5","model":model.state_dict(),"optimizer":opt.state_dict(),
                 "epoch":epoch,"seed":seed,"parent_sha256":parent_sha,"dataset_manifest_sha256":manifest_sha,
-                "validation":metrics,"torch_rng":torch.get_rng_state(),"scope":"image_only_shape_continuation"},temp)
+                "validation":metrics,"vocabulary":vocab,"torch_rng":torch.get_rng_state(),"scope":"image_only_shape_continuation"},temp)
     temp.replace(path)
 
 def main():
@@ -110,7 +110,7 @@ def main():
     train=tensors(a.data,rows["train"]);valid=tensors(a.data,rows["valid"])
     median=train.tensors[2].median(dim=0).values
     baseline=evaluate(model,valid,a.batch,median);best=score(baseline);selected=0;stale=0;curve=[]
-    save(a.out/"selected.pt",model,opt,0,parent_sha,msha,a.seed,baseline)
+    save(a.out/"selected.pt",model,opt,0,parent_sha,msha,a.seed,baseline,ck["vocabulary"])
     print(json.dumps({"event":"parent_validation","metrics":baseline}),flush=True)
     generator=torch.Generator().manual_seed(a.seed+917)
     loader=DataLoader(train,batch_size=a.batch,shuffle=True,generator=generator)
@@ -129,9 +129,9 @@ def main():
         improved=retain and v<best-0.0001
         if improved:
             best=v;selected=epoch;stale=0
-            save(a.out/"selected.pt",model,opt,epoch,parent_sha,msha,a.seed,val)
+            save(a.out/"selected.pt",model,opt,epoch,parent_sha,msha,a.seed,val,ck["vocabulary"])
         else: stale+=1
-        save(a.out/"latest.pt",model,opt,epoch,parent_sha,msha,a.seed,val)
+        save(a.out/"latest.pt",model,opt,epoch,parent_sha,msha,a.seed,val,ck["vocabulary"])
         curve.append({"epoch":epoch,"loss":sum(losses)/len(losses),"validation":val,"retention_pass":retain,"selected":improved})
         (a.out/"curve.json").write_text(json.dumps(curve,indent=2))
         print(json.dumps({"event":"epoch",**curve[-1]}),flush=True)
