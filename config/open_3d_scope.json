@@ -1,6 +1,26 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "mission": "Open, accessible professional-quality 3D asset creation",
+  "product_role": "AI-driven 3D production aid that works alongside ChatGPT and compatible assistants",
+  "collaboration": {
+    "assistant_handles": [
+      "conversation",
+      "open_ended_reasoning",
+      "translating_creator_intent_into_structured_requests"
+    ],
+    "forge_handles": [
+      "image_and_shape_analysis",
+      "editable_geometry",
+      "surface_topology",
+      "materials_and_textures",
+      "blender_execution",
+      "inspection_and_revision",
+      "asset_export"
+    ],
+    "interface_status": "planned",
+    "current_plugin_or_mcp_integration": false
+  },
+  "training_objective": "Image-conditioned, editable 3D asset construction and measurable refinement; no general language-model or dialogue training",
   "active_scope": [
     "geometry_analysis",
     "image_shape_understanding",
@@ -9,20 +29,33 @@
     "materials_textures",
     "inspection",
     "optimization",
-    "asset_export"
+    "asset_export",
+    "assistant_tool_integration"
   ],
   "backend": "blender",
   "future_backend": "ai_native_geometry_engine",
   "lanes": {
     "cpu": {
-      "role": "geometry analysis and bounded baselines"
+      "role": "dataset validation, geometry inspection, deterministic tools, bounded baselines"
     },
     "gpu": {
-      "role": "visual reconstruction and materials"
+      "role": "image and depth understanding, image-conditioned geometry, reconstruction and materials",
+      "first_candidates": [
+        "frozen DINOv2 visual encoder with structured geometry decoder",
+        "TripoSR as an independent single-image reconstruction baseline"
+      ]
     },
     "experimental": {
-      "role": "isolated geometry representations and algorithms"
+      "role": "isolated visual encoders, teacher comparisons, geometry representations and algorithms"
     }
+  },
+  "training_gates": {
+    "licensed_data_only": true,
+    "whole_object_family_holdouts": true,
+    "compare_no_image_baseline": true,
+    "measure_editability_and_export": true,
+    "automatic_checkpoint_promotion": false,
+    "legacy_language_training": false
   },
   "legacy": {
     "branch": "archive/pre-open-3d-2026-11-25",
@@ -30,7 +63,6 @@
     "active_training": false,
     "workflow_deactivation_verified": false
   },
-  "automatic_checkpoint_promotion": false,
   "public_release_requires_rights_review": true,
   "mcp_status": "planned"
 }
