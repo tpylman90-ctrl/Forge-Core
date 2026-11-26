@@ -1,0 +1,91 @@
+name: Forge Open 3D CPU validation experiment
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/open-3d-cpu-validation.yml'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  train:
+    name: Image-only visual checkpoint seed ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      max-parallel: 3
+      matrix:
+        seed: [43, 53, 73]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU visual dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install pillow
+          python -m pip install --no-deps -e .
+          python -m py_compile src/forge_core/visual/object_branch_v5.py src/forge_core/visual/shape_continue_v1.py
+      - name: Restore exact V5 visual dataset
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-object-data-v5-44011991242
+          run-id: 44011991242
+          github-token: ${{ github.token }}
+          path: dataset
+      - name: Restore original visual checkpoint for this seed
+        uses: actions/download-artifact@v4
+        with:
+          name: forge-object-branch-v5-seed${{ matrix.seed }}-44011991242
+          run-id: 44011991242
+          github-token: ${{ github.token }}
+          path: parent
+      - name: Train with per-epoch validation and checkpoint retention
+        run: |
+          python -m forge_core.visual.shape_continue_v1 --data dataset --parent parent --out output --seed "${{ matrix.seed }}" --epochs 20 --batch 32 --validation-only
+      - name: Save candidates and training evidence even if later steps fail
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: forge-open3d-cpu-validation-seed${{ matrix.seed }}-${{ github.run_id }}
+          path: output/
+          if-no-files-found: warn
+          retention-days: 90
+  summary:
+    needs: train
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: forge-open3d-cpu-validation-seed*-${{ github.run_id }}
+          path: reports
+      - name: Summarize validation-only candidates
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          rows=[json.loads(p.read_text()) for p in Path("reports").glob("**/metrics.json")]
+          if sorted(r["seed"] for r in rows)!=[43,53,73]: raise SystemExit("Incomplete reports")
+          lines=["# Open 3D CPU continuation","", "| Seed | Selected epoch | Single-view validation MAE parent / candidate | Four-view validation MAE parent / candidate | Selected updates | Weights changed |","|---|---|---|---|---|---|"]
+          for r in sorted(rows,key=lambda x:x["seed"]):
+              def pair(m): return f'{r["parent_validation"][m]["all"]["mae"]:.5f} / {r["selected_validation"][m]["all"]["mae"]:.5f}'
+              lines.append(f'| {r["seed"]} | {r["selected_epoch"]} | {pair("single")} | {pair("all_views")} | {r["selected_optimizer_updates"]} | {r["weights_changed_from_parent"]} |')
+          lines += ["","Validation-only experiment. Independent evaluation is required before promotion."]
+          Path("summary.md").write_text("\n".join(lines)+"\n")
+          print("\n".join(lines))
+          PY
+          cat summary.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: forge-open3d-cpu-validation-summary-${{ github.run_id }}
+          path: summary.md
+          retention-days: 90
