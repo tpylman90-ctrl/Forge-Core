@@ -112,7 +112,7 @@ def checkpoint(path,net,opt,seed,epoch,metrics,manifest):
                 "cuda_rng":torch.cuda.get_rng_state_all() if next(net.parameters()).is_cuda else [],"no_language_weights":True},tmp)
     tmp.replace(path)
 
-def run(data,root,seed,epochs,batch,manifest,*,device="cuda",limitations=None):
+def run(data,root,seed,epochs,batch,manifest,*,device="cuda",limitations=None,objective=None):
     device = torch.device(device)
     on_cuda = device.type == "cuda"
     torch.manual_seed(seed)
@@ -140,7 +140,8 @@ def run(data,root,seed,epochs,batch,manifest,*,device="cuda",limitations=None):
             x=x.to(device,non_blocking=True).float();y=y.to(device,non_blocking=True).float()
             opt.zero_grad(set_to_none=True)
             pred=net(x,mode_input(x,"single" if (epoch+i)%2 else "multi"))
-            loss=nn.functional.binary_cross_entropy_with_logits(pred,y,pos_weight=torch.tensor(5.,device=device))
+            loss = (objective(pred, y) if objective is not None else
+                    nn.functional.binary_cross_entropy_with_logits(pred,y,pos_weight=torch.tensor(5.,device=device)))
             if not torch.isfinite(loss): raise RuntimeError("Nonfinite training loss")
             loss.backward();nn.utils.clip_grad_norm_(net.parameters(),1.);opt.step()
             updates += 1
