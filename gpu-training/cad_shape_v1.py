@@ -109,20 +109,24 @@ def checkpoint(path,net,opt,seed,epoch,metrics,manifest):
     tmp=path.with_suffix(".tmp")
     torch.save({"architecture":"CADSurface32-v1","model":net.state_dict(),"optimizer":opt.state_dict(),
                 "seed":seed,"epoch":epoch,"metrics":metrics,"dataset_sha256":manifest,"torch_rng":torch.get_rng_state(),
-                "cuda_rng":torch.cuda.get_rng_state_all(),"no_language_weights":True},tmp)
+                "cuda_rng":torch.cuda.get_rng_state_all() if next(net.parameters()).is_cuda else [],"no_language_weights":True},tmp)
     tmp.replace(path)
 
-def run(data,root,seed,epochs,batch,manifest):
-    torch.manual_seed(seed);torch.cuda.manual_seed_all(seed)
-    device=torch.device("cuda")
+def run(data,root,seed,epochs,batch,manifest,*,device="cuda",limitations=None):
+    device = torch.device(device)
+    on_cuda = device.type == "cuda"
+    torch.manual_seed(seed)
+    if on_cuda:
+        torch.cuda.manual_seed_all(seed)
     out=root/f"seed-{seed}";out.mkdir(exist_ok=False)
     net=Net().to(device);opt=torch.optim.AdamW(net.parameters(),lr=.001)
     def loader(split,shuffle=False):
         x,y,_=data[split]
-        return DataLoader(TensorDataset(x,y),batch_size=batch,shuffle=shuffle,pin_memory=True,
+        return DataLoader(TensorDataset(x,y),batch_size=batch,shuffle=shuffle,pin_memory=on_cuda,
                           generator=torch.Generator().manual_seed(seed))
     train,valid,test=loader("train",True),loader("valid"),loader("test")
-    torch.cuda.reset_peak_memory_stats(device)
+    if on_cuda:
+        torch.cuda.reset_peak_memory_stats(device)
     initial=evaluate(net,valid,device)
     initial_model_sha256 = model_sha256(net)
     updates = 0
@@ -161,10 +165,10 @@ def run(data,root,seed,epochs,batch,manifest):
             "initial_model_sha256":initial_model_sha256,"selected_model_sha256":selected_model_sha256,
             "weights_changed_from_initial":selected_model_sha256 != initial_model_sha256,
             "updates":updates,"batch_size":batch,"epoch_limit":epochs,
-            "peak_cuda_allocated_bytes":torch.cuda.max_memory_allocated(device),
-            "dataset_sha256":manifest,"gpu":torch.cuda.get_device_name(0),"seconds":time.monotonic()-start,
+            "peak_cuda_allocated_bytes":torch.cuda.max_memory_allocated(device) if on_cuda else None,
+            "dataset_sha256":manifest,"device":device.type,"gpu":torch.cuda.get_device_name(0) if on_cuda else None,"seconds":time.monotonic()-start,
             "status":"research_only","gate":selected>0 and selected_model_sha256 != initial_model_sha256 and all(result[m]["surface_iou"]>result[m]["visual_hull_iou"] for m in result),
-            "limitations":"Synthetic surface voxels, fixed 18 CAD templates, correlated families; no mesh, texture, or arbitrary-photo reconstruction."}
+            "limitations":limitations or "Synthetic surface voxels, fixed 18 CAD templates, correlated families; no mesh, texture, or arbitrary-photo reconstruction."}
     (out/"metrics.json").write_text(json.dumps(report,indent=2))
     print(json.dumps(report),flush=True)
     return report
