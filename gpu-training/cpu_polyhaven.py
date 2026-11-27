@@ -24,8 +24,8 @@ LIMIT = 48 * 1024 * 1024
 def fetch(url, limit=LIMIT):
     parsed = urlparse(url)
     host = parsed.hostname or ""
-    if parsed.scheme != "https" or not host.endswith(".polyhaven.com"):
-        raise ValueError("Unexpected Poly Haven download host")
+    if parsed.scheme != "https" or host not in {"api.polyhaven.com", "dl.polyhaven.org", "cdn.polyhaven.com"}:
+        raise ValueError(f"Unexpected Poly Haven download host: {host}")
     request = Request(url, headers={"User-Agent": "Forge-Core-CPU-Shape-Research"})
     with urlopen(request, timeout=30) as response:
         data = response.read(limit + 1)
