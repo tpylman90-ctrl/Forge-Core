@@ -1,0 +1,42 @@
+name: Forge CPU Poly Haven shape diversity
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/cpu-polyhaven.yml', 'gpu-training/cpu_polyhaven.py']
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU geometry and training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy trimesh
+          curl --fail --silent --show-error --retry 2 --max-time 30 \
+            https://raw.githubusercontent.com/tpylman90-ctrl/Native-model-forge/c2f050a54418d69a8ddc082d10110fb4d55e985d/tools/generate_forge_basics.py \
+            --output "$RUNNER_TEMP/generate_forge_basics.py"
+      - name: Compare matched CPU runs on a Poly Haven holdout
+        run: |
+          python -m py_compile gpu-training/{cad_shape_v1,scaled_cad_v2,cpu_polyhaven}.py
+          python -u gpu-training/cpu_polyhaven.py --generator "$RUNNER_TEMP/generate_forge_basics.py" --out results
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: forge-cpu-polyhaven-${{ github.run_id }}
+          path: |
+            results/**/*.json
+            results/**/*.pt
+          retention-days: 90
+          if-no-files-found: warn
