@@ -1,0 +1,38 @@
+name: Forge open structure training
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/train-open-structure.yml', 'gpu-training/train_open_structure.py']
+permissions:
+  contents: read
+jobs:
+  train:
+    name: Open structure seed ${{ matrix.seed }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        seed: [43, 53, 73]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU training dependencies
+        run: |
+          python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install numpy trimesh
+      - name: Train and test open structures
+        run: python -u gpu-training/train_open_structure.py --seed "${{ matrix.seed }}" --out output
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: forge-open-structure-seed-${{ matrix.seed }}
+          path: |
+            output/**/*.json
+            output/**/*.pt
+            output/**/*.glb
+          retention-days: 90
+          if-no-files-found: warn
