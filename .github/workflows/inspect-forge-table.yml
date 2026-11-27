@@ -30,7 +30,7 @@ jobs:
       - name: Render the actual voxel meshes in Blender
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y blender
+          sudo apt-get install -y blender python3-numpy xvfb
           cat > /tmp/render-forge-table.py <<'PY'
           from pathlib import Path
           import bpy
@@ -61,7 +61,7 @@ jobs:
                   bpy.ops.render.render(write_still=True)
               bpy.ops.wm.save_as_mainfile(filepath=str(path.with_suffix(".blend")))
           PY
-          blender -b --factory-startup --python-exit-code 1 --python /tmp/render-forge-table.py
+          xvfb-run -a blender -b --factory-startup --python-exit-code 1 --python /tmp/render-forge-table.py
       - uses: actions/upload-artifact@v5
         if: always()
         with:
