@@ -10,13 +10,9 @@ The next great idea should not be limited by access to schooling, expensive soft
 
 ## What we are building
 
-Forge is an independent, specialized 3D asset production system that complements ChatGPT and other AI assistants. It is not a general-purpose conversational assistant. Blender is the initial modeling backend; a purpose-built, AI-native geometry engine is a long-term objective.
+Forge is an independent, AI-driven 3D production aid designed to work alongside ChatGPT and compatible assistants. The assistant handles open-ended conversation and helps shape the creator's intent into a structured request; Forge handles 3D-specific visual analysis, editable geometry, materials, Blender execution, inspection, revision and export. Forge is not being trained as a general-purpose conversational model. Blender is the initial modeling backend; a purpose-built, AI-native geometry engine is a long-term objective.
 
-```text
-Creator → assistant or direct interface → structured asset request
-        → Forge geometry / surfaces / materials → Blender backend
-        → inspection + user-approved refinement → editable asset + GLB + report
-```
+Creator ↔ ChatGPT or compatible assistant → structured asset request → Forge geometry, surfaces and materials → Blender execution and inspection → editable asset, GLB, previews and report
 
 | Component | Purpose |
 |---|---|
@@ -26,17 +22,17 @@ Creator → assistant or direct interface → structured asset request
 | Materials | UVs, PBR materials, texture maps and baking |
 | Inspector | Reproducible geometry and visual quality checks |
 | Optimizer | LODs, mesh budgets and game-engine compatibility |
-| Integration | Versioned asset requests; future MCP interface |
+| Integration | Versioned asset requests; future plugin/MCP-compatible interface |
 | Native engine | Future headless, AI-oriented modeling backend |
 
-These are target capabilities, not claims of completed functionality.
+These are target capabilities, not claims of completed functionality. ChatGPT/plugin/MCP integration is planned and does not yet exist.
 
 ## Current status
 
 Existing research includes procedural Blender object generation, visual neural experiments v1–v5, part maps and silhouette evaluation. A separate Kaggle pilot explored mesh bounds from images. Results remain research-only; neither full image-to-3D nor professional textured asset generation has been demonstrated.
 
 - [Roadmap](docs/ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Master blueprint](docs/MASTER-BLUEPRINT.md)
-- [Training lanes and reproducibility](docs/OPEN-3D-TRAINING.md) · [Project scope](config/open_3d_scope.json)
+- [ChatGPT companion 3D training plan](docs/CHATGPT-COMPANION-3D-TRAINING.md) · [Training lanes and reproducibility](docs/OPEN-3D-TRAINING.md) · [Project scope](config/open_3d_scope.json)
 - [Previous visual results](docs/OBJECT-PHOTO-TEXT-V4-RESULTS-2026-11-17.md) · [November 20 results](docs/FORGE-TRAINING-RESULTS-2026-11-20.md)
 - [Founding charter](CHARTER.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md)
 
@@ -50,7 +46,8 @@ Existing research includes procedural Blender object generation, visual neural e
 2. A bounded, structured Blender asset construction pipeline.
 3. Automated inspection, targeted revisions and texture baking.
 4. Game-ready GLB exports with preview images and validation reports.
-5. Accessible mobile workflows, assistant integrations and eventually an independent geometry backend.
+5. Accessible mobile workflows and a future assistant/plugin interface.
+6. Eventually, an independent geometry backend.
 
 CPU, GPU and experimental tracks are isolated. No automatic checkpoint promotion; retain lineage and report failures.
 
